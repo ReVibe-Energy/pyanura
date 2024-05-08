@@ -10,7 +10,8 @@ dependencies = [
 [project.optional-dependencies]
 cli = [
   "click",
-  "bleak"
+  "bleak",
+  "zeroconf"
 ]
 
 [project.scripts]
