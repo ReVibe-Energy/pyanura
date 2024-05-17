@@ -1,4 +1,5 @@
 from .models import *
+from .settings import SettingsMapper
 
 import asyncio
 import cbor2
@@ -227,7 +228,9 @@ class AVSSClient:
 
     async def _request(self, opcode, argument, timeout=2.0):
         req = bytearray([opcode])
-        if argument:
+        if isinstance(argument, dict):
+            req.extend(cbor2.dumps(argument))
+        elif argument:
             req.extend(argument.to_cbor())
         else:
             req.extend(cbor2.dumps(None))
@@ -297,8 +300,8 @@ class AVSSClient:
     async def get_version(self):
         return await self._request(OpCode.GetVersion, None)
 
-    async def write_settings(self, args: WriteSettingsArgs) -> WriteSettingsResponse:
-        return await self._request(OpCode.WriteSettings, args)
+    async def write_settings(self, settings: dict) -> WriteSettingsResponse:
+        return await self._request(OpCode.WriteSettings, SettingsMapper.from_readable(settings))
 
     async def test_throughput(self, duration: int):
         args = TestThroughputArgs(duration=duration)

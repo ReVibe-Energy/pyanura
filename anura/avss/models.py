@@ -41,22 +41,6 @@ class ConfirmUpgradeArgs:
 
 @dataclass_cbor()
 @dataclass
-class SettingsGroup:
-    sample_rate: int = field(0)
-    snippet_interval: int = field(1)
-    snippet_length: int = field(2)
-    health_interval: int = field(3)
-
-@dataclass_cbor()
-@dataclass
-class WriteSettingsArgs:
-    sample_rate: int = field(0)
-    snippet_interval: int = field(1)
-    snippet_length: int = field(2)
-    health_interval: int = field(3)
-
-@dataclass_cbor()
-@dataclass
 class TestThroughputArgs:
     duration: int = field(0)
 
@@ -129,4 +113,4 @@ class HealthReport(Report):
 @dataclass_cbor()
 @dataclass
 class SettingsReport(Report):
-    settings: SettingsGroup = field(0)
+    settings: dict = field(0)

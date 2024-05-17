@@ -4,6 +4,7 @@ import bleak
 from bleak import BleakError, BleakScanner
 import click
 import functools
+import json
 import logging
 import math
 from pathlib import Path
@@ -135,12 +136,24 @@ async def throughput(client: avss.AVSSClient, duration: float):
 
 @avss_group.command()
 @with_avss_client
-async def get_settings(client: avss.AVSSClient):
-    """Get settings."""
+async def read_settings(client: avss.AVSSClient):
+    """Read settings."""
     with client.reports() as reports:
+        logger.info("Requesting settings report from device")
         await client.report_settings()
 
+        logger.info("Waiting for settings report")
         async for msg in reports:
             if isinstance(msg, avss.SettingsReport):
-                click.echo(f"{msg}")
+                click.echo(json.dumps(avss.SettingsMapper.to_readable(msg.settings)))
                 break
+
+@avss_group.command()
+@click.option("--file", metavar="FILE", help="Path to settings file.")
+@with_avss_client
+async def write_settings(client: avss.AVSSClient, file: str):
+    """Write settings."""
+    settings = json.loads(Path(file).read_text())
+    resp = await client.write_settings(settings)
+    click.echo(resp)
+    await client.apply_settings(persist=True)
