@@ -15,7 +15,7 @@ cli = [
 ]
 
 [project.scripts]
-anura = "anura:anura_cli"
+anura = "anura.cli:anura_cli"
 
 [build-system]
 requires = ["setuptools>=61.0"]
