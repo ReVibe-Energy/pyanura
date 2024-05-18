@@ -1,4 +1,5 @@
 import anura.avss as avss
+from anura.avss.bleak_avss_client import BleakAVSSClient
 import asyncio
 import bleak
 from bleak import BleakError, BleakScanner
@@ -19,7 +20,7 @@ def with_avss_client(f):
         async def do_async():
             try:
                 logger.info(f"Connecting to {address}")
-                async with avss.BleakAVSSClient(address) as client:
+                async with BleakAVSSClient(address) as client:
                     logger.info(f"Connected")
                     return await f(*args, client=client, **kwargs)
             except BleakError as ex:
@@ -72,7 +73,7 @@ def upgrade(address, file, confirm_only):
             image_index = 0
 
             if not confirm_only:
-                async with avss.BleakAVSSClient(device) as client:
+                async with BleakAVSSClient(device) as client:
                     await client.prepare_upgrade(image_index, len(binary))
                     await client.program_transfer(binary)
                     await client.apply_upgrade()
@@ -83,7 +84,7 @@ def upgrade(address, file, confirm_only):
                 await asyncio.sleep(5)
                 device = await BleakScanner.find_device_by_address(address, timeout=60)
 
-            async with avss.BleakAVSSClient(device) as client:
+            async with BleakAVSSClient(device) as client:
                 click.echo("Confirming new image")
                 await client.confirm_upgrade(image_index)
         except Exception as ex:

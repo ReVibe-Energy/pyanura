@@ -1,6 +1,5 @@
 from .client import *
 from .models import *
-from .bleak_avss_client import BleakAVSSClient
 from .settings import SettingsMapper
 
 ServiceUuid = "8bff24a0-e382-49cd-8753-a2d67d9904a0"
