@@ -1,5 +1,6 @@
 import binascii
 from dataclasses import dataclass
+import ipaddress
 from anura.dataclasses_cbor import (dataclass_cbor, field)
 import re
 import types
@@ -123,6 +124,10 @@ class GetDeviceInfoResult():
     device_id: bytes = field(2)
     app_version: str = field(3)
     app_build_version: str = field(4)
+    serial_number: str = field(5)
+    hostname: str = field(6)
+    mac_address: bytes = field(7)
+    ip_addresses: list[ipaddress.IPv4Address] = field(8)
 
 @dataclass_cbor()
 @dataclass
