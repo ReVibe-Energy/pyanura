@@ -3,6 +3,7 @@ import dataclasses
 from io import BytesIO
 from typing import List
 import typing_inspect
+import ipaddress
 
 def _default_encoder(encoder, inst):
     struct = type(inst)._dataclass_cbor_struct
@@ -55,13 +56,25 @@ def _decode_type(type, obj):
         init_args[f.name] = value
     return type(**init_args)
 
+# Tag hook for tags used throughout the Anura CBOR protocols
+def _tag_hook(decoder, tag, shareable_index=None):
+    # Tag 52 is a IANA registered tag but cbor2 does not handle it by default
+    # so we provide an implementation here. Note that this implementation is
+    # only partial but enough for our current needs.
+    if tag.tag == 52:
+        if isinstance(tag.value, bytes):
+            return ipaddress.IPv4Address(tag.value)
+        else:
+            return tag.value
+    return tag
+
 @classmethod
 def _from_struct(cls, obj):
-    return _decode_type(cls, obj)
+    return _decode_type(cls, cbor2.loads(cbor2.dumps(obj), tag_hook=_tag_hook))
 
 @classmethod
 def _from_cbor(cls, s):
-    return _decode_type(cls, cbor2.loads(s))
+    return _decode_type(cls, cbor2.loads(s, tag_hook=_tag_hook))
 
 def field(cbor_key):
     return dataclasses.field(metadata={"cbor_key": cbor_key})
