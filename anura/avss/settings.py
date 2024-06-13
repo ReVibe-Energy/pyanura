@@ -4,6 +4,7 @@ class SettingsMapper:
         "snippet_interval_ms": 1,
         "snippet_length": 2,
         "health_interval_ms": 3,
+        "base_axis_enable": 4,
     }
 
     reverse_map = dict(reversed(item) for item in forward_map.items())
