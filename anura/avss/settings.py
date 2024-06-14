@@ -5,6 +5,10 @@ class SettingsMapper:
         "snippet_length": 2,
         "health_interval_ms": 3,
         "base_axis_enable": 4,
+        "motion_threshold_rms_g": 5,
+        "motion_standby_delay_ms": 6,
+        "wom_sample_rate_hz": 7,
+        "wom_threshold_g": 8,
     }
 
     reverse_map = dict(reversed(item) for item in forward_map.items())
