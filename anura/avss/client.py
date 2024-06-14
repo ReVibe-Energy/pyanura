@@ -64,6 +64,7 @@ OpCode.WriteSettings = 7
 OpCode.WriteSettingsResponse = 8
 OpCode.ReportSettings = 9
 OpCode.ApplySettings = 10
+OpCode.ReportCapture = 11
 OpCode.TestThroughput = 12
 OpCode.PrepareUpgrade = 100
 OpCode.ApplyUpgrade = 101
@@ -265,6 +266,10 @@ class AVSSClient:
     async def report_snippets(self, count, auto_resume):
         arg = ReportSnippetArgs(count=count, auto_resume=auto_resume)
         return await self._request(OpCode.ReportSnippet, arg)
+
+    async def report_capture(self, count):
+        arg = ReportCaptureArgs(count=count)
+        return await self._request(OpCode.ReportCapture, arg)
 
     async def report_aggregates(self, count, auto_resume):
         arg = ReportAggregatesArgs(count=count, auto_resume=auto_resume)

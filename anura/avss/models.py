@@ -15,6 +15,11 @@ class ReportAggregatesArgs:
 
 @dataclass_cbor()
 @dataclass
+class ReportCaptureArgs:
+    count: int = field(0)
+
+@dataclass_cbor()
+@dataclass
 class ReportHealthArgs:
     active: bool = field(0)
 
@@ -70,6 +75,7 @@ class Report:
             3: AggregatedValuesReport,
             4: HealthReport,
             5: SettingsReport,
+            6: CaptureReport,
         }
         if report_class := report_classes.get(report_type):
             return report_class.from_cbor(payload)
@@ -86,6 +92,14 @@ class UnknownReport(Report):
 class SnippetReport(Report):
     start_time: int = field(0)
     sample_rate: int = field(1)
+    range_: int = field(2)
+    samples: dict[int, bytes] = field(3)
+
+@dataclass_cbor()
+@dataclass
+class CaptureReport(Report):
+    start_time: int = field(0)
+    end_time: int = field(1)
     range_: int = field(2)
     samples: dict[int, bytes] = field(3)
 
