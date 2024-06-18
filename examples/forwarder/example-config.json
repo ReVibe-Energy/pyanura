@@ -1,0 +1,32 @@
+{
+	"mqtt": {
+		"broker": "mqtt://broker.hivemq.com",
+		"client_id": "a1e6d6e9-5e03-4e62-b347-a8b8d81d2ba2"
+	},
+	"transceivers": {
+		"L": {
+			"host": "anura-ec9a0cb20018.local.",
+			"mac_address": "ec:9a:0c:b2:00:1b"
+		}
+	},
+	"nodes": {
+		"FL": {
+			"transceiver": "L",
+			"address": "ec:9a:0c:b1:00:48",
+			"settings": {
+				"base_sample_rate_hz": 512,
+				"snippet_length": 1024,
+				"snippet_interval_ms": 60000
+			}
+		},
+		"DL": {
+			"transceiver": "L",
+			"address": "ec:9a:0c:b1:00:47",
+			"settings": {
+				"base_sample_rate_hz": 512,
+				"snippet_length": 1024,
+				"snippet_interval_ms": 60000
+			}
+		}
+	}
+}

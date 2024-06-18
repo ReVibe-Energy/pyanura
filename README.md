@@ -38,6 +38,19 @@ Assuming you have activated a suitable a virtual environment, install the denden
 
     pip3 install -r requirements.txt
 
+(Optional) Install extra requirements needed to run the examples under `/examples`.
+
+    pip3 install -r requirements-extras.txt
+
 After that you should be able to launch the `anura` command-line insterface with the following command:
 
     python3 -m anura.cli
+
+
+## Running an example
+
+Assuming you have activated a virtual environment with all the required
+dependencies you can launch the examples from the `pyanura` root directory
+as follows:
+
+    python3 -m examples.forwarder --config examples/forwarder/example-config.json
