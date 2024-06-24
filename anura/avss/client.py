@@ -64,8 +64,9 @@ OpCode.WriteSettings = 7
 OpCode.WriteSettingsResponse = 8
 OpCode.ReportSettings = 9
 OpCode.ApplySettings = 10
-OpCode.ReportCapture = 11
-OpCode.TestThroughput = 12
+OpCode.ApplySettingsResponse = 11
+OpCode.TestThroughput = 12 # TBD
+OpCode.ReportCapture = 13 # TBD
 OpCode.PrepareUpgrade = 100
 OpCode.ApplyUpgrade = 101
 OpCode.ConfirmUpgrade = 102
@@ -257,6 +258,8 @@ class AVSSClient:
             return GetVersionResponse.from_cbor(chrc_value[1:])
         elif response_opcode == OpCode.WriteSettingsResponse:
             return WriteSettingsResponse.from_cbor(chrc_value[1:])
+        elif response_opcode == OpCode.ApplySettingsResponse:
+            return ApplySettingsResponse.from_cbor(chrc_value[1:])
         else:
             raise AVSSProtocolError("Expected response opcode")
 

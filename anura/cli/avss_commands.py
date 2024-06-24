@@ -157,4 +157,5 @@ async def write_settings(client: avss.AVSSClient, file: str):
     settings = json.loads(Path(file).read_text())
     resp = await client.write_settings(settings)
     click.echo(resp)
-    await client.apply_settings(persist=True)
+    resp = await client.apply_settings(persist=True)
+    click.echo(resp)
