@@ -20,7 +20,7 @@ class RequestError(Exception):
     "Raised when a request returns an error"
     def __init__(self, method, error):
         self.error = error
-        super().__init__(f"Request \"{method}\" returned an error response")
+        super().__init__(f"Request \"{method}\" returned an error response: {error}")
 
 class TransceiverClientError(Exception):
     pass
