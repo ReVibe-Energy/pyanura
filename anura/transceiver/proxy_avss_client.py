@@ -6,6 +6,10 @@ class ProxyAVSSClient(avss.AVSSClient):
     def __init__(self, transceiver, address):
         self.transceiver = transceiver
         self.address = address
+
+        if type(address) is not BluetoothAddrLE:
+            raise ValueError("Type of 'address' must be BluetoothAddrLE")
+
         super().__init__()
 
     async def __aenter__(self):
