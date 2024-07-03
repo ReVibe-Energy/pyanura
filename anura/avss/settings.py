@@ -19,7 +19,10 @@ class SettingsMapper:
             try:
                 return SettingsMapper.forward_map[key]
             except KeyError:
-                return int(key)
+                try:
+                    return int(key)
+                except:
+                    raise ValueError(f"Invalid key {key}")
 
         return {map_key(k): v for k, v in settings.items()}
 
