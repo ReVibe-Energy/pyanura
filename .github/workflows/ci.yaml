@@ -14,7 +14,9 @@ jobs:
   build_pyanure:
     name: Build Pyanura
     runs-on: ubuntu-latest
-    permissions: read-all
+    permissions:
+      id-token: write
+      contents: write # Needed to commit updated version
 
     steps:
       - name: Checkout
