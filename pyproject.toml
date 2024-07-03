@@ -1,6 +1,6 @@
 [project]
-name = "anura"
-version = "0.0.1"
+dynamic = ["version"]
+name = "pyanura"
 requires-python = ">=3.11"
 dependencies = [
   "cbor2",
@@ -18,5 +18,8 @@ cli = [
 anura = "anura.cli:anura_cli"
 
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=61.0","setuptools-scm"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools_scm]
+
