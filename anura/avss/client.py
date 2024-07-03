@@ -286,7 +286,7 @@ class AVSSClient:
         arg = ReportSettings()
         return await self._request(OpCode.ReportSettings, arg)
 
-    async def apply_settings(self, persist: bool):
+    async def apply_settings(self, persist: bool) -> ApplySettingsResponse:
         arg = ApplySettingsArgs(persist=persist)
         return await self._request(OpCode.ApplySettings, arg)
 
@@ -305,7 +305,7 @@ class AVSSClient:
     async def reboot(self):
         return await self._request(OpCode.Reboot, None)
 
-    async def get_version(self):
+    async def get_version(self) -> GetVersionResponse:
         return await self._request(OpCode.GetVersion, None)
 
     async def write_settings(self, settings: dict) -> WriteSettingsResponse:
