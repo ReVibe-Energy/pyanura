@@ -49,6 +49,7 @@ jobs:
 
       - name: Upload the package to CodeArtifact
         run: |
+          python3 -m pip install --upgrade twine
           export TWINE_USERNAME=aws
           export TWINE_PASSWORD=`aws codeartifact get-authorization-token --domain revibe-energy --query authorizationToken --output text`
           export TWINE_REPOSITORY_URL=`aws codeartifact get-repository-endpoint --domain revibe-energy --repository revibe-repo --format pypi --query repositoryEndpoint --output text`
