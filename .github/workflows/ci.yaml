@@ -44,6 +44,7 @@ jobs:
 
       - name: Package the generated files as a Python package
         run: |
+          python3 -m pip install --upgrade build
           python3 -m build
 
       - name: Upload the package to CodeArtifact
