@@ -42,7 +42,7 @@ Assuming you have activated a suitable a virtual environment, install the denden
 
     pip3 install -r requirements-extras.txt
 
-After that you should be able to launch the `anura` command-line insterface with the following command:
+After that you should be able to launch the `anura` command-line interface with the following command:
 
     python3 -m anura.cli
 
