@@ -24,6 +24,14 @@ jobs:
         with:
           fetch-tags: true
 
+      - name: Git Describe
+        run: |
+          git describe --tags --always
+
+      - name: Git Tags
+        run: |
+          git tag -l -n1
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
