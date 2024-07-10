@@ -29,7 +29,7 @@ class ProxyAVSSClient(avss.AVSSClient):
         return self
 
     async def __aexit__(self, exc_type, exc, tb):
-        pass
+        self._loop_task.cancel()
 
     async def _request_raw(self, req, timeout):
         result = await self.transceiver.avss_request(self.address, req)
