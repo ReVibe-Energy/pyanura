@@ -1,7 +1,8 @@
 import anura.avss as avss
+from anura.transceiver import TransceiverClient, BluetoothAddrLE
+from anura.transceiver.proxy_avss_client import ProxyAVSSClient
 from anura.avss.bleak_avss_client import BleakAVSSClient
 import asyncio
-import bleak
 from bleak import BleakError, BleakScanner
 import click
 import functools
@@ -14,19 +15,39 @@ import sys
 logger = logging.getLogger(__name__)
 
 def with_avss_client(f):
-    @click.option("--address", help="Bluetooth address of AVSS node.")
+    @click.option("--transceiver", help="Hostname or IP address")
+    @click.option("--transceiver-port", default=7645, show_default=True, help="TCP port number")
+    @click.option("--address", help="Bluetooth address of AVSS node.", required=True)
     @functools.wraps(f)
-    def wrapper(address, *args, **kwargs):
+    def wrapper(transceiver, transceiver_port, address, *args, **kwargs):
+        address = BluetoothAddrLE.parse(address)
+
         async def do_async():
             try:
                 logger.info(f"Connecting to {address}")
-                async with BleakAVSSClient(address) as client:
+                async with BleakAVSSClient(address.address_str()) as client:
                     logger.info(f"Connected")
                     return await f(*args, client=client, **kwargs)
             except BleakError as ex:
                 click.echo(f"Error: {ex}", err=True)
                 sys.exit(1)
-        asyncio.run(do_async())
+
+        async def do_proxy_async():
+            logger.info(f"Connect to transceiver {transceiver}")
+            async with TransceiverClient(transceiver, transceiver_port) as trx_client:
+                # Check if the transceiver is assigned to the given node
+                resp = await trx_client.get_assigned_nodes()
+                if not any(node.address == address for node in resp.nodes):
+                    click.echo(f"Error: Transceiver not assigned to node {address}")
+                    sys.exit(1)
+
+                async with ProxyAVSSClient(trx_client, address) as client:
+                    return await f(*args, client=client, **kwargs)
+
+        if transceiver:
+            asyncio.run(do_proxy_async())
+        else:
+            asyncio.run(do_async())
 
     return wrapper
 
