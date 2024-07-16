@@ -9,6 +9,7 @@ class SettingsMapper:
         "motion_standby_delay_ms": 6,
         "wom_sample_rate_hz": 7,
         "wom_threshold_g": 8,
+        "snippet_mode": 9,
     }
 
     reverse_map = dict(reversed(item) for item in forward_map.items())
