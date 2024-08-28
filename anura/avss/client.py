@@ -163,9 +163,14 @@ class AVSSClient:
                 loop = asyncio.get_running_loop()
                 get: asyncio.Task[Report] = loop.create_task(reports.get())
                 try:
-                    done, _ = await asyncio.wait(
-                        (get, self._disconnected), return_when=asyncio.FIRST_COMPLETED
-                    )
+                    while True:
+                        done, _ = await asyncio.wait(
+                            (get, self._disconnected),
+                            return_when=asyncio.FIRST_COMPLETED,
+                            timeout=0.1,
+                        )
+                        if done:
+                            break
                 except asyncio.CancelledError:
                     # If the asyncio.wait is cancelled, we must make sure
                     # to also cancel the underlying tasks.
