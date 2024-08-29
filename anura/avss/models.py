@@ -99,6 +99,7 @@ class SnippetReport(Report):
     sample_rate: int = field(1)
     range_: int = field(2)
     samples: dict[int, bytes] = field(3)
+    is_synced: bool = field(4)
 
 @dataclass_cbor()
 @dataclass
