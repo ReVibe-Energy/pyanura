@@ -241,6 +241,9 @@ class TransceiverClient:
     async def get_device_status(self) -> GetDeviceStatusResult:
         return await self.request("get_device_status", result_type=GetDeviceStatusResult)
 
+    async def get_firmware_info(self) -> GetFirmwareInfoResult:
+        return await self.request("get_firmware_info", result_type=GetFirmwareInfoResult)
+
     async def get_ptp_status(self) -> GetPtpStatusResult:
         return await self.request("get_ptp_status", result_type=GetPtpStatusResult)
 

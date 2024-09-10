@@ -103,6 +103,12 @@ async def get_device_status(client: TransceiverClient):
 
 @transceiver_group.command()
 @with_transceiver_client
+async def get_firmware_info(client: TransceiverClient):
+    """Get firmware info."""
+    click.echo(await client.get_firmware_info())
+
+@transceiver_group.command()
+@with_transceiver_client
 async def get_ptp_status(client: TransceiverClient):
     """Get Precision Time Protocol (PTP) status."""
     click.echo(await client.get_ptp_status())

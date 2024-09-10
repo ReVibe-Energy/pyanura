@@ -138,6 +138,16 @@ class GetDeviceStatusResult():
 
 @dataclass_cbor()
 @dataclass
+class GetFirmwareInfoResult:
+    dfu_status: int = field(0)
+    app_version: int = field(1)
+    app_build_version: int = field(2)
+    net_version: int = field(3)
+    net_build_version: int = field(4)
+
+
+@dataclass_cbor()
+@dataclass
 class GetPtpStatusResult():
     port_state: str = field(0)
     offset: str = field(1)
