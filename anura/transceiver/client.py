@@ -49,32 +49,44 @@ class TransceiverClient:
     async def connect(self):
         reader, self._writer = await asyncio.open_connection(self._hostname, self._port)
 
-        async def loop():
+        async def recv_task():
+            while True:
+                payload = None
+                try:
+                    header = await reader.readexactly(2)
+                    payload_len, = struct.unpack(">H", header)
+                    payload = await reader.readexactly(payload_len)
+                except asyncio.IncompleteReadError:
+                    break
+                message = cbor2.loads(payload)
+                match message:
+                    case [msg_type.Response, request_token, error, result]:
+                        response = self._pending_responses.get(request_token)
+                        if response:
+                            response.set_result([error, result])
+                    case [msg_type.Notification, type_, argument]:
+                        n = Notification.parse(type_, argument)
+                        for callback in self._on_notification_callbacks:
+                            callback(n)
+                    case _:
+                        raise ProtocolError()
+
+        async def ping_task():
+            """Task to keep the connection alive."""
+            while True:
+                await asyncio.sleep(1.0)
+                await self.ping()
+
+        async def conn_tasks():
             try:
-                while True:
-                    payload = None
-                    try:
-                        header = await reader.readexactly(2)
-                        payload_len, = struct.unpack(">H", header)
-                        payload = await reader.readexactly(payload_len)
-                    except asyncio.IncompleteReadError:
-                        break
-                    message = cbor2.loads(payload)
-                    match message:
-                        case [msg_type.Response, request_token, error, result]:
-                            response = self._pending_responses.get(request_token)
-                            if response:
-                                response.set_result([error, result])
-                        case [msg_type.Notification, type_, argument]:
-                            n = Notification.parse(type_, argument)
-                            for callback in self._on_notification_callbacks:
-                                callback(n)
-                        case _:
-                            raise ProtocolError()
+                async with asyncio.TaskGroup() as tg:
+                    tg.create_task(recv_task())
+                    tg.create_task(ping_task())
             finally:
                 self._disconnected.set_result(None)
 
-        self._recv_task = asyncio.create_task(loop())
+        asyncio.create_task(conn_tasks())
+
         # Discover methods automatically
         await self.discover_methods()
 
