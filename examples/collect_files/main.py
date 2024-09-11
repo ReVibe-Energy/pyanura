@@ -61,11 +61,6 @@ async def connect_node(transceiver, output_dir, addr):
     finally:
         logger.info("Exiting task for node %s", addr)
 
-async def ping_loop(transceiver):
-    while True:
-        await transceiver.ping()
-        await asyncio.sleep(1.0)
-
 async def connect_transceiver(host, output_dir):
     async with TransceiverClient(host) as transceiver:
         logger.info(f"Connected to transceiver at {host}")
@@ -74,8 +69,6 @@ async def connect_transceiver(host, output_dir):
         logger.info(f"Updated time in transceiver {host}")
 
         async with asyncio.TaskGroup() as tg:
-            tg.create_task(ping_loop(transceiver))
-
             connected_nodes_resp = await transceiver.get_connected_nodes()
             for node in connected_nodes_resp.nodes:
                 tg.create_task(connect_node(transceiver, output_dir, node.address))

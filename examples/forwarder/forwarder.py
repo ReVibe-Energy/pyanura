@@ -82,15 +82,7 @@ class AnuraSupervisor:
                     transceiver_config["host"]
                 )
 
-                async def _ping_task():
-                    # "Ping" periodically to keep the connection alive.
-                    while True:
-                        await asyncio.wait_for(transceiver.ping(), 1.0)
-                        await asyncio.sleep(2.0)
-
                 async with asyncio.TaskGroup() as tg:
-                    tg.create_task(_ping_task())
-
                     if self.on_transceiver_connect:
                         await self.on_transceiver_connect(transceiver)
 
