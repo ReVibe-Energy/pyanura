@@ -56,6 +56,11 @@ class ApplySettingsArgs:
 
 @dataclass_cbor()
 @dataclass
+class DeactivateArgs:
+    key: int = field(0)
+
+@dataclass_cbor()
+@dataclass
 class ApplySettingsResponse:
     will_reboot: bool = field(0)
 

@@ -67,6 +67,7 @@ OpCode.ApplySettings = 10
 OpCode.ApplySettingsResponse = 11
 OpCode.TestThroughput = 12 # TBD
 OpCode.ReportCapture = 13 # TBD
+OpCode.Deactivate = 16
 OpCode.PrepareUpgrade = 100
 OpCode.ApplyUpgrade = 101
 OpCode.ConfirmUpgrade = 102
@@ -314,6 +315,10 @@ class AVSSClient:
     async def test_throughput(self, duration: int):
         args = TestThroughputArgs(duration=duration)
         return await self._request(OpCode.TestThroughput, args)
+
+    async def deactivate(self, key: int):
+        arg = DeactivateArgs(key=key)
+        return await self._request(OpCode.Deactivate, arg)
 
     def _on_program_notify(self, data):
         offset, = struct.unpack("<L", data)
