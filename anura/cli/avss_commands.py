@@ -159,3 +159,10 @@ async def write_settings(client: avss.AVSSClient, file: str):
     click.echo(resp)
     resp = await client.apply_settings(persist=True)
     click.echo(resp)
+
+@avss_group.command()
+@with_avss_client
+async def deactivate(client: avss.AVSSClient):
+    """Deactivate(decommission) a node."""
+    await client.deactivate(key=0xFEEDF00D)
+    click.echo("Deactivating shortly.")
