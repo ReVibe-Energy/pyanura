@@ -80,6 +80,13 @@ ResponseCode.OpCodeUnsupported = 3
 ResponseCode.Busy = 4
 ResponseCode.BadArgument = 5
 
+ReportType = types.SimpleNamespace()
+ReportType.Snippet = 2
+ReportType.AggregatedValues = 3
+ReportType.Health = 4
+ReportType.Settings = 5
+ReportType.Capture = 6
+
 SEGMENT_FIRST = 0x80
 SEGMENT_LAST = 0x40
 SEGMENT_NUMBER_MASK = 0x3F
@@ -107,11 +114,11 @@ class Report:
 
     def parse(self):
         report_classes = {
-            2: SnippetReport,
-            3: AggregatedValuesReport,
-            4: HealthReport,
-            5: SettingsReport,
-            6: CaptureReport,
+            ReportType.Snippet: SnippetReport,
+            ReportType.AggregatedValues: AggregatedValuesReport,
+            ReportType.Health: HealthReport,
+            ReportType.Settings: SettingsReport,
+            ReportType.Capture: CaptureReport,
         }
         if report_class := report_classes.get(self.report_type):
             return report_class.from_cbor(self.payload_cbor)
