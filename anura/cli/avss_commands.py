@@ -237,3 +237,16 @@ async def deactivate(client: avss.AVSSClient):
     """Deactivate(decommission) a node."""
     await client.deactivate(key=0xFEEDF00D)
     click.echo("Deactivating shortly.")
+
+@avss_group.command()
+@with_avss_client
+async def health_report(client: avss.AVSSClient):
+    """Health report."""
+    with client.reports() as reports:
+        resp = await client.report_health(count=1)
+
+        logger.info("Waiting for health report")
+        async for msg in reports:
+            if isinstance(msg, avss.HealthReport):
+                click.echo(f"Health report: {msg}")
+                break
