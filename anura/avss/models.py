@@ -70,31 +70,9 @@ class GetVersionResponse:
     version: str = field(0)
     build_version: str = field(1)
 
-class Report:
-    def parse(record):
-        report_type = record[0]
-        payload = record[1:]
-
-        report_classes = {
-            2: SnippetReport,
-            3: AggregatedValuesReport,
-            4: HealthReport,
-            5: SettingsReport,
-            6: CaptureReport,
-        }
-        if report_class := report_classes.get(report_type):
-            return report_class.from_cbor(payload)
-        else:
-            return UnknownReport(report_type, payload)
-
-class UnknownReport(Report):
-    def __init__(self, report_type, payload):
-        self.report_type = report_type
-        self.payload = payload
-
 @dataclass_cbor()
 @dataclass
-class SnippetReport(Report):
+class SnippetReport:
     start_time: int = field(0)
     sample_rate: int = field(1)
     range_: int = field(2)
@@ -103,7 +81,7 @@ class SnippetReport(Report):
 
 @dataclass_cbor()
 @dataclass
-class CaptureReport(Report):
+class CaptureReport:
     start_time: int = field(0)
     end_time: int = field(1)
     range_: int = field(2)
@@ -111,14 +89,14 @@ class CaptureReport(Report):
 
 @dataclass_cbor()
 @dataclass
-class AggregatedValuesReport(Report):
+class AggregatedValuesReport:
     start_time: int = field(0)
     duration: int = field(1)
     values: dict[int, int] = field(2)
 
 @dataclass_cbor()
 @dataclass
-class HealthReport(Report):
+class HealthReport:
     uptime: int = field(0)
     reboot_count: int = field(1)
     reset_cause: int = field(2)
@@ -132,5 +110,5 @@ class HealthReport(Report):
 
 @dataclass_cbor()
 @dataclass
-class SettingsReport(Report):
+class SettingsReport:
     settings: dict = field(0)

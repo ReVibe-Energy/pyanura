@@ -3,17 +3,17 @@ from .settings import SettingsMapper
 
 import asyncio
 import cbor2
-from contextlib import asynccontextmanager, contextmanager
+from contextlib import contextmanager
 from dataclasses import dataclass
 import logging
 import struct
 import time
 import types
-from typing import Optional
 from typing import (
     AsyncGenerator,
     Callable,
     Generator,
+    Optional,
 )
 
 logger = logging.getLogger(__name__)
@@ -90,6 +90,33 @@ class ReportTransferInfo:
     num_bytes: int
     num_segments: int
 
+class Report:
+    report_type: int
+    payload_cbor: bytes
+    transfer_info: Optional[ReportTransferInfo]
+
+    def __init__(self, report_type: int, payload_cbor: bytes, transfer_info: Optional[ReportTransferInfo] = None):
+        self.report_type = report_type
+        self.payload_cbor = payload_cbor
+        self.transfer_info = transfer_info
+
+    @staticmethod
+    def from_record(record: bytes, transfer_info: Optional[ReportTransferInfo] = None) -> "Report":
+        return Report(report_type=record[0], payload_cbor=record[1:], transfer_info=transfer_info)
+
+    def parse(self):
+        report_classes = {
+            2: SnippetReport,
+            3: AggregatedValuesReport,
+            4: HealthReport,
+            5: SettingsReport,
+            6: CaptureReport,
+        }
+        if report_class := report_classes.get(self.report_type):
+            return report_class.from_cbor(self.payload_cbor)
+        else:
+            return None
+
 class ReportBuffer:
     def __init__(self):
         self.start_time: float = time.time()
@@ -113,7 +140,7 @@ class ReportBuffer:
             elapsed_time=time.time()-self.start_time,
             num_bytes=len(self._buffer),
             num_segments=self.num_segments)
-        return self._buffer, transfer_info
+        return Report.from_record(self._buffer, transfer_info=transfer_info)
 
 class AVSSClient:
     def __init__(self):
@@ -129,14 +156,17 @@ class AVSSClient:
     async def __aexit__(self, exc_type, exc, tb):
         pass
 
-    def _callback_and_generator(self) -> tuple[Callable[[Report], None], AsyncGenerator[Report, None]]:
+    def _callback_and_generator(self, parse) -> tuple[Callable[[Report], None], AsyncGenerator[Report, None]]:
         # Queue to hold the incoming reports
         reports: asyncio.Queue[Report] = asyncio.Queue()
 
         def _callback(msg: Report) -> None:
             """Put the new Report in the queue."""
             try:
-                reports.put_nowait(msg)
+                if parse:
+                    reports.put_nowait(msg.parse())
+                else:
+                    reports.put_nowait(msg)
             except asyncio.QueueFull:
                 logger.warning("Report queue is full. Discarding message.")
 
@@ -169,13 +199,13 @@ class AVSSClient:
         return _callback, _generator()
 
     @contextmanager
-    def reports(self) -> Generator[AsyncGenerator[Report, None], None, None]:
+    def reports(self, parse=True) -> Generator[AsyncGenerator[Report, None], None, None]:
         """Context manager that creates a queue for incoming Reports.
 
         Returns:
             An async generator that yields reports from the underlying queue.
         """
-        callback, generator = self._callback_and_generator()
+        callback, generator = self._callback_and_generator(parse)
         try:
             # Add to the list of callbacks to call when a message is received
             self._on_report_callbacks.append(callback)
@@ -215,9 +245,7 @@ class AVSSClient:
             return
 
         if segment_hdr & SEGMENT_LAST:
-            buffer, transfer_info = self._report_buf.finish()
-            report = Report.parse(buffer)
-            report.transfer_info = transfer_info
+            report = self._report_buf.finish()
             for callback in self._on_report_callbacks:
                 try:
                     callback(report)
