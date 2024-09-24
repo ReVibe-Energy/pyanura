@@ -112,7 +112,9 @@ async def reset(client: avss.AVSSClient):
 @with_avss_client
 async def throughput(client: avss.AVSSClient, duration: float):
     """Perform a throughput test."""
-    with client.reports() as reports:
+    # Passing parse=False lets us access the raw payload and, more importantly,
+    # it lets us access the transfer info.
+    with client.reports(parse=False) as reports:
         click.echo(f"Starting {duration} s throughput test...")
         await client.test_throughput(duration=duration*1000)
         test = await anext(reports)
