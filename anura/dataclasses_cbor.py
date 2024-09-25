@@ -5,27 +5,32 @@ from typing import List
 import typing_inspect
 import ipaddress
 
-def _default_encoder(encoder, inst):
-    struct = type(inst)._dataclass_cbor_struct
-    if struct == "array":
-        indices = []
-        for f in dataclasses.fields(inst):
-            index = f.metadata.get("cbor_key", f.name)
-            indices.append(index)
-        max_index = max(indices)
-        arr = [None] * (max_index + 1)
-        for f in dataclasses.fields(inst):
-            index = f.metadata.get("cbor_key", f.name)
-            arr[index] = getattr(inst, f.name)
-        encoder.encode(arr)
-    else:
-        obj = {}
-        for f in dataclasses.fields(inst):
-            key = f.metadata.get("cbor_key", f.name)
-            obj[key] = getattr(inst, f.name)
-        encoder.encode(obj)
+def _make_default_encoder(string_keys=False):
+    def _default_encoder(encoder, inst):
+        struct = type(inst)._dataclass_cbor_struct
+        if struct == "array":
+            indices = []
+            for f in dataclasses.fields(inst):
+                index = f.metadata.get("cbor_key", f.name)
+                indices.append(index)
+            max_index = max(indices)
+            arr = [None] * (max_index + 1)
+            for f in dataclasses.fields(inst):
+                index = f.metadata.get("cbor_key", f.name)
+                arr[index] = getattr(inst, f.name)
+            encoder.encode(arr)
+        else:
+            obj = {}
+            for f in dataclasses.fields(inst):
+                key = f.metadata.get("cbor_key", f.name)
+                key = str(key) if string_keys else key
+                obj[key] = getattr(inst, f.name)
+            encoder.encode(obj)
+    
+    return _default_encoder
 
-def _to_cbor(self):
+def _to_cbor(self, string_keys=False):
+    _default_encoder = _make_default_encoder(string_keys)
     with BytesIO() as fp:
         cbor2.CBOREncoder(
             fp,
