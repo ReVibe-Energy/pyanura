@@ -159,3 +159,16 @@ async def write_settings(client: avss.AVSSClient, file: str):
     click.echo(resp)
     resp = await client.apply_settings(persist=True)
     click.echo(resp)
+
+@avss_group.command()
+@with_avss_client
+async def health_report(client: avss.AVSSClient):
+    """Health report."""
+    with client.reports() as reports:
+        resp = await client.report_health(active=False)
+
+        logger.info("Waiting for health report")
+        async for msg in reports:
+            if isinstance(msg, avss.HealthReport):
+                logger.info("Health report: %s", msg)
+                break
