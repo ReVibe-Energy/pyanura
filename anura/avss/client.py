@@ -14,9 +14,18 @@ from typing import (
     Callable,
     Generator,
     Optional,
+    TypeAlias,
 )
 
 logger = logging.getLogger(__name__)
+
+_ParsedReport: TypeAlias = (
+    AggregatedValuesReport
+    | CaptureReport
+    | HealthReport
+    | SettingsReport
+    | SnippetReport
+)
 
 class AVSSError(Exception):
     pass
@@ -164,9 +173,11 @@ class AVSSClient:
     async def __aexit__(self, exc_type, exc, tb):
         pass
 
-    def _callback_and_generator(self, parse) -> tuple[Callable[[Report], None], AsyncGenerator[Report, None]]:
+    def _callback_and_generator(
+        self, parse: bool
+    ) -> tuple[Callable[[Report], None], AsyncGenerator[Report | _ParsedReport, None]]:
         # Queue to hold the incoming reports
-        reports: asyncio.Queue[Report] = asyncio.Queue()
+        reports: asyncio.Queue[Report | _ParsedReport] = asyncio.Queue()
 
         def _callback(msg: Report) -> None:
             """Put the new Report in the queue."""
@@ -178,7 +189,7 @@ class AVSSClient:
             except asyncio.QueueFull:
                 logger.warning("Report queue is full. Discarding message.")
 
-        async def _generator() -> AsyncGenerator[Report, None]:
+        async def _generator() -> AsyncGenerator[Report | _ParsedReport, None]:
             """Forward all Reports from the report queue."""
             while True:
                 # Wait until we either:
@@ -207,7 +218,7 @@ class AVSSClient:
         return _callback, _generator()
 
     @contextmanager
-    def reports(self, parse=True) -> Generator[AsyncGenerator[Report, None], None, None]:
+    def reports(self, parse=True) -> Generator[AsyncGenerator[Report | _ParsedReport, None], None, None]:
         """Context manager that creates a queue for incoming Reports.
 
         Returns:
