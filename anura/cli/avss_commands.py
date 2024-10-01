@@ -115,6 +115,63 @@ def upgrade(address, file, confirm_only):
     asyncio.run(do())
 
 @avss_group.command()
+@click.option("--transceiver", help="Hostname or IP address")
+@click.option("--transceiver-port", default=7645, show_default=True, help="TCP port number")
+@click.option("--address", help="Bluetooth address of AVSS node.", required=True)
+@click.option("--file", metavar="FILE", help="Path to firmware image.")
+@click.option("--confirm-only", is_flag=True, help="Run only the confirm step.")
+def upgrade_with_transceiver(transceiver, transceiver_port, address, file, confirm_only):
+    """Upgrade node firmware."""
+
+    if not confirm_only and not file:
+        click.echo("Error: At least one of options '--file' and '--confirm-only' must be given.", err=True)
+        sys.exit(1)
+
+    if not confirm_only:
+        binary = Path(file).read_bytes()
+
+    address = BluetoothAddrLE.parse(address)
+
+    async def do():
+        try:
+            logger.info(f"Connect to transceiver {transceiver}")
+            async with TransceiverClient(transceiver, transceiver_port) as trx_client:
+                # Check if the transceiver is assigned to the given node
+                resp = await trx_client.get_assigned_nodes()
+                if not any(node.address == address for node in resp.nodes):
+                    click.echo(f"Error: Transceiver not assigned to node {address}")
+                    sys.exit(1)
+
+                image_index = 0
+
+                if not confirm_only:
+                    async with ProxyAVSSClient(trx_client, address) as client:
+                        await client.prepare_upgrade(image_index, len(binary))
+                        await client.program_transfer(binary)
+                        await client.apply_upgrade()
+
+                    click.echo("Waiting for node to reboot with new firmware image...")
+                    await asyncio.sleep(30.0)
+
+                async with ProxyAVSSClient(trx_client, address) as client:
+                    while True:
+                        try:
+                            version = await client.get_version()
+                            break
+                        except:
+                            await asyncio.sleep(1.0)
+
+                    click.echo(f"Version: {version.version} (build: {version.build_version})")
+                    click.echo("Confirming new image")
+                    await client.confirm_upgrade(image_index)
+
+        except Exception as ex:
+            click.echo(f"Error: {ex}", err=True)
+            sys.exit(1)
+
+    asyncio.run(do())
+
+@avss_group.command()
 @with_avss_client
 async def get_version(client: avss.AVSSClient):
     """Get the node firmware version."""
