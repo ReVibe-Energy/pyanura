@@ -166,3 +166,11 @@ async def deactivate(client: avss.AVSSClient):
     """Deactivate(decommission) a node."""
     await client.deactivate(key=0xFEEDF00D)
     click.echo("Deactivating shortly.")
+
+@avss_group.command()
+@click.option("--duration", default=2, help="Time(seconds) to run measurement")
+@with_avss_client
+async def trigger_measurement(client: avss.AVSSClient, duration: float):
+    """Trigger measurement"""
+    resp = await client.trigger_measurement(duration_ms=duration*1000)
+    click.echo(resp)
