@@ -63,6 +63,11 @@ class DeactivateArgs:
 
 @dataclass_cbor()
 @dataclass
+class TriggerMeasurementArgs:
+    duration_ms: int = field(0)
+
+@dataclass_cbor()
+@dataclass
 class ApplySettingsResponse:
     will_reboot: bool = field(0)
 

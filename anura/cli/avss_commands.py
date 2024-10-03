@@ -280,3 +280,12 @@ async def get_firmware_info(client: avss.AVSSClient):
     patch = (info.net_version >> 8) & 0xff
     tweak = info.net_version & 0xff
     click.echo(f"Net version: v{major}.{minor}.{patch}.{tweak}, build: {info.net_build_version}")
+
+
+@avss_group.command()
+@click.option("--duration", default=2, help="Time(seconds) to run measurement")
+@with_avss_client
+async def trigger_measurement(client: avss.AVSSClient, duration: float):
+    """Trigger measurement"""
+    resp = await client.trigger_measurement(duration_ms=duration*1000)
+    click.echo(resp)
