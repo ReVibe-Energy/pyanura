@@ -83,6 +83,7 @@ OpCode.ReportCapture = 13
 OpCode.WriteSettingsV2 = 14
 OpCode.WriteSettingsV2Response = 15
 OpCode.Deactivate = 16
+OpCode.TriggerMeasurement = 17
 OpCode.GetFirmwareInfo = 18
 OpCode.GetFirmwareInfoResponse = 19
 OpCode.ResetReport = 20
@@ -407,6 +408,10 @@ class AVSSClient:
                 apply=apply,
             ),
         )
+
+    async def trigger_measurement(self, duration_ms: int):
+        arg = TriggerMeasurementArgs(duration_ms=duration_ms)
+        return await self._request(OpCode.TriggerMeasurement, arg)
 
     def _on_program_notify(self, data):
         offset, = struct.unpack("<L", data)
