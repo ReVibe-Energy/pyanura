@@ -24,7 +24,11 @@ def _make_default_encoder(string_keys=False):
             for f in dataclasses.fields(inst):
                 key = f.metadata.get("cbor_key", f.name)
                 key = str(key) if string_keys else key
-                obj[key] = getattr(inst, f.name)
+                value = getattr(inst, f.name)
+                # Make sure dictionary values have string keys.
+                if string_keys and type(value) is dict:
+                    value = {str(k): v for k, v in value.items()}
+                obj[key] = value
             encoder.encode(obj)
     
     return _default_encoder
