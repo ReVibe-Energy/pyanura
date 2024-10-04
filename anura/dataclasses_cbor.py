@@ -5,6 +5,7 @@ from typing import List
 import typing_inspect
 import ipaddress
 
+
 def _make_default_encoder(string_keys=False):
     def _default_encoder(encoder, inst):
         struct = type(inst)._dataclass_cbor_struct
@@ -30,8 +31,9 @@ def _make_default_encoder(string_keys=False):
                     value = {str(k): v for k, v in value.items()}
                 obj[key] = value
             encoder.encode(obj)
-    
+
     return _default_encoder
+
 
 def _to_cbor(self, string_keys=False):
     _default_encoder = _make_default_encoder(string_keys)
@@ -42,10 +44,12 @@ def _to_cbor(self, string_keys=False):
         ).encode(self)
         return fp.getvalue()
 
+
 def _to_struct(self):
     # TODO: Consider changing this so _to_cbor is defined in
     # terms of _to_struct instead of the other way around
     return cbor2.loads(_to_cbor(self))
+
 
 def _decode_type(type, obj):
     if typing_inspect.get_origin(type) is list:
@@ -65,6 +69,7 @@ def _decode_type(type, obj):
         init_args[f.name] = value
     return type(**init_args)
 
+
 # Tag hook for tags used throughout the Anura CBOR protocols
 def _tag_hook(decoder, tag, shareable_index=None):
     # Tag 52 is a IANA registered tag but cbor2 does not handle it by default
@@ -77,20 +82,25 @@ def _tag_hook(decoder, tag, shareable_index=None):
             return tag.value
     return tag
 
+
 @classmethod
 def _from_struct(cls, obj):
     return _decode_type(cls, cbor2.loads(cbor2.dumps(obj), tag_hook=_tag_hook))
+
 
 @classmethod
 def _from_cbor(cls, s):
     return _decode_type(cls, cbor2.loads(s, tag_hook=_tag_hook))
 
+
 def field(cbor_key):
     return dataclasses.field(metadata={"cbor_key": cbor_key})
 
-def dataclass_cbor(struct = "map"):
+
+def dataclass_cbor(struct="map"):
     if struct != "map" and struct != "array":
         raise ValueError(f"invalid struct: {struct}")
+
     def decorator(cls):
         cls.to_cbor = _to_cbor
         cls.to_struct = _to_struct
@@ -98,4 +108,5 @@ def dataclass_cbor(struct = "map"):
         cls.from_struct = _from_struct
         cls._dataclass_cbor_struct = struct
         return cls
+
     return decorator
