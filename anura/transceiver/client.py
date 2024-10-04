@@ -36,6 +36,7 @@ class TransceiverClient:
         self._pending_responses = {}
         self._known_methods = {}
         self._disconnected = asyncio.Future()
+        self._connection_task: asyncio.Task = None
         self._on_notification_callbacks: list[Callable[[Notification], None]] = []
 
     async def __aenter__(self):
@@ -43,11 +44,16 @@ class TransceiverClient:
         return self
 
     async def __aexit__(self, exc_type, exc, tb):
+        logger.debug("Closing connection")
+        if self._connection_task:
+            self._connection_task.cancel()
         self._writer.close()
         await self._writer.wait_closed()
 
     async def connect(self):
+        logger.debug("Connecting to host %s at port %d", self._hostname, self._port)
         reader, self._writer = await asyncio.open_connection(self._hostname, self._port)
+        logger.debug("Connected")
 
         async def recv_task():
             while True:
@@ -84,8 +90,9 @@ class TransceiverClient:
                     tg.create_task(ping_task())
             finally:
                 self._disconnected.set_result(None)
+                logger.debug("Connection closed")
 
-        asyncio.create_task(conn_tasks())
+        self._connection_task = asyncio.create_task(conn_tasks())
 
         # Discover methods automatically
         await self.discover_methods()

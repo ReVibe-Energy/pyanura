@@ -45,11 +45,13 @@ class BluetoothAddrLE:
             type_str = "public"
         else:
             type_str = "random"
-        addr_str = binascii.hexlify(self.address, ":").decode("utf-8").upper()
-        return f"{addr_str}/{type_str}"
+        return f"{self.address_str()}/{type_str}"
 
     def __repr__(self):
         return f"BluetoothAddrLE(\"{self.__str__()}\")"
+
+    def address_str(self) -> str:
+        return binascii.hexlify(self.address, ":").decode("utf-8").upper()
 
     @staticmethod
     def parse(str):

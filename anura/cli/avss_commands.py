@@ -1,7 +1,8 @@
 import anura.avss as avss
+from anura.transceiver import TransceiverClient, BluetoothAddrLE
+from anura.transceiver.proxy_avss_client import ProxyAVSSClient
 from anura.avss.bleak_avss_client import BleakAVSSClient
 import asyncio
-import bleak
 from bleak import BleakError, BleakScanner
 import click
 import functools
@@ -14,19 +15,39 @@ import sys
 logger = logging.getLogger(__name__)
 
 def with_avss_client(f):
-    @click.option("--address", help="Bluetooth address of AVSS node.")
+    @click.option("--transceiver", help="Hostname or IP address")
+    @click.option("--transceiver-port", default=7645, show_default=True, help="TCP port number")
+    @click.option("--address", help="Bluetooth address of AVSS node.", required=True)
     @functools.wraps(f)
-    def wrapper(address, *args, **kwargs):
+    def wrapper(transceiver, transceiver_port, address, *args, **kwargs):
+        address = BluetoothAddrLE.parse(address)
+
         async def do_async():
             try:
                 logger.info(f"Connecting to {address}")
-                async with BleakAVSSClient(address) as client:
+                async with BleakAVSSClient(address.address_str()) as client:
                     logger.info(f"Connected")
                     return await f(*args, client=client, **kwargs)
             except BleakError as ex:
                 click.echo(f"Error: {ex}", err=True)
                 sys.exit(1)
-        asyncio.run(do_async())
+
+        async def do_proxy_async():
+            logger.info(f"Connect to transceiver {transceiver}")
+            async with TransceiverClient(transceiver, transceiver_port) as trx_client:
+                # Check if the transceiver is assigned to the given node
+                resp = await trx_client.get_assigned_nodes()
+                if not any(node.address == address for node in resp.nodes):
+                    click.echo(f"Error: Transceiver not assigned to node {address}")
+                    sys.exit(1)
+
+                async with ProxyAVSSClient(trx_client, address) as client:
+                    return await f(*args, client=client, **kwargs)
+
+        if transceiver:
+            asyncio.run(do_proxy_async())
+        else:
+            asyncio.run(do_async())
 
     return wrapper
 
@@ -54,10 +75,12 @@ def scan():
     asyncio.run(do_async())
 
 @avss_group.command()
-@click.option("--address", help="Bluetooth address of AVSS node.")
+@click.option("--transceiver", help="Hostname or IP address")
+@click.option("--transceiver-port", default=7645, show_default=True, help="TCP port number")
+@click.option("--address", help="Bluetooth address of AVSS node.", required=True)
 @click.option("--file", metavar="FILE", help="Path to firmware image.")
 @click.option("--confirm-only", is_flag=True, help="Run only the confirm step.")
-def upgrade(address, file, confirm_only):
+def upgrade(transceiver, transceiver_port, address, file, confirm_only):
     """Upgrade node firmware."""
 
     if not confirm_only and not file:
@@ -65,11 +88,17 @@ def upgrade(address, file, confirm_only):
         sys.exit(1)
 
     if not confirm_only:
-        binary = Path(file).read_bytes()
-
-    async def do():
         try:
-            device = await BleakScanner.find_device_by_address(address)
+            binary = Path(file).read_bytes()
+        except OSError as ex:
+            click.echo(f"Error: {ex}", err=True)
+            sys.exit(1)
+
+    address = BluetoothAddrLE.parse(address)
+
+    async def do_async():
+        try:
+            device = await BleakScanner.find_device_by_address(address.address_str())
             image_index = 0
 
             if not confirm_only:
@@ -91,7 +120,47 @@ def upgrade(address, file, confirm_only):
             click.echo(f"Error: {ex}", err=True)
             sys.exit(1)
 
-    asyncio.run(do())
+    async def do_proxy_async():
+        try:
+            logger.info(f"Connect to transceiver {transceiver}")
+            async with TransceiverClient(transceiver, transceiver_port) as trx_client:
+                # Check if the transceiver is assigned to the given node
+                resp = await trx_client.get_assigned_nodes()
+                if not any(node.address == address for node in resp.nodes):
+                    click.echo(f"Error: Transceiver not assigned to node {address}")
+                    sys.exit(1)
+
+                image_index = 0
+
+                if not confirm_only:
+                    async with ProxyAVSSClient(trx_client, address) as client:
+                        await client.prepare_upgrade(image_index, len(binary))
+                        await client.program_transfer(binary)
+                        await client.apply_upgrade()
+
+                    click.echo("Waiting for node to reboot with new firmware image...")
+                    await asyncio.sleep(30.0)
+
+                async with ProxyAVSSClient(trx_client, address) as client:
+                    while True:
+                        try:
+                            version = await client.get_version()
+                            break
+                        except:
+                            await asyncio.sleep(1.0)
+
+                    click.echo(f"Version: {version.version} (build: {version.build_version})")
+                    click.echo("Confirming new image")
+                    await client.confirm_upgrade(image_index)
+
+        except Exception as ex:
+            click.echo(f"Error: {ex}", err=True)
+            sys.exit(1)
+
+    if transceiver:
+        asyncio.run(do_proxy_async())
+    else:
+        asyncio.run(do_async())
 
 @avss_group.command()
 @with_avss_client
