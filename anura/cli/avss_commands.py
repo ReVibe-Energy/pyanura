@@ -88,7 +88,11 @@ def upgrade(transceiver, transceiver_port, address, file, confirm_only):
         sys.exit(1)
 
     if not confirm_only:
-        binary = Path(file).read_bytes()
+        try:
+            binary = Path(file).read_bytes()
+        except OSError as ex:
+            click.echo(f"Error: {ex}", err=True)
+            sys.exit(1)
 
     address = BluetoothAddrLE.parse(address)
 
