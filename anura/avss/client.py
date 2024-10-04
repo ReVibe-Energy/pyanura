@@ -68,6 +68,7 @@ OpCode.ApplySettingsResponse = 11
 OpCode.TestThroughput = 12 # TBD
 OpCode.ReportCapture = 13 # TBD
 OpCode.Deactivate = 16
+OpCode.TriggerMeasurement = 17
 OpCode.PrepareUpgrade = 100
 OpCode.ApplyUpgrade = 101
 OpCode.ConfirmUpgrade = 102
@@ -319,6 +320,10 @@ class AVSSClient:
     async def deactivate(self, key: int):
         arg = DeactivateArgs(key=key)
         return await self._request(OpCode.Deactivate, arg)
+
+    async def trigger_measurement(self, duration_ms: int):
+        arg = TriggerMeasurementArgs(duration_ms=duration_ms)
+        return await self._request(OpCode.TriggerMeasurement, arg)
 
     def _on_program_notify(self, data):
         offset, = struct.unpack("<L", data)
