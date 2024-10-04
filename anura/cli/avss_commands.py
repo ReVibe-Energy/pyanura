@@ -75,10 +75,12 @@ def scan():
     asyncio.run(do_async())
 
 @avss_group.command()
-@click.option("--address", help="Bluetooth address of AVSS node.")
+@click.option("--transceiver", help="Hostname or IP address")
+@click.option("--transceiver-port", default=7645, show_default=True, help="TCP port number")
+@click.option("--address", help="Bluetooth address of AVSS node.", required=True)
 @click.option("--file", metavar="FILE", help="Path to firmware image.")
 @click.option("--confirm-only", is_flag=True, help="Run only the confirm step.")
-def upgrade(address, file, confirm_only):
+def upgrade(transceiver, transceiver_port, address, file, confirm_only):
     """Upgrade node firmware."""
 
     if not confirm_only and not file:
@@ -88,9 +90,11 @@ def upgrade(address, file, confirm_only):
     if not confirm_only:
         binary = Path(file).read_bytes()
 
-    async def do():
+    address = BluetoothAddrLE.parse(address)
+
+    async def do_async():
         try:
-            device = await BleakScanner.find_device_by_address(address)
+            device = await BleakScanner.find_device_by_address(address.address_str())
             image_index = 0
 
             if not confirm_only:
@@ -112,27 +116,7 @@ def upgrade(address, file, confirm_only):
             click.echo(f"Error: {ex}", err=True)
             sys.exit(1)
 
-    asyncio.run(do())
-
-@avss_group.command()
-@click.option("--transceiver", help="Hostname or IP address")
-@click.option("--transceiver-port", default=7645, show_default=True, help="TCP port number")
-@click.option("--address", help="Bluetooth address of AVSS node.", required=True)
-@click.option("--file", metavar="FILE", help="Path to firmware image.")
-@click.option("--confirm-only", is_flag=True, help="Run only the confirm step.")
-def upgrade_with_transceiver(transceiver, transceiver_port, address, file, confirm_only):
-    """Upgrade node firmware."""
-
-    if not confirm_only and not file:
-        click.echo("Error: At least one of options '--file' and '--confirm-only' must be given.", err=True)
-        sys.exit(1)
-
-    if not confirm_only:
-        binary = Path(file).read_bytes()
-
-    address = BluetoothAddrLE.parse(address)
-
-    async def do():
+    async def do_proxy_async():
         try:
             logger.info(f"Connect to transceiver {transceiver}")
             async with TransceiverClient(transceiver, transceiver_port) as trx_client:
@@ -169,7 +153,10 @@ def upgrade_with_transceiver(transceiver, transceiver_port, address, file, confi
             click.echo(f"Error: {ex}", err=True)
             sys.exit(1)
 
-    asyncio.run(do())
+    if transceiver:
+        asyncio.run(do_proxy_async())
+    else:
+        asyncio.run(do_async())
 
 @avss_group.command()
 @with_avss_client
