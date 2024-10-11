@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from anura.dataclasses_cbor import (dataclass_cbor, field)
+from typing import Union
 
 @dataclass_cbor()
 @dataclass
@@ -21,7 +22,7 @@ class ReportCaptureArgs:
 @dataclass_cbor()
 @dataclass
 class ReportHealthArgs:
-    active: bool = field(0)
+    count: Union[bool, int] = field(0)
 
 @dataclass_cbor()
 @dataclass

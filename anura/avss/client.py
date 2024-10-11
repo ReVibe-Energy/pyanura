@@ -279,8 +279,8 @@ class AVSSClient:
         arg = ReportAggregatesArgs(count=count, auto_resume=auto_resume)
         return await self._request(OpCode.ReportAggregates, arg)
 
-    async def report_health(self, active):
-        arg = ReportHealthArgs(active=active)
+    async def report_health(self, count):
+        arg = ReportHealthArgs(count=count)
         return await self._request(OpCode.ReportHealth, arg)
 
     async def report_settings(self):
