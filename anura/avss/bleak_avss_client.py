@@ -13,7 +13,9 @@ class BleakAVSSClient(AVSSClient):
     def __init__(self, addr):
         self._cp_response_q = asyncio.Queue(maxsize=1)
         self._disconnected = asyncio.Future()
-        self.client = BleakClient(addr)
+        def disconnected(client: BleakClient):
+             self._disconnected.set_result(None)
+        self.client = BleakClient(addr, disconnected_callback=disconnected)
         super().__init__()
 
     async def __aenter__(self):
