@@ -325,8 +325,15 @@ class AVSSClient:
         arg = ReportAggregatesArgs(count=count, auto_resume=auto_resume)
         return await self._request(OpCode.ReportAggregates, arg)
 
-    async def report_health(self, active):
-        arg = ReportHealthArgs(active=active)
+    async def report_health(self, count: int = None, *, active: bool = None):
+        if active == True or active == False:
+            arg = ReportHealthArgs(count=active)
+        elif count == None:
+            # Send True instead of None since this is compatible
+            # with older sensor firmware versions.
+            arg = ReportHealthArgs(count=True)
+        else:
+            arg = ReportHealthArgs(count=count)
         return await self._request(OpCode.ReportHealth, arg)
 
     async def report_settings(self):
