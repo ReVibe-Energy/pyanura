@@ -37,7 +37,7 @@ async def connect_node(transceiver, output_dir, addr):
                 logger.info("Requesting settings from %s", addr)
                 await node.report_settings()
                 logger.info("Enabling health reports from %s", addr)
-                await node.report_health(active=True)
+                await node.report_health()
                 logger.info("Enabling snippet reports from %s", addr)
                 await node.report_snippets(count=None, auto_resume=True)
 
