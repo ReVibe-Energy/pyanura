@@ -207,7 +207,7 @@ class Forwarder(AnuraSupervisor):
                 logger.info("Node will reboot to apply settings")
 
         logger.info("Request health reports")
-        await node.report_health(active=True)
+        await node.report_health()
         logger.info("Request snippet reports")
         await node.report_snippets(count=None, auto_resume=True)
 
