@@ -77,6 +77,8 @@ OpCode.ApplySettingsResponse = 11
 OpCode.TestThroughput = 12 # TBD
 OpCode.ReportCapture = 13 # TBD
 OpCode.Deactivate = 16
+OpCode.GetFirmwareInfo = 18
+OpCode.GetFirmwareInfoResponse = 19
 OpCode.PrepareUpgrade = 100
 OpCode.ApplyUpgrade = 101
 OpCode.ConfirmUpgrade = 102
@@ -307,6 +309,8 @@ class AVSSClient:
             return WriteSettingsResponse.from_cbor(chrc_value[1:])
         elif response_opcode == OpCode.ApplySettingsResponse:
             return ApplySettingsResponse.from_cbor(chrc_value[1:])
+        elif response_opcode == OpCode.GetFirmwareInfoResponse:
+            return GetFirmwareInfoResponse.from_cbor(chrc_value[1:])
         else:
             raise AVSSProtocolError("Expected response opcode")
 
@@ -372,6 +376,9 @@ class AVSSClient:
     async def deactivate(self, key: int):
         arg = DeactivateArgs(key=key)
         return await self._request(OpCode.Deactivate, arg)
+
+    async def get_firmware_info(self) -> GetFirmwareInfoResponse:
+        return await self._request(OpCode.GetFirmwareInfo, None)
 
     def _on_program_notify(self, data):
         offset, = struct.unpack("<L", data)

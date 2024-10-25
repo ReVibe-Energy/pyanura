@@ -78,6 +78,15 @@ class GetVersionResponse:
 
 @dataclass_cbor()
 @dataclass
+class GetFirmwareInfoResponse:
+    app_version: int = field(0)
+    app_build_version: str = field(1)
+    app_status: int = field(2)
+    net_version: int = field(3)
+    net_build_version: str = field(4)
+
+@dataclass_cbor()
+@dataclass
 class SnippetReport:
     start_time: int = field(0)
     sample_rate: int = field(1)
