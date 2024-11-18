@@ -8,12 +8,13 @@ import time
 import zeroconf
 
 from anura.transceiver import BluetoothAddrLE, TransceiverClient, ScanNodesReceivedEvent
+from anura.transceiver.transport import USBTransport
 from anura.transceiver.proxy_avss_client import ProxyAVSSClient
 
 logger = logging.getLogger(__name__)
 
 def with_transceiver_client(f):
-    @click.option("--host", metavar="HOST", required=True, help="Hostname or IP address")
+    @click.option("--host", metavar="HOST", required=True, help="Hostname, IP address or usb:<serial>")
     @click.option('--port', metavar="PORT", default=7645, show_default=True, help="TCP port number")
     @functools.wraps(f)
     def wrapper(host, port, *args, **kwargs):
@@ -38,7 +39,7 @@ def transceiver_group():
 
 @transceiver_group.command()
 def browse():
-    """List transceivers discovered using mDNS"""
+    """List transceivers discovered using mDNS and USB"""
 
     class EchoDistinctListener(zeroconf.ServiceListener):
         def __init__(self):
@@ -55,6 +56,9 @@ def browse():
             if server not in self._found_servers:
                 click.echo(server)
                 self._found_servers.add(server)
+
+    for serial in USBTransport.list_devices():
+        print(f"usb:{serial}")
 
     with zeroconf.Zeroconf() as zc:
         listener = EchoDistinctListener()
@@ -183,7 +187,7 @@ async def reset(client: TransceiverClient):
     click.echo("Resetting shortly.")
 
 @transceiver_group.command()
-@click.option("--host", metavar="HOST", required=True, help="Hostname or IP address")
+@click.option("--host", metavar="HOST", required=True, help="Hostname, IP address or usb:<serial>")
 @click.option('--port', metavar="PORT", default=7645, show_default=True, help="TCP port number")
 @click.option("--file", metavar="FILE", help="Path to firmware image.")
 @click.option("--confirm-only", is_flag=True, help="Run only the confirm step.")
