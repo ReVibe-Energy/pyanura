@@ -15,7 +15,7 @@ import sys
 logger = logging.getLogger(__name__)
 
 def with_avss_client(f):
-    @click.option("--transceiver", help="Hostname or IP address")
+    @click.option("--transceiver", help="Hostname, IP address or usb:<serial>")
     @click.option("--transceiver-port", default=7645, show_default=True, help="TCP port number")
     @click.option("--address", help="Bluetooth address of AVSS node.", required=True)
     @functools.wraps(f)
@@ -75,7 +75,7 @@ def scan():
     asyncio.run(do_async())
 
 @avss_group.command()
-@click.option("--transceiver", help="Hostname or IP address")
+@click.option("--transceiver", help="Hostname, IP address or usb:<serial>")
 @click.option("--transceiver-port", default=7645, show_default=True, help="TCP port number")
 @click.option("--address", help="Bluetooth address of AVSS node.", required=True)
 @click.option("--file", metavar="FILE", help="Path to firmware image.")
