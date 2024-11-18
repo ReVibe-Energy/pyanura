@@ -1,4 +1,5 @@
 from .models import *
+from .transport import Transport
 import asyncio
 import cbor2
 from contextlib import contextmanager
@@ -28,11 +29,10 @@ class TransceiverClientError(Exception):
 class TransceiverClient:
     def __init__(
         self,
-        hostname: str,
+        target_spec: str,
         port: int = 7645
     ) -> None:
-        self._hostname = hostname
-        self._port = port
+        self._transport = Transport.create(target_spec, port)
         self._pending_responses = {}
         self._known_methods = {}
         self._disconnected = asyncio.Future()
@@ -47,21 +47,18 @@ class TransceiverClient:
         logger.debug("Closing connection")
         if self._connection_task:
             self._connection_task.cancel()
-        self._writer.close()
-        await self._writer.wait_closed()
+        await self._transport.close()
 
     async def connect(self):
-        logger.debug("Connecting to host %s at port %d", self._hostname, self._port)
-        reader, self._writer = await asyncio.open_connection(self._hostname, self._port)
+        logger.debug("Connecting to %s", self._transport)
+        await self._transport.open_connection()
         logger.debug("Connected")
 
         async def recv_task():
             while True:
                 payload = None
                 try:
-                    header = await reader.readexactly(2)
-                    payload_len, = struct.unpack(">H", header)
-                    payload = await reader.readexactly(payload_len)
+                    payload = await self._transport.read()
                 except asyncio.IncompleteReadError:
                     break
                 message = cbor2.loads(payload)
@@ -98,9 +95,7 @@ class TransceiverClient:
         await self.discover_methods()
 
     async def _send(self, payload):
-        self._writer.write(struct.pack(">H", len(payload)))
-        self._writer.write(payload)
-        await self._writer.drain()
+        await self._transport.send(payload)
 
     async def _request_internal(self, method, param):
         method_id = method
