@@ -392,7 +392,7 @@ class AVSSClient:
                     while True:
                         # Wait a short while for a NACK message to indicate the
                         # node is not in sync with our writes.
-                        offset = await asyncio.wait_for(self._program_nack_queue.get(), timeout=0.01)
+                        offset = await asyncio.wait_for(self._program_nack_queue.get(), timeout=0.04)
                         if offset == 0xFFFFFFFF:
                             raise RuntimeError("Program transfer aborted")
                         # We received a NACK so we wait a short while to see
@@ -401,7 +401,7 @@ class AVSSClient:
                         # are queued .
                         await asyncio.sleep(0.1)
                 except TimeoutError:
-                    # No NACK was received after 10 ms of waiting so we assume
+                    # No NACK was received after 40 ms of waiting so we assume
                     # the write operation is on track.
                     pass
                 end = offset + chunk_size
