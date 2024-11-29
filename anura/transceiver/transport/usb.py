@@ -58,12 +58,16 @@ class USBTransport(Transport, transport_type="usb"):
         await self.loop.run_in_executor(None, self._detach_kernel_driver)
         usb.util.claim_interface(self.dev, 0)
 
+        # Get rid of old data on the IN endpoint that may be buffered
+        # in the device.
+        await self.flush_in_endpoint()
+
         # Start the background reader task that puts messages on the
         # receive queue
         self.reader_task = asyncio.create_task(self._background_reader())
 
     async def send(self, msg: bytes) -> None:
-        assert self.dev is not None
+        assert self.dev is not None, "Not connected"
 
         if len(msg) > 0xFFFF:
             raise ValueError("Message too large", len(msg))
@@ -74,7 +78,7 @@ class USBTransport(Transport, transport_type="usb"):
         logger.debug(f"Sent message: {msg}")
 
     async def read(self) -> bytes:
-        assert self.dev is not None
+        assert self.dev is not None, "Not connected"
 
         message = await self.receive_queue.get()
         if message is EOF_SENTINEL:
@@ -133,13 +137,26 @@ class USBTransport(Transport, transport_type="usb"):
             if dev_serial == serial_number:
                 return device
 
+    async def flush_in_endpoint(self) -> None:
+        while True:
+            try:
+                data = await self.loop.run_in_executor(
+                    None, self.dev.read, self.in_ep, self.max_packet_size, 50
+                )
+            except usb.core.USBError as e:
+                if hasattr(e, "errno") and e.errno == errno.ETIMEDOUT:
+                    break
+                else:
+                    logger.error(f"Error while flushing IN endpoint: {e}")
+                    raise
+
     async def _background_reader(self) -> None:
         # Task to always have a read pending on the IN endpoint
         buf = bytearray()
         while self.dev is not None:
             try:
                 data = await self.loop.run_in_executor(
-                    None, self.dev.read, self.in_ep, self.max_packet_size
+                    None, self.dev.read, self.in_ep, self.max_packet_size, 0
                 )
                 buf.extend(data)
                 logger.debug(f"Received raw data: {data}")
