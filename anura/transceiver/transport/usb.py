@@ -55,8 +55,10 @@ class USBTransport(Transport, transport_type="usb"):
 
         # Get rid of the kernel driver (if there is one) and claim the
         # default interface
-        await self.loop.run_in_executor(None, self._detach_kernel_driver)
-        usb.util.claim_interface(self.dev, 0)
+        # await self.loop.run_in_executor(None, self._detach_kernel_driver)
+        # usb.util.claim_interface(self.dev, 0)
+
+        self.dev.set_configuration()
 
         # Get rid of old data on the IN endpoint that may be buffered
         # in the device.
