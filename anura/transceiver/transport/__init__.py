@@ -1,3 +1,6 @@
 from .tcp import TCPTransport
-from .usb import USBTransport
+try:
+    from .usb import USBTransport
+except ModuleNotFoundError:
+    from .usb_dummy import USBTransport
 from .base import Transport
