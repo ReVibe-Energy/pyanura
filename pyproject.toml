@@ -5,14 +5,17 @@ requires-python = ">=3.11"
 dependencies = [
   "cbor2",
   "typing_inspect",
-  "pyusb",
 ]
 
 [project.optional-dependencies]
+usb = [
+  "pyusb",
+]
 cli = [
   "click",
   "bleak",
-  "zeroconf"
+  "pyusb",
+  "zeroconf",
 ]
 
 [project.scripts]
