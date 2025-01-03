@@ -77,6 +77,7 @@ OpCode.ApplySettingsResponse = 11
 OpCode.TestThroughput = 12 # TBD
 OpCode.ReportCapture = 13 # TBD
 OpCode.Deactivate = 16
+OpCode.ResetReport = 20
 OpCode.PrepareUpgrade = 100
 OpCode.ApplyUpgrade = 101
 OpCode.ConfirmUpgrade = 102
@@ -372,6 +373,9 @@ class AVSSClient:
     async def deactivate(self, key: int):
         arg = DeactivateArgs(key=key)
         return await self._request(OpCode.Deactivate, arg)
+
+    async def reset_report(self):
+        return await self._request(OpCode.ResetReport, None)
 
     def _on_program_notify(self, data):
         offset, = struct.unpack("<L", data)
