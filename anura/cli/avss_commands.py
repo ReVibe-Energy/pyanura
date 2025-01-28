@@ -250,3 +250,17 @@ async def health_report(client: avss.AVSSClient):
             if isinstance(msg, avss.HealthReport):
                 click.echo(f"Health report: {msg}")
                 break
+
+@avss_group.command()
+@with_avss_client
+async def get_firmware_info(client: avss.AVSSClient):
+    """Get firmware info"""
+    info = await client.get_firmware_info()
+    major = (info.app_version >> 24) & 0xff
+    minor = (info.app_version >> 16) & 0xff
+    patch = (info.app_version >> 8) & 0xff
+    click.echo(f"App version: v{major}.{minor}.{patch}, build: {info.app_build_version}, status: {info.app_status}")
+    major = (info.net_version >> 24) & 0xff
+    minor = (info.net_version >> 16) & 0xff
+    patch = (info.net_version >> 8) & 0xff
+    click.echo(f"Net version: v{major}.{minor}.{patch},, build: {info.net_build_version}")
