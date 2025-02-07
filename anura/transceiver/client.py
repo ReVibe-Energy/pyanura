@@ -64,8 +64,10 @@ class TransceiverClient:
                 message = cbor2.loads(payload)
                 match message:
                     case [msg_type.Response, request_token, error, result]:
-                        response = self._pending_responses.get(request_token)
-                        if response:
+                        response = self._pending_responses.pop(request_token, None)
+                        if response and response.cancelled():
+                            logger.warning("Response to cancelled request received")
+                        elif response:
                             response.set_result([error, result])
                     case [msg_type.Notification, type_, argument]:
                         n = Notification.parse(type_, argument)
@@ -108,26 +110,19 @@ class TransceiverClient:
             request_token += 1
         loop = asyncio.get_event_loop()
         response = loop.create_future()
-        try:
-            self._pending_responses[request_token] = response
-            await self._send(cbor2.dumps([msg_type.Request, request_token, method_id, param]))
-            match await response:
-                case [None, result]:
-                        return result
-                case [error, _]:
-                    raise RequestError(method, error)
-        finally:
-            del self._pending_responses[request_token]
+        self._pending_responses[request_token] = response
+        await self._send(cbor2.dumps([msg_type.Request, request_token, method_id, param]))
+        match await response:
+            case [None, result]:
+                    return result
+            case [error, _]:
+                raise RequestError(method, error)
 
     async def request(self, method, arg=None, result_type=None):
         "Send a send a request and receive the response"
         if hasattr(arg, "to_struct"):
             arg = arg.to_struct()
-        # _request_internal needs to be shielded from cancellation
-        # because otherwise we would remove the request token from
-        # _pending_responses prematurely, leading to re-use of
-        # tokens that are still associated with an ongoing request.
-        result = await asyncio.shield(self._request_internal(method, arg))
+        result = await self._request_internal(method, arg)
         if result_type:
             return result_type.from_struct(result)
         else:
