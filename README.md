@@ -29,6 +29,13 @@ Using this method you don't have to manually set up a virtual environment as `pi
 will create one for you. Additionally it will add a script to your `PATH` that will
 launch the command-line in the appropriate virtual environment.
 
+At this point, you should be able to run CLI commands from your terminal - for example:
+```
+anura transceiver browse
+```
+to search for transceivers on the local network.
+
+
 ## Installing libusb
 `libusb` must be manually installed to use USB transceivers in Windows.
 1. Download `libusb` binaries, e.g. from the [Github releases page of `libusb`](https://github.com/libusb/libusb/releases)
