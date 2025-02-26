@@ -53,10 +53,8 @@ class USBTransport(Transport, transport_type="usb"):
         logger.debug(f"Transceiver found: {device}")
         self.dev = device
 
-        # Get rid of the kernel driver (if there is one) and claim the
-        # default interface
+        # Get rid of the kernel driver (if there is one)
         await self.loop.run_in_executor(None, self._detach_kernel_driver)
-        usb.util.claim_interface(self.dev, 0)
 
         # Get rid of old data on the IN endpoint that may be buffered
         # in the device.
