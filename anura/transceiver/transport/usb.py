@@ -124,9 +124,15 @@ class USBTransport(Transport, transport_type="usb"):
         return device_list
 
     def _detach_kernel_driver(self):
-        if self.dev.is_kernel_driver_active(0):
-            self.dev.detach_kernel_driver(0)
-            logger.debug("Kernel driver detached")
+    # These operations are not available on Windows and cause
+    # NotImplementedError. See libusb docs:
+    # https://libusb.sourceforge.io/api-1.0/group__libusb__dev.html#ga1cabd4660a274f715eeb82de112e0779
+        try:
+            if self.dev.is_kernel_driver_active(0):
+                self.dev.detach_kernel_driver(0)
+                logger.debug("Kernel driver detached")
+        except NotImplementedError:
+            logger.debug("Couldn't detach kernel driver (expected on Windows)")
 
     def _find_device_by_serial(self, serial_number: str) -> Optional[usb.core.Device]:
         devices = usb.core.find(
