@@ -53,6 +53,10 @@ class USBTransport(Transport, transport_type="usb"):
         logger.debug(f"Transceiver found: {device}")
         self.dev = device
 
+        # Set the configuration. See
+        # https://libusb.sourceforge.io/api-1.0/libusb_caveats.html#configsel
+        self.dev.set_configuration()
+
         # Get rid of the kernel driver (if there is one)
         await self.loop.run_in_executor(None, self._detach_kernel_driver)
 
