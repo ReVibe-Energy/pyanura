@@ -29,6 +29,14 @@ Using this method you don't have to manually set up a virtual environment as `pi
 will create one for you. Additionally it will add a script to your `PATH` that will
 launch the command-line in the appropriate virtual environment.
 
+## Installing libusb
+`libusb` must be manually installed to use USB transceivers in Windows.
+1. Download `libusb` binaries, e.g. from the [Github releases page of `libusb`](https://github.com/libusb/libusb/releases)
+2. Extract them to a directory suitable for keeping the files long-term
+3. Add the `VS2022\MS64\dll` subfolder to your PATH environment variable. Example path: `C:\Users\felix\libusb-1.0.27\VS2022\MS64\dll`
+4. Restart terminal/IDE in which you're invoking the CLI so that the new entry in PATH is loaded
+5. Run pyanura
+
 
 ## Development setup
 
