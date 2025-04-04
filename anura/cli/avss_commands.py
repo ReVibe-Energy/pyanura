@@ -2,6 +2,7 @@ import anura.avss as avss
 from anura.transceiver import TransceiverClient, BluetoothAddrLE
 from anura.transceiver.proxy_avss_client import ProxyAVSSClient
 from anura.avss.bleak_avss_client import BleakAVSSClient
+from .session import SessionFile
 import asyncio
 from bleak import BleakError, BleakScanner
 import click
@@ -9,6 +10,7 @@ import functools
 import json
 import logging
 import math
+import time
 from pathlib import Path
 import sys
 
@@ -289,3 +291,65 @@ async def trigger_measurement(client: avss.AVSSClient, duration: float):
     """Trigger measurement"""
     resp = await client.trigger_measurement(duration_ms=duration*1000)
     click.echo(resp)
+
+@avss_group.command()
+@click.option("--duration", default=4)
+@click.option("--output", help="path to output file", required=True)
+@click.option("--captures", is_flag=True, help="Fetch capture reports")
+@click.option("--snippets", is_flag=True, help="Fetch snippet reports")
+@with_avss_client
+async def quick_measurement(client: avss.AVSSClient, duration, output, captures, snippets):
+    """Quick measurement"""
+    settings = {}
+    if captures:
+        settings.update({
+            "capture_mode": 1,
+            "capture_buffer_length": 1024,
+            "events_motion_start_enable": True,
+            "events_motion_start_capture": True,
+            "events_motion_start_capture_duration_ms": (duration*1000),
+        })
+
+    if snippets:
+        settings.update({
+            "snippet_length": 1024,
+            "snippet_mode": 2,
+        })
+
+    await client.write_settings(avss.SettingsMapper.from_readable(settings))
+    resp = await client.apply_settings(persist=True)
+
+    if resp.will_reboot:
+        click.echo("Rebooting node to apply settings, re-run command to start measurement")
+        sys.exit()
+
+
+    with client.reports(parse=False) as reports:
+        if captures:
+            await client.report_capture(count=None, auto_resume=False)
+
+        if snippets:
+            await client.report_snippets(count=None, auto_resume=False)
+
+        await client.trigger_measurement(duration_ms=duration*1000)
+
+        click.echo("Waiting for reports")
+
+        async def collect_reports():
+            with SessionFile(output, read_only=False) as f:
+                f.update_session_info(time.time_ns())
+
+                async for report in reports:
+                    f.insert_avss_report(received_at=time.time_ns(),
+                                         node_id="NODE",
+                                         report_type=report.report_type,
+                                         payload_cbor=report.payload_cbor)
+
+
+        try:
+            await asyncio.wait_for(collect_reports(), duration)
+        except TimeoutError:
+            pass
+
+
+
