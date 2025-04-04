@@ -77,6 +77,7 @@ OpCode.ApplySettingsResponse = 11
 OpCode.TestThroughput = 12 # TBD
 OpCode.ReportCapture = 13 # TBD
 OpCode.Deactivate = 16
+OpCode.TriggerMeasurement = 17
 OpCode.GetFirmwareInfo = 18
 OpCode.GetFirmwareInfoResponse = 19
 OpCode.PrepareUpgrade = 100
@@ -321,8 +322,8 @@ class AVSSClient:
         arg = ReportSnippetArgs(count=count, auto_resume=auto_resume)
         return await self._request(OpCode.ReportSnippet, arg)
 
-    async def report_capture(self, count):
-        arg = ReportCaptureArgs(count=count)
+    async def report_capture(self, count, auto_resume):
+        arg = ReportCaptureArgs(count=count, auto_resume=auto_resume)
         return await self._request(OpCode.ReportCapture, arg)
 
     async def report_aggregates(self, count, auto_resume):
@@ -379,6 +380,10 @@ class AVSSClient:
 
     async def get_firmware_info(self) -> GetFirmwareInfoResponse:
         return await self._request(OpCode.GetFirmwareInfo, None)
+
+    async def trigger_measurement(self, duration_ms: int):
+        arg = TriggerMeasurementArgs(duration_ms=duration_ms)
+        return await self._request(OpCode.TriggerMeasurement, arg)
 
     def _on_program_notify(self, data):
         offset, = struct.unpack("<L", data)
