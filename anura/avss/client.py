@@ -332,8 +332,8 @@ class AVSSClient:
         arg = ReportSnippetArgs(count=count, auto_resume=auto_resume)
         return await self._request(OpCode.ReportSnippet, arg)
 
-    async def report_capture(self, count):
-        arg = ReportCaptureArgs(count=count)
+    async def report_capture(self, count, auto_resume):
+        arg = ReportCaptureArgs(count=count, auto_resume=auto_resume)
         return await self._request(OpCode.ReportCapture, arg)
 
     async def report_aggregates(self, count, auto_resume):
