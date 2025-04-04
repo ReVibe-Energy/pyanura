@@ -18,6 +18,7 @@ class ReportAggregatesArgs:
 @dataclass
 class ReportCaptureArgs:
     count: int = field(0)
+    auto_resume: bool = field(1)
 
 @dataclass_cbor()
 @dataclass
@@ -117,9 +118,13 @@ class SnippetReport:
 @dataclass
 class CaptureReport:
     start_time: int = field(0)
-    end_time: int = field(1)
+    unused_key: int = field(1)
     range_: int = field(2)
     samples: dict[int, bytes] = field(3)
+    is_synced: bool = field(4)
+    duration: bool = field(5)
+    start_time_monotonic: int = field(6)
+    duration_monotonic: int = field(7)
 
 @dataclass_cbor()
 @dataclass
