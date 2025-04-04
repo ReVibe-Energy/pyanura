@@ -10,6 +10,11 @@ class SettingsMapper:
         "wom_sample_rate_hz": 7,
         "wom_threshold_g": 8,
         "snippet_mode": 9,
+        "capture_mode": 10,
+        "capture_buffer_length": 11,
+        "events_motion_start_enable": 12,
+        "events_motion_start_capture": 13,
+        "events_motion_start_capture_duration_ms": 14
     }
 
     reverse_map = dict(reversed(item) for item in forward_map.items())
