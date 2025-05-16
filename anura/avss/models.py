@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from anura.dataclasses_cbor import (dataclass_cbor, field)
-from typing import Union
+from typing import Any, Union
 
 @dataclass_cbor()
 @dataclass
@@ -27,7 +27,8 @@ class ReportHealthArgs:
 @dataclass_cbor()
 @dataclass
 class ReportSettings:
-    pass
+    current: bool = field(0)
+    pending: bool = field(1)
 
 @dataclass_cbor()
 @dataclass
@@ -140,3 +141,4 @@ class HealthReport:
 @dataclass
 class SettingsReport:
     settings: dict = field(0)
+    pending_settings: dict = field(1)

@@ -349,8 +349,8 @@ class AVSSClient:
             arg = ReportHealthArgs(count=count)
         return await self._request(OpCode.ReportHealth, arg)
 
-    async def report_settings(self):
-        arg = ReportSettings()
+    async def report_settings(self, current=True, pending=False):
+        arg = ReportSettings(current=current, pending=pending)
         return await self._request(OpCode.ReportSettings, arg)
 
     async def apply_settings(self, persist: bool) -> ApplySettingsResponse:
