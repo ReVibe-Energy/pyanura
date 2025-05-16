@@ -222,14 +222,28 @@ async def read_settings(client: avss.AVSSClient):
 
 @avss_group.command()
 @click.option("--file", metavar="FILE", help="Path to settings file.")
+@click.option("--reset-defaults", is_flag=True, help="Reset default values")
 @with_avss_client
-async def write_settings(client: avss.AVSSClient, file: str):
+async def write_settings(client: avss.AVSSClient, file: str, reset_defaults: bool):
     """Write settings."""
-    settings = json.loads(Path(file).read_text())
-    resp = await client.write_settings(settings)
-    click.echo(resp)
-    resp = await client.apply_settings(persist=True)
-    click.echo(resp)
+    if file:
+        try:
+            settings = json.loads(Path(file).read_text())
+        except FileNotFoundError as e:
+            click.echo(f"Error: {e}", err=True)
+            sys.exit(1)
+    else:
+        settings = {}
+
+    try:
+        resp = await client.write_settings_v2(settings, reset_defaults=reset_defaults, apply=True)
+        click.echo(resp)
+    except avss.client.AVSSOpCodeUnsupportedError:
+        logger.info("Write Settings v2 opcode not supported, using fallback...")
+        resp = await client.write_settings(settings)
+        click.echo(resp)
+        resp = await client.apply_settings(persist=True)
+        click.echo(resp)
 
 @avss_group.command()
 @with_avss_client
