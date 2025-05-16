@@ -10,6 +10,20 @@ class SettingsMapper:
         "wom_sample_rate_hz": 7,
         "wom_threshold_g": 8,
         "snippet_mode": 9,
+        "capture_mode": 10,
+        "capture_buffer_length": 11,
+        "events_motion_start_enable": 12,
+        "events_motion_start_capture": 13,
+        "events_motion_start_capture_duration_ms": 14,
+        "aggregates_mode": 15,
+        "aggregates_interval_ms": 16,
+        "aggregates_sample_rate_hz": 17,
+        "aggregates_hpf_mode": 18,
+        "aggregates_hpf_cutoff": 19,
+        "aggregates_fft_mode": 20,
+        "aggregates_fft_length": 21,
+        "aggregates_param_enable_0_31": 22,
+        "aggregates_param_enable_32_63": 23,
     }
 
     reverse_map = dict(reversed(item) for item in forward_map.items())
