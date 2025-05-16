@@ -1,4 +1,8 @@
 from .models import *
+from .models import (
+    WriteSettingsV2Args,
+    WriteSettingsV2Response,
+)
 from .settings import SettingsMapper
 
 import asyncio
@@ -74,8 +78,10 @@ OpCode.WriteSettingsResponse = 8
 OpCode.ReportSettings = 9
 OpCode.ApplySettings = 10
 OpCode.ApplySettingsResponse = 11
-OpCode.TestThroughput = 12 # TBD
-OpCode.ReportCapture = 13 # TBD
+OpCode.TestThroughput = 12
+OpCode.ReportCapture = 13
+OpCode.WriteSettingsV2 = 14
+OpCode.WriteSettingsV2Response = 15
 OpCode.Deactivate = 16
 OpCode.GetFirmwareInfo = 18
 OpCode.GetFirmwareInfoResponse = 19
@@ -308,6 +314,8 @@ class AVSSClient:
             return GetVersionResponse.from_cbor(chrc_value[1:])
         elif response_opcode == OpCode.WriteSettingsResponse:
             return WriteSettingsResponse.from_cbor(chrc_value[1:])
+        elif response_opcode == OpCode.WriteSettingsV2Response:
+            return WriteSettingsV2Response.from_cbor(chrc_value[1:])
         elif response_opcode == OpCode.ApplySettingsResponse:
             return ApplySettingsResponse.from_cbor(chrc_value[1:])
         elif response_opcode == OpCode.GetFirmwareInfoResponse:
@@ -383,6 +391,18 @@ class AVSSClient:
 
     async def reset_report(self):
         return await self._request(OpCode.ResetReport, None)
+
+    async def write_settings_v2(
+        self, settings: dict[int, Any], reset_defaults: bool, apply: bool
+    ) -> WriteSettingsV2Response:
+        return await self._request(
+            OpCode.WriteSettingsV2,
+            WriteSettingsV2Args(
+                settings=SettingsMapper.from_readable(settings),
+                reset_defaults=reset_defaults,
+                apply=apply,
+            ),
+        )
 
     def _on_program_notify(self, data):
         offset, = struct.unpack("<L", data)

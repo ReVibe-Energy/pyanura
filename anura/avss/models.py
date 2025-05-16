@@ -72,6 +72,19 @@ class WriteSettingsResponse:
 
 @dataclass_cbor()
 @dataclass
+class WriteSettingsV2Args:
+    settings: dict[int, Any] = field(0)
+    reset_defaults: bool = field(1)
+    apply: bool = field(2)
+
+@dataclass_cbor()
+@dataclass
+class WriteSettingsV2Response:
+    num_unhandled: int = field(0)
+    will_reboot: bool = field(1)
+
+@dataclass_cbor()
+@dataclass
 class GetVersionResponse:
     version: str = field(0)
     build_version: str = field(1)
