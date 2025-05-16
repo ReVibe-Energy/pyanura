@@ -111,7 +111,7 @@ def upgrade(transceiver, transceiver_port, address, file, confirm_only):
                 # Wait at last 5 seconds to make sure we don't find the device
                 # before it has actually rebooted and started swapping images.
                 await asyncio.sleep(5)
-                device = await BleakScanner.find_device_by_address(address, timeout=60)
+                device = await BleakScanner.find_device_by_address(address.address_str(), timeout=60)
 
             async with BleakAVSSClient(device) as client:
                 click.echo("Confirming new image")
