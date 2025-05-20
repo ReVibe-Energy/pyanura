@@ -86,6 +86,7 @@ OpCode.Deactivate = 16
 OpCode.GetFirmwareInfo = 18
 OpCode.GetFirmwareInfoResponse = 19
 OpCode.ResetReport = 20
+OpCode.ResetSettings = 21
 OpCode.PrepareUpgrade = 100
 OpCode.ApplyUpgrade = 101
 OpCode.ConfirmUpgrade = 102
@@ -377,6 +378,9 @@ class AVSSClient:
 
     async def write_settings(self, settings: dict) -> WriteSettingsResponse:
         return await self._request(OpCode.WriteSettings, SettingsMapper.from_readable(settings))
+
+    async def reset_settings(self):
+        return await self._request(OpCode.ResetSettings, None)
 
     async def test_throughput(self, duration: int):
         args = TestThroughputArgs(duration=duration)
