@@ -259,8 +259,10 @@ async def get_firmware_info(client: avss.AVSSClient):
     major = (info.app_version >> 24) & 0xff
     minor = (info.app_version >> 16) & 0xff
     patch = (info.app_version >> 8) & 0xff
-    click.echo(f"App version: v{major}.{minor}.{patch}, build: {info.app_build_version}, status: {info.app_status}")
+    tweak = info.app_version & 0xff
+    click.echo(f"App version: v{major}.{minor}.{patch}.{tweak}, build: {info.app_build_version}, status: {info.app_status}")
     major = (info.net_version >> 24) & 0xff
     minor = (info.net_version >> 16) & 0xff
     patch = (info.net_version >> 8) & 0xff
-    click.echo(f"Net version: v{major}.{minor}.{patch},, build: {info.net_build_version}")
+    tweak = info.net_version & 0xff
+    click.echo(f"Net version: v{major}.{minor}.{patch}.{tweak}, build: {info.net_build_version}")
