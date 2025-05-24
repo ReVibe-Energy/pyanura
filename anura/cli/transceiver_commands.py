@@ -35,7 +35,7 @@ def with_transceiver_client(f):
             try:
                 logger.debug(f"Connecting to {host}:{port}")
                 async with TransceiverClient(host, port) as client:
-                    logger.debug(f"Connected")
+                    logger.debug("Connected")
                     return await f(*args, client=client, **kwargs)
             except Exception as ex:
                 click.echo(f"Error: {ex}", err=True)

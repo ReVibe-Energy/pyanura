@@ -1,7 +1,6 @@
 import dataclasses
 import ipaddress
 from io import BytesIO
-from typing import List
 
 import cbor2
 import typing_inspect

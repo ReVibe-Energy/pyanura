@@ -44,7 +44,7 @@ class AnuraSupervisor:
                         try:
                             version = await node.get_version()
                             break
-                        except Exception as ex:
+                        except Exception:
                             await asyncio.sleep(1.0)
 
                     logger.info("Node is available: %s", version)

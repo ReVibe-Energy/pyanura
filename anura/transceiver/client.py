@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import struct
 from contextlib import contextmanager
 from typing import (
     AsyncGenerator,

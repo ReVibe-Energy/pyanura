@@ -1,10 +1,8 @@
-import argparse
 import asyncio
 import errno
 import logging
 import struct
-import sys
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 import usb.core
 import usb.util
