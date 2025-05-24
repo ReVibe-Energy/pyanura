@@ -15,25 +15,27 @@ from .transport import Transport
 
 logger = logging.getLogger(__name__)
 
+
 class ProtocolError(Exception):
     "Raised when an invalid payload is received"
+
     pass
+
 
 class RequestError(Exception):
     "Raised when a request returns an error"
+
     def __init__(self, method, error):
         self.error = error
-        super().__init__(f"Request \"{method}\" returned an error response: {error}")
+        super().__init__(f'Request "{method}" returned an error response: {error}')
+
 
 class TransceiverClientError(Exception):
     pass
 
+
 class TransceiverClient:
-    def __init__(
-        self,
-        target_spec: str,
-        port: int = 7645
-    ) -> None:
+    def __init__(self, target_spec: str, port: int = 7645) -> None:
         self._transport = Transport.create(target_spec, port)
         self._pending_responses = {}
         self._known_methods = {}
@@ -113,10 +115,12 @@ class TransceiverClient:
         loop = asyncio.get_event_loop()
         response = loop.create_future()
         self._pending_responses[request_token] = response
-        await self._send(cbor2.dumps([msg_type.Request, request_token, method_id, param]))
+        await self._send(
+            cbor2.dumps([msg_type.Request, request_token, method_id, param])
+        )
         match await response:
             case [None, result]:
-                    return result
+                return result
             case [error, _]:
                 raise RequestError(method, error)
 
@@ -130,7 +134,9 @@ class TransceiverClient:
         else:
             return result
 
-    def _callback_and_generator(self) -> tuple[Callable[[Notification], None], AsyncGenerator[Notification, None]]:
+    def _callback_and_generator(
+        self,
+    ) -> tuple[Callable[[Notification], None], AsyncGenerator[Notification, None]]:
         # Queue to hold the incoming notifications
         notifications: asyncio.Queue[Notification] = asyncio.Queue()
 
@@ -171,7 +177,9 @@ class TransceiverClient:
         return _callback, _generator()
 
     @contextmanager
-    def notifications(self) -> Generator[AsyncGenerator[Notification, None], None, None]:
+    def notifications(
+        self,
+    ) -> Generator[AsyncGenerator[Notification, None], None, None]:
         """Context manager that creates a queue for incoming notifications.
 
         Returns:
@@ -206,16 +214,18 @@ class TransceiverClient:
         offset = 0
         while offset < len(image):
             if offset + chunk_size < len(image):
-                chunk = image[offset:(offset + chunk_size)]
+                chunk = image[offset : (offset + chunk_size)]
             else:
                 chunk = image[offset:]
-            logger.info(f"Writing image offset={offset} ({int(offset/len(image) * 100)}%)")
+            logger.info(
+                f"Writing image offset={offset} ({int(offset / len(image) * 100)}%)"
+            )
             await self.dfu_write(offset, chunk)
             offset += len(chunk)
 
     async def dfu_apply(self, permanent=False):
         if permanent:
-            args = DfuApplyArgs(permanent=0x5045524d) # ASCII "PERM"
+            args = DfuApplyArgs(permanent=0x5045524D)  # ASCII "PERM"
         else:
             args = DfuApplyArgs(permanent=0)
         return await self.request("dfu_apply", args)
@@ -229,19 +239,27 @@ class TransceiverClient:
         return await self.request("set_assigned_nodes", args)
 
     async def get_assigned_nodes(self) -> GetAssignedNodesResult:
-        return await self.request("get_assigned_nodes", result_type=GetAssignedNodesResult)
+        return await self.request(
+            "get_assigned_nodes", result_type=GetAssignedNodesResult
+        )
 
     async def get_connected_nodes(self) -> GetConnectedNodesResult:
-        return await self.request("get_connected_nodes", result_type=GetConnectedNodesResult)
+        return await self.request(
+            "get_connected_nodes", result_type=GetConnectedNodesResult
+        )
 
     async def get_device_info(self) -> GetDeviceInfoResult:
         return await self.request("get_device_info", result_type=GetDeviceInfoResult)
 
     async def get_device_status(self) -> GetDeviceStatusResult:
-        return await self.request("get_device_status", result_type=GetDeviceStatusResult)
+        return await self.request(
+            "get_device_status", result_type=GetDeviceStatusResult
+        )
 
     async def get_firmware_info(self) -> GetFirmwareInfoResult:
-        return await self.request("get_firmware_info", result_type=GetFirmwareInfoResult)
+        return await self.request(
+            "get_firmware_info", result_type=GetFirmwareInfoResult
+        )
 
     async def get_ptp_status(self) -> GetPtpStatusResult:
         return await self.request("get_ptp_status", result_type=GetPtpStatusResult)
@@ -256,7 +274,7 @@ class TransceiverClient:
     async def scan_nodes(self):
         return await self.request("scan_nodes")
 
-    async def ping(self, arg = None):
+    async def ping(self, arg=None):
         # arg is ignored by server
         return await self.request("ping", arg)
 
@@ -279,12 +297,12 @@ class TransceiverClient:
             assigned_nodes = await self.get_assigned_nodes()
             is_assigned = any(node.address == addr for node in assigned_nodes.nodes)
             if not is_assigned:
-                return None # Not assigned, so we can just give up
+                return None  # Not assigned, so we can just give up
 
             connected_nodes = await self.get_connected_nodes()
             is_connected = any(node.address == addr for node in connected_nodes.nodes)
             if is_connected:
-                return addr # Already connected
+                return addr  # Already connected
 
             async for msg in notifications:
                 if isinstance(msg, NodeServiceDiscoveredEvent) and msg.address == addr:

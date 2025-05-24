@@ -20,14 +20,24 @@ class ProxyAVSSClient(avss.AVSSClient):
             with self.transceiver.notifications() as notifications:
                 try:
                     async for msg in notifications:
-                        if isinstance(msg, AVSSReportNotifiedEvent) and msg.address == self.address:
+                        if (
+                            isinstance(msg, AVSSReportNotifiedEvent)
+                            and msg.address == self.address
+                        ):
                             self._on_report_notify(msg.value)
-                        elif isinstance(msg, AVSSProgramNotifiedEvent) and msg.address == self.address:
+                        elif (
+                            isinstance(msg, AVSSProgramNotifiedEvent)
+                            and msg.address == self.address
+                        ):
                             self._on_program_notify(msg.value)
-                        elif isinstance(msg, NodeDisconnectedEvent) and msg.address == self.address:
+                        elif (
+                            isinstance(msg, NodeDisconnectedEvent)
+                            and msg.address == self.address
+                        ):
                             return
                 finally:
                     self._disconnected.set_result(None)
+
         self._loop_task = asyncio.create_task(loop())
         return self
 
