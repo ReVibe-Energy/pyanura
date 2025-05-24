@@ -1,11 +1,11 @@
-import anura.avss as avss
 import asyncio
-from bleak import BleakClient, BleakError
 import logging
 
-from . import (
-    AVSSClient
-)
+from bleak import BleakClient, BleakError
+
+import anura.avss as avss
+
+from . import AVSSClient
 
 logger = logging.getLogger(__name__)
 
