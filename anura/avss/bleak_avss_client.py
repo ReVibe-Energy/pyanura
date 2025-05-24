@@ -36,11 +36,15 @@ class BleakAVSSClient(AVSSClient):
             self._on_program_notify(data)
 
         await self.client.connect()
-        await self.client.start_notify(avss.ReportCharacteristicUuid, report_notify)
         await self.client.start_notify(
-            avss.ControlPointCharacteristicUuid, self._cp_indicate
+            avss.uuids.ReportCharacteristicUuid, report_notify
         )
-        await self.client.start_notify(avss.ProgramCharacteristicUuid, program_notify)
+        await self.client.start_notify(
+            avss.uuids.ControlPointCharacteristicUuid, self._cp_indicate
+        )
+        await self.client.start_notify(
+            avss.uuids.ProgramCharacteristicUuid, program_notify
+        )
 
     async def disconnect(self):
         await self.client.disconnect()
@@ -54,10 +58,12 @@ class BleakAVSSClient(AVSSClient):
             logger.warning("Flushing lingering responses")
             await self._cp_response_q.get()
             self._cp_response_q.task_done()
-        await self.client.write_gatt_char(avss.ControlPointCharacteristicUuid, req)
+        await self.client.write_gatt_char(
+            avss.uuids.ControlPointCharacteristicUuid, req
+        )
         return await asyncio.wait_for(self._cp_response_q.get(), timeout=timeout)
 
     async def _program_write(self, value):
         return await self.client.write_gatt_char(
-            avss.ProgramCharacteristicUuid, value, response=False
+            avss.uuids.ProgramCharacteristicUuid, value, response=False
         )

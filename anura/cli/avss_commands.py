@@ -72,7 +72,7 @@ def scan():
     stop_event = asyncio.Event()
 
     def on_detection(device, advertising_data):
-        if avss.ServiceUuid in advertising_data.service_uuids:
+        if avss.uuids.ServiceUuid in advertising_data.service_uuids:
             print(f"{device.address} {advertising_data.local_name}")
 
     async def do_async():
