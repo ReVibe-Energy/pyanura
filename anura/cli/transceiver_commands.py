@@ -1,15 +1,16 @@
 import asyncio
-import click
 import functools
 import logging
-from pathlib import Path
 import sys
 import time
+from pathlib import Path
+
+import click
 import zeroconf
 
-from anura.transceiver import BluetoothAddrLE, TransceiverClient, ScanNodesReceivedEvent
-from anura.transceiver.transport import USBTransport
+from anura.transceiver import BluetoothAddrLE, ScanNodesReceivedEvent, TransceiverClient
 from anura.transceiver.proxy_avss_client import ProxyAVSSClient
+from anura.transceiver.transport import USBTransport
 
 logger = logging.getLogger(__name__)
 

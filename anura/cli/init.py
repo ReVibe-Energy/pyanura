@@ -1,8 +1,8 @@
-import click
 import logging
 
-from . import avss_commands
-from . import transceiver_commands
+import click
+
+from . import avss_commands, transceiver_commands
 
 logging.basicConfig(
     format='[%(asctime)s.%(msecs)03d] <%(levelname)s> %(module)s: %(message)s',

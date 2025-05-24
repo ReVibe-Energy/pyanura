@@ -1,6 +1,8 @@
 from dataclasses import dataclass
-from anura.dataclasses_cbor import (dataclass_cbor, field)
 from typing import Any, Union
+
+from anura.dataclasses_cbor import dataclass_cbor, field
+
 
 @dataclass_cbor()
 @dataclass

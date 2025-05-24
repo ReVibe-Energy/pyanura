@@ -2,10 +2,11 @@ import argparse
 import asyncio
 import csv
 import logging
-import numpy as np
 import os
-from pathlib import Path
 import time
+from pathlib import Path
+
+import numpy as np
 
 import anura.avss as avss
 from anura.transceiver import TransceiverClient

@@ -1,10 +1,11 @@
 import binascii
-from dataclasses import dataclass
 import ipaddress
-from anura.dataclasses_cbor import (dataclass_cbor, field)
 import re
 import types
+from dataclasses import dataclass
 from uuid import UUID
+
+from anura.dataclasses_cbor import dataclass_cbor, field
 
 msg_type = types.SimpleNamespace()
 msg_type.Request = 0

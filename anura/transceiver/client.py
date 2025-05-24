@@ -1,15 +1,17 @@
-from .models import *
-from .transport import Transport
 import asyncio
-import cbor2
-from contextlib import contextmanager
 import logging
 import struct
+from contextlib import contextmanager
 from typing import (
     AsyncGenerator,
     Callable,
     Generator,
 )
+
+import cbor2
+
+from .models import *
+from .transport import Transport
 
 logger = logging.getLogger(__name__)
 

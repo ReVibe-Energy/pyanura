@@ -1,15 +1,15 @@
-from .base import Transport
-
 import argparse
 import asyncio
 import errno
 import logging
 import struct
 import sys
-from typing import Tuple, Optional, List
+from typing import List, Optional, Tuple
 
 import usb.core
 import usb.util
+
+from .base import Transport
 
 logger = logging.getLogger(__name__)
 

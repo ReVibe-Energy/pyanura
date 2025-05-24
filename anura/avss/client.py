@@ -1,18 +1,10 @@
-from .models import *
-from .models import (
-    WriteSettingsV2Args,
-    WriteSettingsV2Response,
-)
-from .settings import SettingsMapper
-
 import asyncio
-import cbor2
-from contextlib import contextmanager
-from dataclasses import dataclass
 import logging
 import struct
 import time
 import types
+from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import (
     AsyncGenerator,
     Callable,
@@ -20,6 +12,15 @@ from typing import (
     Optional,
     TypeAlias,
 )
+
+import cbor2
+
+from .models import *
+from .models import (
+    WriteSettingsV2Args,
+    WriteSettingsV2Response,
+)
+from .settings import SettingsMapper
 
 logger = logging.getLogger(__name__)
 

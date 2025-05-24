@@ -1,6 +1,7 @@
 import asyncio
-from typing import Tuple
 import struct
+from typing import Tuple
+
 from .base import Transport
 
 
