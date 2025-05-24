@@ -19,9 +19,12 @@ from .session import SessionFile
 
 logger = logging.getLogger(__name__)
 
+
 def with_avss_client(f):
     @click.option("--transceiver", help="Hostname, IP address or usb:<serial>")
-    @click.option("--transceiver-port", default=7645, show_default=True, help="TCP port number")
+    @click.option(
+        "--transceiver-port", default=7645, show_default=True, help="TCP port number"
+    )
     @click.option("--address", help="Bluetooth address of AVSS node.", required=True)
     @functools.wraps(f)
     def wrapper(transceiver, transceiver_port, address, *args, **kwargs):
@@ -56,10 +59,12 @@ def with_avss_client(f):
 
     return wrapper
 
+
 @click.group("avss")
 def avss_group():
     """Anura Vibration Sensing Service (AVSS) commands."""
     pass
+
 
 @avss_group.command()
 def scan():
@@ -77,11 +82,15 @@ def scan():
         except BleakError as ex:
             click.echo(f"ERROR: {ex}", err=True)
             sys.exit(1)
+
     asyncio.run(do_async())
+
 
 @avss_group.command()
 @click.option("--transceiver", help="Hostname, IP address or usb:<serial>")
-@click.option("--transceiver-port", default=7645, show_default=True, help="TCP port number")
+@click.option(
+    "--transceiver-port", default=7645, show_default=True, help="TCP port number"
+)
 @click.option("--address", help="Bluetooth address of AVSS node.", required=True)
 @click.option("--file", metavar="FILE", help="Path to firmware image.")
 @click.option("--confirm-only", is_flag=True, help="Run only the confirm step.")
@@ -89,7 +98,10 @@ def upgrade(transceiver, transceiver_port, address, file, confirm_only):
     """Upgrade node firmware."""
 
     if not confirm_only and not file:
-        click.echo("Error: At least one of options '--file' and '--confirm-only' must be given.", err=True)
+        click.echo(
+            "Error: At least one of options '--file' and '--confirm-only' must be given.",
+            err=True,
+        )
         sys.exit(1)
 
     if not confirm_only:
@@ -116,7 +128,9 @@ def upgrade(transceiver, transceiver_port, address, file, confirm_only):
                 # Wait at last 5 seconds to make sure we don't find the device
                 # before it has actually rebooted and started swapping images.
                 await asyncio.sleep(5)
-                device = await BleakScanner.find_device_by_address(address.address_str(), timeout=60)
+                device = await BleakScanner.find_device_by_address(
+                    address.address_str(), timeout=60
+                )
 
             async with BleakAVSSClient(device) as client:
                 click.echo("Confirming new image")
@@ -154,7 +168,9 @@ def upgrade(transceiver, transceiver_port, address, file, confirm_only):
                         except:
                             await asyncio.sleep(1.0)
 
-                    click.echo(f"Version: {version.version} (build: {version.build_version})")
+                    click.echo(
+                        f"Version: {version.version} (build: {version.build_version})"
+                    )
                     click.echo("Confirming new image")
                     await client.confirm_upgrade(image_index)
 
@@ -167,6 +183,7 @@ def upgrade(transceiver, transceiver_port, address, file, confirm_only):
     else:
         asyncio.run(do_async())
 
+
 @avss_group.command()
 @with_avss_client
 async def get_version(client: avss.AVSSClient):
@@ -174,12 +191,14 @@ async def get_version(client: avss.AVSSClient):
     resp = await client.get_version()
     click.echo(resp)
 
+
 @avss_group.command()
 @with_avss_client
 async def reset(client: avss.AVSSClient):
     """Reset a node."""
     await client.reboot()
     click.echo("Resetting shortly.")
+
 
 @avss_group.command()
 @click.option("--duration", default=1)
@@ -190,7 +209,7 @@ async def throughput(client: avss.AVSSClient, duration: float):
     # it lets us access the transfer info.
     with client.reports(parse=False) as reports:
         click.echo(f"Starting {duration} s throughput test...")
-        await client.test_throughput(duration=duration*1000)
+        await client.test_throughput(duration=duration * 1000)
         test = await anext(reports)
 
         if test.transfer_info.elapsed_time > 0:
@@ -204,12 +223,15 @@ async def throughput(client: avss.AVSSClient, duration: float):
             test.transfer_info.num_bytes / test.transfer_info.num_segments
         )
 
-        click.echo(f"Received {test.transfer_info.num_bytes} B "
-                   f"over {test.transfer_info.num_segments} segments "
-                   f"in {test.transfer_info.elapsed_time:.2f} s")
+        click.echo(
+            f"Received {test.transfer_info.num_bytes} B "
+            f"over {test.transfer_info.num_segments} segments "
+            f"in {test.transfer_info.elapsed_time:.2f} s"
+        )
 
         click.echo(f"Throughput:   {throughput:.2f} kB/s")
         click.echo(f"Segment size: {segment_size} B")
+
 
 @avss_group.command()
 @with_avss_client
@@ -224,6 +246,7 @@ async def read_settings(client: avss.AVSSClient):
             if isinstance(msg, avss.SettingsReport):
                 click.echo(json.dumps(avss.SettingsMapper.to_readable(msg.settings)))
                 break
+
 
 @avss_group.command()
 @click.option("--file", metavar="FILE", help="Path to settings file.")
@@ -241,7 +264,9 @@ async def write_settings(client: avss.AVSSClient, file: str, reset_defaults: boo
         settings = {}
 
     try:
-        resp = await client.write_settings_v2(settings, reset_defaults=reset_defaults, apply=True)
+        resp = await client.write_settings_v2(
+            settings, reset_defaults=reset_defaults, apply=True
+        )
         click.echo(resp)
     except avss.client.AVSSOpCodeUnsupportedError:
         logger.info("Write Settings v2 opcode not supported, using fallback...")
@@ -250,12 +275,14 @@ async def write_settings(client: avss.AVSSClient, file: str, reset_defaults: boo
         resp = await client.apply_settings(persist=True)
         click.echo(resp)
 
+
 @avss_group.command()
 @with_avss_client
 async def deactivate(client: avss.AVSSClient):
     """Deactivate(decommission) a node."""
     await client.deactivate(key=0xFEEDF00D)
     click.echo("Deactivating shortly.")
+
 
 @avss_group.command()
 @with_avss_client
@@ -270,21 +297,26 @@ async def health_report(client: avss.AVSSClient):
                 click.echo(f"Health report: {msg}")
                 break
 
+
 @avss_group.command()
 @with_avss_client
 async def get_firmware_info(client: avss.AVSSClient):
     """Get firmware info"""
     info = await client.get_firmware_info()
-    major = (info.app_version >> 24) & 0xff
-    minor = (info.app_version >> 16) & 0xff
-    patch = (info.app_version >> 8) & 0xff
-    tweak = info.app_version & 0xff
-    click.echo(f"App version: v{major}.{minor}.{patch}.{tweak}, build: {info.app_build_version}, status: {info.app_status}")
-    major = (info.net_version >> 24) & 0xff
-    minor = (info.net_version >> 16) & 0xff
-    patch = (info.net_version >> 8) & 0xff
-    tweak = info.net_version & 0xff
-    click.echo(f"Net version: v{major}.{minor}.{patch}.{tweak}, build: {info.net_build_version}")
+    major = (info.app_version >> 24) & 0xFF
+    minor = (info.app_version >> 16) & 0xFF
+    patch = (info.app_version >> 8) & 0xFF
+    tweak = info.app_version & 0xFF
+    click.echo(
+        f"App version: v{major}.{minor}.{patch}.{tweak}, build: {info.app_build_version}, status: {info.app_status}"
+    )
+    major = (info.net_version >> 24) & 0xFF
+    minor = (info.net_version >> 16) & 0xFF
+    patch = (info.net_version >> 8) & 0xFF
+    tweak = info.net_version & 0xFF
+    click.echo(
+        f"Net version: v{major}.{minor}.{patch}.{tweak}, build: {info.net_build_version}"
+    )
 
 
 @avss_group.command()
@@ -292,8 +324,9 @@ async def get_firmware_info(client: avss.AVSSClient):
 @with_avss_client
 async def trigger_measurement(client: avss.AVSSClient, duration: float):
     """Trigger measurement"""
-    resp = await client.trigger_measurement(duration_ms=duration*1000)
+    resp = await client.trigger_measurement(duration_ms=duration * 1000)
     click.echo(resp)
+
 
 @avss_group.command()
 @click.option("--duration", default=4)
@@ -302,48 +335,57 @@ async def trigger_measurement(client: avss.AVSSClient, duration: float):
 @click.option("--snippets", is_flag=True, help="Fetch snippet reports")
 @click.option("--aggregates", is_flag=True, help="Fetch aggregated values reports")
 @with_avss_client
-async def quick_measurement(client: avss.AVSSClient, duration, output, captures, snippets, aggregates):
+async def quick_measurement(
+    client: avss.AVSSClient, duration, output, captures, snippets, aggregates
+):
     """Quick measurement"""
     settings = {
-            "base_sample_rate_hz": 1024,
-            "snippet_mode": 0,
-            "capture_mode": 0,
-            "aggregates_mode": 0,
+        "base_sample_rate_hz": 1024,
+        "snippet_mode": 0,
+        "capture_mode": 0,
+        "aggregates_mode": 0,
     }
 
     if captures:
-        settings.update({
-            "capture_mode": 1,
-            "capture_buffer_length": 1024,
-            "events_motion_start_enable": True,
-            "events_motion_start_capture": True,
-            "events_motion_start_capture_duration_ms": (duration*1000),
-        })
+        settings.update(
+            {
+                "capture_mode": 1,
+                "capture_buffer_length": 1024,
+                "events_motion_start_enable": True,
+                "events_motion_start_capture": True,
+                "events_motion_start_capture_duration_ms": (duration * 1000),
+            }
+        )
 
     if snippets:
-        settings.update({
-            "snippet_length": 1024,
-            "snippet_mode": 2,
-        })
+        settings.update(
+            {
+                "snippet_length": 1024,
+                "snippet_mode": 2,
+            }
+        )
 
     if aggregates:
-        settings.update({
-            "aggregates_mode": 1,
-            "aggregates_sample_rate_hz": 512,
-            "aggregates_interval_ms": 1000,
-            "aggregates_fft_mode": 0,
-            "aggregates_fft_length": 512,
-            "aggregates_param_enable_0_31": 0xFFFFFFFF,
-            "aggregates_param_enable_32_63": 0xFFFFFFFF,
-        })
+        settings.update(
+            {
+                "aggregates_mode": 1,
+                "aggregates_sample_rate_hz": 512,
+                "aggregates_interval_ms": 1000,
+                "aggregates_fft_mode": 0,
+                "aggregates_fft_length": 512,
+                "aggregates_param_enable_0_31": 0xFFFFFFFF,
+                "aggregates_param_enable_32_63": 0xFFFFFFFF,
+            }
+        )
 
     await client.write_settings(settings)
     resp = await client.apply_settings(persist=True)
 
     if resp.will_reboot:
-        click.echo("Rebooting node to apply settings, re-run command to start measurement")
+        click.echo(
+            "Rebooting node to apply settings, re-run command to start measurement"
+        )
         sys.exit()
-
 
     with client.reports(parse=False) as reports:
         if captures:
@@ -355,7 +397,7 @@ async def quick_measurement(client: avss.AVSSClient, duration, output, captures,
         if aggregates:
             await client.report_aggregates(count=None, auto_resume=False)
 
-        await client.trigger_measurement(duration_ms=duration*1000)
+        await client.trigger_measurement(duration_ms=duration * 1000)
 
         click.echo("Waiting for reports")
 
@@ -364,17 +406,15 @@ async def quick_measurement(client: avss.AVSSClient, duration, output, captures,
                 f.update_session_info(time.time_ns())
 
                 async for report in reports:
-                    f.insert_avss_report(received_at=time.time_ns(),
-                                         node_id="NODE",
-                                         report_type=report.report_type,
-                                         payload_cbor=report.payload_cbor)
+                    f.insert_avss_report(
+                        received_at=time.time_ns(),
+                        node_id="NODE",
+                        report_type=report.report_type,
+                        payload_cbor=report.payload_cbor,
+                    )
                     click.echo(f"Report Type {report.report_type}")
-
 
         try:
             await asyncio.wait_for(collect_reports(), duration)
         except TimeoutError:
             pass
-
-
-
