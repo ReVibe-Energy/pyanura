@@ -1,7 +1,7 @@
 import asyncio
 import logging
 
-from bleak import BleakClient, BleakError
+from bleak import BleakClient
 
 import anura.avss as avss
 

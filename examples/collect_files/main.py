@@ -79,7 +79,7 @@ async def connect_node(transceiver, output_dir, addr):
                         logger.info("%s: Settings report: %s", addr, msg)
                     else:
                         logger.info("(%s): Unknown report: %s", addr, type(msg))
-    except avss.DisconnectedError as exc:
+    except avss.DisconnectedError:
         pass
     finally:
         logger.info("Exiting task for node %s", addr)

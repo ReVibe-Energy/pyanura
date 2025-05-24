@@ -34,7 +34,7 @@ def with_avss_client(f):
             try:
                 logger.info(f"Connecting to {address}")
                 async with BleakAVSSClient(address.address_str()) as client:
-                    logger.info(f"Connected")
+                    logger.info("Connected")
                     return await f(*args, client=client, **kwargs)
             except BleakError as ex:
                 click.echo(f"Error: {ex}", err=True)
