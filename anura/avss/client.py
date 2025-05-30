@@ -16,6 +16,8 @@ from typing import (
 
 import cbor2
 
+from anura.marshalling import marshal, unmarshal
+
 from .models import (
     AggregatedValuesReport,
     ApplySettingsArgs,
@@ -68,6 +70,7 @@ class DisconnectedError(AVSSError):
 class AVSSControlPointError(AVSSError):
     pass
 
+    @staticmethod
     def from_response_code(rc):
         if rc == ResponseCode.OK:
             raise ValueError("Not an error response code")
@@ -172,7 +175,7 @@ class Report:
             report_type=record[0], payload_cbor=record[1:], transfer_info=transfer_info
         )
 
-    def parse(self):
+    def parse(self) -> _ParsedReport | None:
         report_classes = {
             ReportType.Snippet: SnippetReport,
             ReportType.AggregatedValues: AggregatedValuesReport,
@@ -181,7 +184,7 @@ class Report:
             ReportType.Capture: CaptureReport,
         }
         if report_class := report_classes.get(self.report_type):
-            return report_class.from_cbor(self.payload_cbor)
+            return unmarshal(report_class, cbor2.loads(self.payload_cbor))
         else:
             return None
 
@@ -210,7 +213,7 @@ class ReportBuffer:
             num_bytes=len(self._buffer),
             num_segments=self.num_segments,
         )
-        return Report.from_record(self._buffer, transfer_info=transfer_info)
+        return Report.from_record(bytes(self._buffer), transfer_info=transfer_info)
 
 
 class AVSSClient:
@@ -238,7 +241,12 @@ class AVSSClient:
             """Put the new Report in the queue."""
             try:
                 if parse:
-                    reports.put_nowait(msg.parse())
+                    if parsed := msg.parse():
+                        reports.put_nowait(parsed)
+                    else:
+                        logger.warning(
+                            "Unknown report type skipped in reports generator."
+                        )
                 else:
                     reports.put_nowait(msg)
             except asyncio.QueueFull:
@@ -345,7 +353,7 @@ class AVSSClient:
         if isinstance(argument, dict):
             req.extend(cbor2.dumps(argument))
         elif argument:
-            req.extend(argument.to_cbor())
+            req.extend(cbor2.dumps(marshal(argument)))
         else:
             req.extend(cbor2.dumps(None))
         try:
@@ -369,18 +377,18 @@ class AVSSClient:
             if response_code != ResponseCode.OK:
                 raise AVSSControlPointError.from_response_code(response_code)
             return None
-        elif response_opcode == OpCode.GetVersionResponse:
-            return GetVersionResponse.from_cbor(chrc_value[1:])
-        elif response_opcode == OpCode.WriteSettingsResponse:
-            return WriteSettingsResponse.from_cbor(chrc_value[1:])
-        elif response_opcode == OpCode.WriteSettingsV2Response:
-            return WriteSettingsV2Response.from_cbor(chrc_value[1:])
-        elif response_opcode == OpCode.ApplySettingsResponse:
-            return ApplySettingsResponse.from_cbor(chrc_value[1:])
-        elif response_opcode == OpCode.GetFirmwareInfoResponse:
-            return GetFirmwareInfoResponse.from_cbor(chrc_value[1:])
         else:
-            raise AVSSProtocolError("Expected response opcode")
+            response_map = {
+                OpCode.GetVersionResponse: GetVersionResponse,
+                OpCode.WriteSettingsResponse: WriteSettingsResponse,
+                OpCode.WriteSettingsV2Response: WriteSettingsV2Response,
+                OpCode.ApplySettingsResponse: ApplySettingsResponse,
+                OpCode.GetFirmwareInfoResponse: GetFirmwareInfoResponse,
+            }
+            if response_cls := response_map.get(response_opcode):
+                return unmarshal(response_cls, cbor2.loads(chrc_value[1:]))
+            else:
+                raise AVSSProtocolError("Expected response opcode")
 
     async def _program_write(self, req):
         raise NotImplementedError()
