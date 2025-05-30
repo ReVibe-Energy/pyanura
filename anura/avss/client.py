@@ -265,7 +265,7 @@ class AVSSClient:
                 #  1. Receive a Report
                 #  2. Disconnect from the node
                 loop = asyncio.get_running_loop()
-                get: asyncio.Task[Report] = loop.create_task(reports.get())
+                get = loop.create_task(reports.get())
                 try:
                     done, _ = await asyncio.wait(
                         (get, self._disconnected), return_when=asyncio.FIRST_COMPLETED
@@ -420,7 +420,9 @@ class AVSSClient:
         arg = ReportAggregatesArgs(count=count, auto_resume=auto_resume)
         return await self._request(OpCode.ReportAggregates, arg)
 
-    async def report_health(self, count: int = None, *, active: bool = None):
+    async def report_health(
+        self, count: int | None = None, *, active: bool | None = None
+    ):
         if active is not None:
             arg = ReportHealthArgs(count=active)
         elif count is None:
