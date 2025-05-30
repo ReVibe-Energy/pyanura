@@ -391,7 +391,7 @@ class AVSSClient:
             else:
                 raise AVSSProtocolError("Expected response opcode")
 
-    async def _program_write(self, req):
+    async def _program_write(self, value):
         raise NotImplementedError()
 
     async def report_snippets(self, count, auto_resume):
