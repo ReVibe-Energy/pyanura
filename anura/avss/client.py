@@ -11,7 +11,10 @@ from typing import (
     Callable,
     Generator,
     Optional,
+    Type,
     TypeAlias,
+    TypeVar,
+    overload,
 )
 
 import cbor2
@@ -44,6 +47,8 @@ from .models import (
     WriteSettingsV2Response,
 )
 from .settings import SettingsMapper
+
+_TResp = TypeVar("_TResp")
 
 logger = logging.getLogger(__name__)
 
@@ -391,6 +396,15 @@ class AVSSClient:
             else:
                 raise AVSSProtocolError("Expected response opcode")
 
+    async def _typed_request(
+        self, type_: Type[_TResp], opcode, argument, timeout=2.0
+    ) -> _TResp:
+        resp = await self._request(opcode, argument, timeout)
+        if isinstance(resp, type_):
+            return resp
+        else:
+            raise ValueError(f"Response type {type_} expected but got {type(resp)}")
+
     async def _program_write(self, value):
         raise NotImplementedError()
 
@@ -423,7 +437,9 @@ class AVSSClient:
 
     async def apply_settings(self, persist: bool) -> ApplySettingsResponse:
         arg = ApplySettingsArgs(persist=persist)
-        return await self._request(OpCode.ApplySettings, arg)
+        return await self._typed_request(
+            ApplySettingsResponse, OpCode.ApplySettings, arg
+        )
 
     async def prepare_upgrade(self, image, size, timeout=30.0):
         arg = PrepareUpgradeArgs(image=image, size=size)
@@ -441,11 +457,13 @@ class AVSSClient:
         return await self._request(OpCode.Reboot, None)
 
     async def get_version(self) -> GetVersionResponse:
-        return await self._request(OpCode.GetVersion, None)
+        return await self._typed_request(GetVersionResponse, OpCode.GetVersion, None)
 
     async def write_settings(self, settings: dict) -> WriteSettingsResponse:
-        return await self._request(
-            OpCode.WriteSettings, SettingsMapper.from_readable(settings)
+        return await self._typed_request(
+            WriteSettingsResponse,
+            OpCode.WriteSettings,
+            SettingsMapper.from_readable(settings),
         )
 
     async def reset_settings(self):
@@ -460,7 +478,9 @@ class AVSSClient:
         return await self._request(OpCode.Deactivate, arg)
 
     async def get_firmware_info(self) -> GetFirmwareInfoResponse:
-        return await self._request(OpCode.GetFirmwareInfo, None)
+        return await self._typed_request(
+            GetFirmwareInfoResponse, OpCode.GetFirmwareInfo, None
+        )
 
     async def reset_report(self):
         return await self._request(OpCode.ResetReport, None)
@@ -468,7 +488,8 @@ class AVSSClient:
     async def write_settings_v2(
         self, settings: dict[int, Any], reset_defaults: bool, apply: bool
     ) -> WriteSettingsV2Response:
-        return await self._request(
+        return await self._typed_request(
+            WriteSettingsV2Response,
             OpCode.WriteSettingsV2,
             WriteSettingsV2Args(
                 settings=SettingsMapper.from_readable(settings),
