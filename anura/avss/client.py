@@ -10,6 +10,7 @@ from typing import (
     AsyncGenerator,
     Callable,
     Generator,
+    Literal,
     Optional,
     Type,
     TypeAlias,
@@ -285,9 +286,19 @@ class AVSSClient:
 
         return _callback, _generator()
 
+    @overload
+    def reports(
+        self, parse: Literal[False]
+    ) -> Generator[AsyncGenerator[Report, None], None, None]: ...
+
+    @overload
+    def reports(
+        self, parse: Literal[True]
+    ) -> Generator[AsyncGenerator[_ParsedReport, None], None, None]: ...
+
     @contextmanager
     def reports(
-        self, parse=True
+        self, parse: bool = True
     ) -> Generator[AsyncGenerator[Report | _ParsedReport, None], None, None]:
         """Context manager that creates a queue for incoming Reports.
 
