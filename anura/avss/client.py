@@ -6,6 +6,7 @@ import types
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import (
+    Any,
     AsyncGenerator,
     Callable,
     Generator,
@@ -15,8 +16,27 @@ from typing import (
 
 import cbor2
 
-from .models import *
 from .models import (
+    AggregatedValuesReport,
+    ApplySettingsArgs,
+    ApplySettingsResponse,
+    ApplyUpgradeArgs,
+    CaptureReport,
+    ConfirmUpgradeArgs,
+    DeactivateArgs,
+    GetFirmwareInfoResponse,
+    GetVersionResponse,
+    HealthReport,
+    PrepareUpgradeArgs,
+    ReportAggregatesArgs,
+    ReportCaptureArgs,
+    ReportHealthArgs,
+    ReportSettings,
+    ReportSnippetArgs,
+    SettingsReport,
+    SnippetReport,
+    TestThroughputArgs,
+    WriteSettingsResponse,
     WriteSettingsV2Args,
     WriteSettingsV2Response,
 )
@@ -378,9 +398,9 @@ class AVSSClient:
         return await self._request(OpCode.ReportAggregates, arg)
 
     async def report_health(self, count: int = None, *, active: bool = None):
-        if active == True or active == False:
+        if active is not None:
             arg = ReportHealthArgs(count=active)
-        elif count == None:
+        elif count is None:
             # Send True instead of None since this is compatible
             # with older sensor firmware versions.
             arg = ReportHealthArgs(count=True)
