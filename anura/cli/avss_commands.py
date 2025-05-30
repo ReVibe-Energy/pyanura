@@ -8,7 +8,8 @@ import time
 from pathlib import Path
 
 import click
-from bleak import BleakError, BleakScanner
+from bleak import BleakScanner
+from bleak.exc import BleakError
 
 import anura.avss as avss
 from anura.avss.bleak_avss_client import BleakAVSSClient
