@@ -182,50 +182,6 @@ async def avss_throughput(client: TransceiverClient, mode: str, duration: int):
 
 @transceiver_group.command()
 @with_transceiver_client
-async def snippet_throughput(client: TransceiverClient):
-    """Measure concurrent throughput of snippet data."""
-
-    async def test_throughput(addr):
-        async with ProxyAVSSClient(client, addr) as node:
-            with node.reports(parse=False) as reports:
-                click.echo(f"{addr}: Requesting snippet reports...")
-                await node.test_throughput(duration=duration * 1000)
-                test = await anext(reports)
-
-                if test.transfer_info.elapsed_time > 0:
-                    throughput = (
-                        test.transfer_info.num_bytes
-                        / test.transfer_info.elapsed_time
-                        / 1000
-                    )
-                else:
-                    throughput = "??"
-
-                click.echo(
-                    f"{addr}: Received {test.transfer_info.num_bytes} B "
-                    f"over {test.transfer_info.num_segments} segments "
-                    f"in {test.transfer_info.elapsed_time:.2f} s "
-                    f"({throughput:.2f} kB/s)"
-                )
-
-    assigned_nodes_resp = await client.get_assigned_nodes()
-    if len(assigned_nodes_resp.nodes) == 0:
-        click.echo(
-            "No nodes are assigned to the transceiver. Assign nodes and try again."
-        )
-        return
-
-    try:
-        async with asyncio.TaskGroup() as tg:
-            for node in assigned_nodes_resp.nodes:
-                tg.create_task(test_throughput(node.address))
-    except ExceptionGroup as ex_group:
-        for ex in ex_group.exceptions:
-            click.echo(ex)
-
-
-@transceiver_group.command()
-@with_transceiver_client
 async def get_device_info(client: TransceiverClient):
     """Get device info."""
     click.echo(await client.get_device_info())
