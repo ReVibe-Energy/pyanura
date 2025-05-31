@@ -19,7 +19,6 @@ class Notification:
             "node_connected": NodeConnectedEvent,
             "node_disconnected": NodeDisconnectedEvent,
             "node_service_discovered": NodeServiceDiscoveredEvent,
-            "node_service_discovered": NodeServiceDiscoveredEvent,
             "avss_report_notified": AVSSReportNotifiedEvent,
             "avss_program_notified": AVSSProgramNotifiedEvent,
             "scan_nodes_received": ScanNodesReceivedEvent,

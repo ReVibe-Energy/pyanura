@@ -146,7 +146,7 @@ class USBTransport(Transport, transport_type="usb"):
     async def flush_in_endpoint(self) -> None:
         while True:
             try:
-                data = await self.loop.run_in_executor(
+                _data = await self.loop.run_in_executor(
                     None, self.dev.read, self.in_ep, self.max_packet_size, 50
                 )
             except usb.core.USBError as e:

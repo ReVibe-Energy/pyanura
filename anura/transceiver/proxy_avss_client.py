@@ -2,7 +2,12 @@ import asyncio
 
 import anura.avss as avss
 
-from .models import *
+from .models import (
+    AVSSProgramNotifiedEvent,
+    AVSSReportNotifiedEvent,
+    BluetoothAddrLE,
+    NodeDisconnectedEvent,
+)
 
 
 class ProxyAVSSClient(avss.AVSSClient):

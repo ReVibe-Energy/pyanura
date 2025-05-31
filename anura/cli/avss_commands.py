@@ -13,7 +13,8 @@ from bleak.exc import BleakError
 
 import anura.avss as avss
 from anura.avss.bleak_avss_client import BleakAVSSClient
-from anura.transceiver import BluetoothAddrLE, TransceiverClient
+from anura.transceiver.client import TransceiverClient
+from anura.transceiver.models import BluetoothAddrLE
 from anura.transceiver.proxy_avss_client import ProxyAVSSClient
 
 from .session import SessionFile

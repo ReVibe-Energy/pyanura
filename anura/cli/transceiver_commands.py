@@ -8,7 +8,8 @@ from pathlib import Path
 import click
 import zeroconf
 
-from anura.transceiver import BluetoothAddrLE, ScanNodesReceivedEvent, TransceiverClient
+from anura.transceiver.client import TransceiverClient
+from anura.transceiver.models import BluetoothAddrLE, ScanNodesReceivedEvent
 from anura.transceiver.proxy_avss_client import ProxyAVSSClient
 from anura.transceiver.transport import USBTransport
 
