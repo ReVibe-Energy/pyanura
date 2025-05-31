@@ -77,7 +77,7 @@ def browse():
 
     with zeroconf.Zeroconf() as zc:
         listener = EchoDistinctListener()
-        browser = zeroconf.ServiceBrowser(zc, "_revibe-anura._tcp.local.", listener)
+        zeroconf.ServiceBrowser(zc, "_revibe-anura._tcp.local.", listener)
         time.sleep(60.0)
 
 
@@ -225,7 +225,7 @@ async def set_time(client: TransceiverClient, time_):
     or current time if no time is specified. If the transceiver
     is acting in a PTP slave role, the set time command has
     no lasting result."""
-    if time_ != None:
+    if time_ is not None:
         time_ns = int(time_) * 1000000000
     else:
         time_ns = time.time_ns()

@@ -78,7 +78,7 @@ def scan():
 
     async def do_async():
         try:
-            async with BleakScanner(on_detection) as scanner:
+            async with BleakScanner(on_detection):
                 await stop_event.wait()
         except BleakError as ex:
             click.echo(f"ERROR: {ex}", err=True)
@@ -166,7 +166,7 @@ def upgrade(transceiver, transceiver_port, address, file, confirm_only):
                         try:
                             version = await client.get_version()
                             break
-                        except:
+                        except Exception:
                             await asyncio.sleep(1.0)
 
                     click.echo(
@@ -290,7 +290,7 @@ async def deactivate(client: avss.AVSSClient):
 async def health_report(client: avss.AVSSClient):
     """Health report."""
     with client.reports() as reports:
-        resp = await client.report_health(count=1)
+        await client.report_health(count=1)
 
         logger.info("Waiting for health report")
         async for msg in reports:
