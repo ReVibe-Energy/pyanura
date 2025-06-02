@@ -19,6 +19,13 @@ class BleakAVSSClient(AVSSClient):
         super().__init__()
 
     async def __aenter__(self):
+        await self.connect()
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        await self.disconnect()
+
+    async def connect(self):
         def report_notify(sender, data):
             self._on_report_notify(data)
         def program_notify(sender, data):
@@ -27,9 +34,8 @@ class BleakAVSSClient(AVSSClient):
         await self.client.start_notify(avss.ReportCharacteristicUuid, report_notify)
         await self.client.start_notify(avss.ControlPointCharacteristicUuid, self._cp_indicate)
         await self.client.start_notify(avss.ProgramCharacteristicUuid, program_notify)
-        return self
 
-    async def __aexit__(self, exc_type, exc, tb):
+    async def disconnect(self):
         await self.client.disconnect()
 
     def _cp_indicate(self, sender, data):
