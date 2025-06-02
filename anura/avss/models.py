@@ -130,8 +130,7 @@ class CaptureReport:
 @dataclass
 class AggregatedValuesReport:
     start_time: int = field(0)
-    duration: int = field(1)
-    values: dict[int, int] = field(2)
+    values: dict[int, float] = field(2)
 
 @dataclass_cbor()
 @dataclass
