@@ -297,10 +297,17 @@ async def trigger_measurement(client: avss.AVSSClient, duration: float):
 @click.option("--output", help="path to output file", required=True)
 @click.option("--captures", is_flag=True, help="Fetch capture reports")
 @click.option("--snippets", is_flag=True, help="Fetch snippet reports")
+@click.option("--aggregates", is_flag=True, help="Fetch aggregated values reports")
 @with_avss_client
-async def quick_measurement(client: avss.AVSSClient, duration, output, captures, snippets):
+async def quick_measurement(client: avss.AVSSClient, duration, output, captures, snippets, aggregates):
     """Quick measurement"""
-    settings = {}
+    settings = {
+            "base_sample_rate_hz": 1024,
+            "snippet_mode": 0,
+            "capture_mode": 0,
+            "aggregates_mode": 0,
+    }
+
     if captures:
         settings.update({
             "capture_mode": 1,
@@ -316,7 +323,18 @@ async def quick_measurement(client: avss.AVSSClient, duration, output, captures,
             "snippet_mode": 2,
         })
 
-    await client.write_settings(avss.SettingsMapper.from_readable(settings))
+    if aggregates:
+        settings.update({
+            "aggregates_mode": 1,
+            "aggregates_sample_rate_hz": 512,
+            "aggregates_interval_ms": 1000,
+            "aggregates_fft_mode": 0,
+            "aggregates_fft_length": 512,
+            "aggregates_param_enable_0_31": 0xFFFFFFFF,
+            "aggregates_param_enable_32_63": 0xFFFFFFFF,
+        })
+
+    await client.write_settings(settings)
     resp = await client.apply_settings(persist=True)
 
     if resp.will_reboot:
@@ -331,6 +349,9 @@ async def quick_measurement(client: avss.AVSSClient, duration, output, captures,
         if snippets:
             await client.report_snippets(count=None, auto_resume=False)
 
+        if aggregates:
+            await client.report_aggregates(count=None, auto_resume=False)
+
         await client.trigger_measurement(duration_ms=duration*1000)
 
         click.echo("Waiting for reports")
@@ -344,6 +365,7 @@ async def quick_measurement(client: avss.AVSSClient, duration, output, captures,
                                          node_id="NODE",
                                          report_type=report.report_type,
                                          payload_cbor=report.payload_cbor)
+                    click.echo(f"Report Type {report.report_type}")
 
 
         try:
