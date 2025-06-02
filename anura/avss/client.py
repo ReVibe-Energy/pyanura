@@ -177,6 +177,7 @@ class AVSSClient:
         self._disconnected = asyncio.Future()
         self._program_lock = asyncio.Lock()
         self._program_nack_queue = None
+        self._control_point_lock = asyncio.Lock()
 
     async def __aenter__(self):
         return self
@@ -287,6 +288,10 @@ class AVSSClient:
         raise NotImplementedError()
 
     async def _request(self, opcode, argument, timeout=2.0):
+        async with self._control_point_lock:
+            return await self._request_impl(opcode, argument, timeout)
+
+    async def _request_impl(self, opcode, argument, timeout=2.0):
         req = bytearray([opcode])
         if isinstance(argument, dict):
             req.extend(cbor2.dumps(argument))
