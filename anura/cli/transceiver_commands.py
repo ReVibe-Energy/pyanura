@@ -1,32 +1,46 @@
 import asyncio
-import click
 import functools
 import logging
-from pathlib import Path
 import sys
 import time
+from pathlib import Path
+
+import click
 import zeroconf
 
-from anura.transceiver import BluetoothAddrLE, TransceiverClient, ScanNodesReceivedEvent
-from anura.transceiver.transport import USBTransport
+from anura.transceiver import BluetoothAddrLE, ScanNodesReceivedEvent, TransceiverClient
 from anura.transceiver.proxy_avss_client import ProxyAVSSClient
+from anura.transceiver.transport import USBTransport
 
 logger = logging.getLogger(__name__)
 
+
 def with_transceiver_client(f):
-    @click.option("--host", metavar="HOST", required=True, help="Hostname, IP address or usb:<serial>")
-    @click.option('--port', metavar="PORT", default=7645, show_default=True, help="TCP port number")
+    @click.option(
+        "--host",
+        metavar="HOST",
+        required=True,
+        help="Hostname, IP address or usb:<serial>",
+    )
+    @click.option(
+        "--port",
+        metavar="PORT",
+        default=7645,
+        show_default=True,
+        help="TCP port number",
+    )
     @functools.wraps(f)
     def wrapper(host, port, *args, **kwargs):
         async def do_async():
             try:
                 logger.debug(f"Connecting to {host}:{port}")
                 async with TransceiverClient(host, port) as client:
-                    logger.debug(f"Connected")
+                    logger.debug("Connected")
                     return await f(*args, client=client, **kwargs)
             except Exception as ex:
                 click.echo(f"Error: {ex}", err=True)
                 sys.exit(1)
+
         asyncio.run(do_async())
 
     return wrapper
@@ -36,6 +50,7 @@ def with_transceiver_client(f):
 def transceiver_group():
     """Transceiver commands."""
     pass
+
 
 @transceiver_group.command()
 def browse():
@@ -65,9 +80,10 @@ def browse():
         browser = zeroconf.ServiceBrowser(zc, "_revibe-anura._tcp.local.", listener)
         time.sleep(60.0)
 
+
 @transceiver_group.command()
 @with_transceiver_client
-@click.argument('address', nargs=-1)
+@click.argument("address", nargs=-1)
 async def set_assigned_nodes(client: TransceiverClient, address: list[str]):
     """Set assigned nodes"""
     nodes = []
@@ -79,12 +95,14 @@ async def set_assigned_nodes(client: TransceiverClient, address: list[str]):
 
     await client.set_assigned_nodes(nodes)
 
+
 @transceiver_group.command()
 @with_transceiver_client
 async def get_assigned_nodes(client: TransceiverClient):
     """Get assigned nodes."""
     for node in (await client.get_assigned_nodes()).nodes:
         click.echo(f"{node.address}")
+
 
 @transceiver_group.command()
 @with_transceiver_client
@@ -120,7 +138,7 @@ async def avss_throughput(client: TransceiverClient, mode: str, duration: int):
             with node.reports(parse=False) as reports:
                 if mode == "test":
                     click.echo(f"{addr}: Starting {duration} s throughput test...")
-                    await node.test_throughput(duration=duration*1000)
+                    await node.test_throughput(duration=duration * 1000)
                 elif mode == "snippets":
                     click.echo(f"{addr}: Requesting snippet reports...")
                     await node.report_snippets(count=None, auto_resume=True)
@@ -128,15 +146,19 @@ async def avss_throughput(client: TransceiverClient, mode: str, duration: int):
                 async for test in reports:
                     if test.transfer_info.elapsed_time > 0:
                         throughput = (
-                            test.transfer_info.num_bytes / test.transfer_info.elapsed_time / 1000
+                            test.transfer_info.num_bytes
+                            / test.transfer_info.elapsed_time
+                            / 1000
                         )
                     else:
                         throughput = "??"
 
-                    click.echo(f"{addr}: Received {test.transfer_info.num_bytes} B "
-                            f"over {test.transfer_info.num_segments} segments "
-                            f"in {test.transfer_info.elapsed_time:.2f} s "
-                            f"({throughput:.2f} kB/s)")
+                    click.echo(
+                        f"{addr}: Received {test.transfer_info.num_bytes} B "
+                        f"over {test.transfer_info.num_segments} segments "
+                        f"in {test.transfer_info.elapsed_time:.2f} s "
+                        f"({throughput:.2f} kB/s)"
+                    )
 
                     if mode == "test":
                         # Only one test report is generated per call to "test_throughput"
@@ -144,7 +166,9 @@ async def avss_throughput(client: TransceiverClient, mode: str, duration: int):
 
     assigned_nodes_resp = await client.get_assigned_nodes()
     if len(assigned_nodes_resp.nodes) == 0:
-        click.echo("No nodes are assigned to the transceiver. Assign nodes and try again.")
+        click.echo(
+            "No nodes are assigned to the transceiver. Assign nodes and try again."
+        )
         return
 
     try:
@@ -165,24 +189,30 @@ async def snippet_throughput(client: TransceiverClient):
         async with ProxyAVSSClient(client, addr) as node:
             with node.reports(parse=False) as reports:
                 click.echo(f"{addr}: Requesting snippet reports...")
-                await node.test_throughput(duration=duration*1000)
+                await node.test_throughput(duration=duration * 1000)
                 test = await anext(reports)
 
                 if test.transfer_info.elapsed_time > 0:
                     throughput = (
-                        test.transfer_info.num_bytes / test.transfer_info.elapsed_time / 1000
+                        test.transfer_info.num_bytes
+                        / test.transfer_info.elapsed_time
+                        / 1000
                     )
                 else:
                     throughput = "??"
 
-                click.echo(f"{addr}: Received {test.transfer_info.num_bytes} B "
-                        f"over {test.transfer_info.num_segments} segments "
-                        f"in {test.transfer_info.elapsed_time:.2f} s "
-                        f"({throughput:.2f} kB/s)")
+                click.echo(
+                    f"{addr}: Received {test.transfer_info.num_bytes} B "
+                    f"over {test.transfer_info.num_segments} segments "
+                    f"in {test.transfer_info.elapsed_time:.2f} s "
+                    f"({throughput:.2f} kB/s)"
+                )
 
     assigned_nodes_resp = await client.get_assigned_nodes()
     if len(assigned_nodes_resp.nodes) == 0:
-        click.echo("No nodes are assigned to the transceiver. Assign nodes and try again.")
+        click.echo(
+            "No nodes are assigned to the transceiver. Assign nodes and try again."
+        )
         return
 
     try:
@@ -193,11 +223,13 @@ async def snippet_throughput(client: TransceiverClient):
         for ex in ex_group.exceptions:
             click.echo(ex)
 
+
 @transceiver_group.command()
 @with_transceiver_client
 async def get_device_info(client: TransceiverClient):
     """Get device info."""
     click.echo(await client.get_device_info())
+
 
 @transceiver_group.command()
 @with_transceiver_client
@@ -205,11 +237,13 @@ async def get_device_status(client: TransceiverClient):
     """Get device status."""
     click.echo(await client.get_device_status())
 
+
 @transceiver_group.command()
 @with_transceiver_client
 async def get_firmware_info(client: TransceiverClient):
     """Get firmware info."""
     click.echo(await client.get_firmware_info())
+
 
 @transceiver_group.command()
 @with_transceiver_client
@@ -217,15 +251,17 @@ async def get_ptp_status(client: TransceiverClient):
     """Get Precision Time Protocol (PTP) status."""
     click.echo(await client.get_ptp_status())
 
+
 @transceiver_group.command()
 @with_transceiver_client
 async def get_time(client: TransceiverClient):
     """Get current time from a transceiver."""
     click.echo(await client.get_time())
 
+
 @transceiver_group.command()
 @with_transceiver_client
-@click.option('--time', "time_", metavar="TIMESTAMP", help="Time in seconds")
+@click.option("--time", "time_", metavar="TIMESTAMP", help="Time in seconds")
 async def set_time(client: TransceiverClient, time_):
     """Set the time of a transceiver.
 
@@ -240,6 +276,7 @@ async def set_time(client: TransceiverClient, time_):
     click.echo(f"Setting time to {time_ns} ns")
     await client.set_time(time=time_ns)
 
+
 @transceiver_group.command()
 @with_transceiver_client
 async def reset(client: TransceiverClient):
@@ -247,16 +284,24 @@ async def reset(client: TransceiverClient):
     await client.reboot()
     click.echo("Resetting shortly.")
 
+
 @transceiver_group.command()
-@click.option("--host", metavar="HOST", required=True, help="Hostname, IP address or usb:<serial>")
-@click.option('--port', metavar="PORT", default=7645, show_default=True, help="TCP port number")
+@click.option(
+    "--host", metavar="HOST", required=True, help="Hostname, IP address or usb:<serial>"
+)
+@click.option(
+    "--port", metavar="PORT", default=7645, show_default=True, help="TCP port number"
+)
 @click.option("--file", metavar="FILE", help="Path to firmware image.")
 @click.option("--confirm-only", is_flag=True, help="Run only the confirm step.")
 def upgrade(host, port, file, confirm_only):
     """Upgrade transceiver firmware"""
 
     if not confirm_only and not file:
-        click.echo("Error: At least one of options '--file' and '--confirm-only' must be given.", err=True)
+        click.echo(
+            "Error: At least one of options '--file' and '--confirm-only' must be given.",
+            err=True,
+        )
         sys.exit(1)
 
     if file:
@@ -270,7 +315,9 @@ def upgrade(host, port, file, confirm_only):
                     await trx.dfu_write_image(image)
                     await trx.dfu_apply()
 
-                click.echo("Waiting for transceiver to reboot with new firmware image...")
+                click.echo(
+                    "Waiting for transceiver to reboot with new firmware image..."
+                )
                 # Wait at last 5 seconds to make sure we don't find the device
                 # before it has actually rebooted and started swapping images.
                 await asyncio.sleep(5)
@@ -290,6 +337,7 @@ def upgrade(host, port, file, confirm_only):
             sys.exit(1)
 
     asyncio.run(do())
+
 
 @transceiver_group.command()
 @with_transceiver_client

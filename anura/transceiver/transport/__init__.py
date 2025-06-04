@@ -1,4 +1,5 @@
 from .tcp import TCPTransport
+
 try:
     from .usb import USBTransport
 except ModuleNotFoundError:

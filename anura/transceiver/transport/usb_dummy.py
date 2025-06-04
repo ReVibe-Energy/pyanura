@@ -4,6 +4,7 @@ from .base import Transport
 
 logger = logging.getLogger(__name__)
 
+
 class USBTransport(Transport, transport_type="usb"):
     """
     Dummy replacement for the USBTransport class in case the pyusb

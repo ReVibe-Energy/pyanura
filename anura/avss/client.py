@@ -1,25 +1,46 @@
-from .models import *
-from .models import (
-    WriteSettingsV2Args,
-    WriteSettingsV2Response,
-)
-from .settings import SettingsMapper
-
 import asyncio
-import cbor2
-from contextlib import contextmanager
-from dataclasses import dataclass
 import logging
 import struct
 import time
 import types
+from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import (
+    Any,
     AsyncGenerator,
     Callable,
     Generator,
     Optional,
     TypeAlias,
 )
+
+import cbor2
+
+from .models import (
+    AggregatedValuesReport,
+    ApplySettingsArgs,
+    ApplySettingsResponse,
+    ApplyUpgradeArgs,
+    CaptureReport,
+    ConfirmUpgradeArgs,
+    DeactivateArgs,
+    GetFirmwareInfoResponse,
+    GetVersionResponse,
+    HealthReport,
+    PrepareUpgradeArgs,
+    ReportAggregatesArgs,
+    ReportCaptureArgs,
+    ReportHealthArgs,
+    ReportSettings,
+    ReportSnippetArgs,
+    SettingsReport,
+    SnippetReport,
+    TestThroughputArgs,
+    WriteSettingsResponse,
+    WriteSettingsV2Args,
+    WriteSettingsV2Response,
+)
+from .settings import SettingsMapper
 
 logger = logging.getLogger(__name__)
 
@@ -31,14 +52,18 @@ _ParsedReport: TypeAlias = (
     | SnippetReport
 )
 
+
 class AVSSError(Exception):
     pass
+
 
 class AVSSProtocolError(AVSSError):
     pass
 
+
 class DisconnectedError(AVSSError):
     pass
+
 
 class AVSSControlPointError(AVSSError):
     pass
@@ -57,14 +82,18 @@ class AVSSControlPointError(AVSSError):
         else:
             return AVSSControlPointError(f"Response code {rc}")
 
+
 class AVSSBusyError(AVSSControlPointError):
     pass
+
 
 class AVSSBadArgumentError(AVSSControlPointError):
     pass
 
+
 class AVSSOpCodeUnsupportedError(AVSSControlPointError):
     pass
+
 
 OpCode = types.SimpleNamespace()
 OpCode.ResponseCode = 1
@@ -111,6 +140,7 @@ SEGMENT_FIRST = 0x80
 SEGMENT_LAST = 0x40
 SEGMENT_NUMBER_MASK = 0x3F
 
+
 @dataclass
 class ReportTransferInfo:
     start_time: float
@@ -118,19 +148,29 @@ class ReportTransferInfo:
     num_bytes: int
     num_segments: int
 
+
 class Report:
     report_type: int
     payload_cbor: bytes
     transfer_info: Optional[ReportTransferInfo]
 
-    def __init__(self, report_type: int, payload_cbor: bytes, transfer_info: Optional[ReportTransferInfo] = None):
+    def __init__(
+        self,
+        report_type: int,
+        payload_cbor: bytes,
+        transfer_info: Optional[ReportTransferInfo] = None,
+    ):
         self.report_type = report_type
         self.payload_cbor = payload_cbor
         self.transfer_info = transfer_info
 
     @staticmethod
-    def from_record(record: bytes, transfer_info: Optional[ReportTransferInfo] = None) -> "Report":
-        return Report(report_type=record[0], payload_cbor=record[1:], transfer_info=transfer_info)
+    def from_record(
+        record: bytes, transfer_info: Optional[ReportTransferInfo] = None
+    ) -> "Report":
+        return Report(
+            report_type=record[0], payload_cbor=record[1:], transfer_info=transfer_info
+        )
 
     def parse(self):
         report_classes = {
@@ -144,6 +184,7 @@ class Report:
             return report_class.from_cbor(self.payload_cbor)
         else:
             return None
+
 
 class ReportBuffer:
     def __init__(self):
@@ -165,10 +206,12 @@ class ReportBuffer:
         self._finished = True
         transfer_info = ReportTransferInfo(
             start_time=self.start_time,
-            elapsed_time=time.time()-self.start_time,
+            elapsed_time=time.time() - self.start_time,
             num_bytes=len(self._buffer),
-            num_segments=self.num_segments)
+            num_segments=self.num_segments,
+        )
         return Report.from_record(self._buffer, transfer_info=transfer_info)
+
 
 class AVSSClient:
     def __init__(self):
@@ -230,7 +273,9 @@ class AVSSClient:
         return _callback, _generator()
 
     @contextmanager
-    def reports(self, parse=True) -> Generator[AsyncGenerator[Report | _ParsedReport, None], None, None]:
+    def reports(
+        self, parse=True
+    ) -> Generator[AsyncGenerator[Report | _ParsedReport, None], None, None]:
         """Context manager that creates a queue for incoming Reports.
 
         Returns:
@@ -268,10 +313,14 @@ class AVSSClient:
         if self._report_next_segment_number == segment_number:
             self._report_buf.append_segment(segment_payload)
             self._report_next_segment_number = (
-                (self._report_next_segment_number + 1) &SEGMENT_NUMBER_MASK)
+                self._report_next_segment_number + 1
+            ) & SEGMENT_NUMBER_MASK
         else:
-            logger.warning("Expected segment %d but got %d",
-                self._report_next_segment_number, segment_number)
+            logger.warning(
+                "Expected segment %d but got %d",
+                self._report_next_segment_number,
+                segment_number,
+            )
             self._report_buf = None
             return
 
@@ -312,8 +361,11 @@ class AVSSClient:
             request_opcode = chrc_value[1]
             response_code = chrc_value[2]
             if request_opcode != opcode:
-                logger.warning("Request opcode mismatch received: %d expected: %d",
-                    request_opcode, opcode)
+                logger.warning(
+                    "Request opcode mismatch received: %d expected: %d",
+                    request_opcode,
+                    opcode,
+                )
             if response_code != ResponseCode.OK:
                 raise AVSSControlPointError.from_response_code(response_code)
             return None
@@ -346,9 +398,9 @@ class AVSSClient:
         return await self._request(OpCode.ReportAggregates, arg)
 
     async def report_health(self, count: int = None, *, active: bool = None):
-        if active == True or active == False:
+        if active is not None:
             arg = ReportHealthArgs(count=active)
-        elif count == None:
+        elif count is None:
             # Send True instead of None since this is compatible
             # with older sensor firmware versions.
             arg = ReportHealthArgs(count=True)
@@ -383,7 +435,9 @@ class AVSSClient:
         return await self._request(OpCode.GetVersion, None)
 
     async def write_settings(self, settings: dict) -> WriteSettingsResponse:
-        return await self._request(OpCode.WriteSettings, SettingsMapper.from_readable(settings))
+        return await self._request(
+            OpCode.WriteSettings, SettingsMapper.from_readable(settings)
+        )
 
     async def reset_settings(self):
         return await self._request(OpCode.ResetSettings, None)
@@ -419,7 +473,7 @@ class AVSSClient:
         return await self._request(OpCode.TriggerMeasurement, arg)
 
     def _on_program_notify(self, data):
-        offset, = struct.unpack("<L", data)
+        (offset,) = struct.unpack("<L", data)
         if self._program_nack_queue:
             self._program_nack_queue.put_nowait(offset)
 
@@ -437,7 +491,9 @@ class AVSSClient:
                     while True:
                         # Wait a short while for a NACK message to indicate the
                         # node is not in sync with our writes.
-                        offset = await asyncio.wait_for(self._program_nack_queue.get(), timeout=0.04)
+                        offset = await asyncio.wait_for(
+                            self._program_nack_queue.get(), timeout=0.04
+                        )
                         if offset == 0xFFFFFFFF:
                             raise RuntimeError("Program transfer aborted")
                         # We received a NACK so we wait a short while to see
@@ -456,5 +512,7 @@ class AVSSClient:
                 else:
                     req.extend(binary[offset:])
                 offset = end
-                logger.info(f"Program {offset}/{len(binary)} ({offset * 100 / len(binary):.0f} %)")
+                logger.info(
+                    f"Program {offset}/{len(binary)} ({offset * 100 / len(binary):.0f} %)"
+                )
                 await self._program_write(req)

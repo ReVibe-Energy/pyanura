@@ -1,15 +1,13 @@
-from .base import Transport
-
-import argparse
 import asyncio
 import errno
 import logging
 import struct
-import sys
-from typing import Tuple, Optional, List
+from typing import List, Optional
 
 import usb.core
 import usb.util
+
+from .base import Transport
 
 logger = logging.getLogger(__name__)
 
@@ -126,9 +124,9 @@ class USBTransport(Transport, transport_type="usb"):
         return device_list
 
     def _detach_kernel_driver(self):
-    # These operations are not available on Windows and cause
-    # NotImplementedError. See libusb docs:
-    # https://libusb.sourceforge.io/api-1.0/group__libusb__dev.html#ga1cabd4660a274f715eeb82de112e0779
+        # These operations are not available on Windows and cause
+        # NotImplementedError. See libusb docs:
+        # https://libusb.sourceforge.io/api-1.0/group__libusb__dev.html#ga1cabd4660a274f715eeb82de112e0779
         try:
             if self.dev.is_kernel_driver_active(0):
                 self.dev.detach_kernel_driver(0)

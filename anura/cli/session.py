@@ -1,13 +1,12 @@
-from contextlib import closing
 import logging
-from pathlib import Path
 import sqlite3
 import sys
 import time
+from contextlib import closing
+from pathlib import Path
 from typing import Iterator
 
 import anura.avss as avss
-
 from anura.avss.client import Report
 
 logger = logging.getLogger(__name__)
@@ -29,8 +28,8 @@ CREATE TABLE avss_report (
 );
 """
 
-class SessionFile:
 
+class SessionFile:
     def __init__(self, path, read_only=True):
         self._path = path
         self._conn: sqlite3.Connection = None
@@ -88,19 +87,25 @@ class SessionFile:
         logger.debug("Initializing schema")
         with closing(self._conn.cursor()) as cur:
             cur.executescript(CREATE_SCHEMA)
-            cur.execute("INSERT INTO vibreshark_schema (version) VALUES (?)", [SCHEMA_VERSION])
+            cur.execute(
+                "INSERT INTO vibreshark_schema (version) VALUES (?)", [SCHEMA_VERSION]
+            )
             self._conn.commit()
 
-    def insert_avss_report(self, received_at, node_id, report_type, payload_cbor) -> None:
+    def insert_avss_report(
+        self, received_at, node_id, report_type, payload_cbor
+    ) -> None:
         self._conn.execute(
             "INSERT INTO avss_report (received_at, node_id, report_type, payload_cbor)"
             " VALUES (?, ?, ?, ?)",
-            [received_at, node_id, report_type, payload_cbor]
+            [received_at, node_id, report_type, payload_cbor],
         )
         self._conn.commit()
 
     def update_session_info(self, created_at: int) -> None:
         with closing(self._conn.cursor()) as cur:
             cur.execute("DELETE FROM session_info")
-            cur.execute("INSERT INTO session_info (created_at) VALUES (?)", [created_at])
+            cur.execute(
+                "INSERT INTO session_info (created_at) VALUES (?)", [created_at]
+            )
             self._conn.commit()

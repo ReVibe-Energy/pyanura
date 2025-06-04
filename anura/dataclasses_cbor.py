@@ -1,9 +1,9 @@
-import cbor2
 import dataclasses
-from io import BytesIO
-from typing import List
-import typing_inspect
 import ipaddress
+from io import BytesIO
+
+import cbor2
+import typing_inspect
 
 
 def _make_default_encoder(string_keys=False):

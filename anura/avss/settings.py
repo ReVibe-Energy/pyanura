@@ -36,7 +36,7 @@ class SettingsMapper:
             except KeyError:
                 try:
                     return int(key)
-                except:
+                except ValueError:
                     raise ValueError(f"Invalid key {key}")
 
         return {map_key(k): v for k, v in settings.items()}
@@ -50,4 +50,3 @@ class SettingsMapper:
                 return str(key)
 
         return {map_key(k): v for k, v in settings.items()}
-
