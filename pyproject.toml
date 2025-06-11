@@ -4,7 +4,6 @@ name = "pyanura"
 requires-python = ">=3.11"
 dependencies = [
   "cbor2",
-  "typing_inspect",
 ]
 
 [project.optional-dependencies]
