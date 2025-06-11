@@ -9,6 +9,8 @@ from typing import (
 
 import cbor2
 
+from anura.marshalling import marshal, unmarshal
+
 from . import models
 from .transport import Transport
 
@@ -127,11 +129,9 @@ class TransceiverClient:
 
     async def request(self, method, arg=None, result_type=None):
         "Send a send a request and receive the response"
-        if hasattr(arg, "to_struct"):
-            arg = arg.to_struct()
-        result = await self._request_internal(method, arg)
+        result = await self._request_internal(method, marshal(arg))
         if result_type:
-            return result_type.from_struct(result)
+            return unmarshal(result_type, result)
         else:
             return result
 
