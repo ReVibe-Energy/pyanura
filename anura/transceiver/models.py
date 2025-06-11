@@ -5,7 +5,7 @@ import types
 from dataclasses import dataclass
 from uuid import UUID
 
-from anura.dataclasses_cbor import dataclass_cbor, field
+from anura.marshalling import cbor_field, unmarshal
 
 msg_type = types.SimpleNamespace()
 msg_type.Request = 0
@@ -14,6 +14,7 @@ msg_type.Notification = 2
 
 
 class Notification:
+    @staticmethod
     def parse(notification_type, argument):
         event_classes = {
             "node_connected": NodeConnectedEvent,
@@ -24,24 +25,22 @@ class Notification:
             "scan_nodes_received": ScanNodesReceivedEvent,
         }
         if event_class := event_classes.get(notification_type):
-            return event_class.from_struct(argument)
+            return unmarshal(event_class, argument)
         else:
             return UnknownNotification(notification_type, argument)
 
 
-@dataclass_cbor()
 @dataclass
 class APIError:
-    code: int = field(0)
-    internal_code: int = field(1)
-    message: str = field(2)
+    code: int = cbor_field(0)
+    internal_code: int = cbor_field(1)
+    message: str = cbor_field(2)
 
 
-@dataclass_cbor(struct="array")
 @dataclass
 class BluetoothAddrLE:
-    type: int = field(0)
-    address: bytes = field(1)
+    type: int
+    address: bytes
 
     def __str__(self):
         if self.type == 0:
@@ -83,163 +82,152 @@ class BluetoothAddrLE:
         addr_str = addr_raw.replace(":", "").replace("-", "")
         return BluetoothAddrLE(type=addr_type, address=bytes.fromhex(addr_str))
 
+    def _marshal(self) -> tuple[int, bytes]:
+        return (self.type, self.address)
 
-@dataclass_cbor()
+    @classmethod
+    def _unmarshal(cls, value) -> "BluetoothAddrLE":
+        match value:
+            case type_, address:
+                return cls(type_, address)
+            case _:
+                raise ValueError(f"'{repr(value)}' not decodable as BluetoothAddrLE")
+
+
 @dataclass
 class AssignedNode:
-    address: BluetoothAddrLE = field(0)
+    address: BluetoothAddrLE = cbor_field(0)
 
 
-@dataclass_cbor()
 @dataclass
 class SetAssignedNodesArgs:
-    nodes: list[AssignedNode] = field(0)
+    nodes: list[AssignedNode] = cbor_field(0)
 
 
-@dataclass_cbor()
 @dataclass
 class GetAssignedNodesResult:
-    nodes: list[AssignedNode] = field(0)
+    nodes: list[AssignedNode] = cbor_field(0)
 
 
-@dataclass_cbor()
 @dataclass
 class ConnectedNode:
-    address: BluetoothAddrLE = field(0)
-    rssi: int = field(1)
+    address: BluetoothAddrLE = cbor_field(0)
+    rssi: int = cbor_field(1)
 
 
-@dataclass_cbor()
 @dataclass
 class GetConnectedNodesResult:
-    nodes: list[ConnectedNode] = field(0)
+    nodes: list[ConnectedNode] = cbor_field(0)
 
 
-@dataclass_cbor()
 @dataclass
 class AVSSRequestArgs:
-    address: BluetoothAddrLE = field(0)
-    data: bytes = field(1)
+    address: BluetoothAddrLE = cbor_field(0)
+    data: bytes = cbor_field(1)
 
 
-@dataclass_cbor()
 @dataclass
 class AVSSProgramWriteArgs:
-    address: BluetoothAddrLE = field(0)
-    data: bytes = field(1)
+    address: BluetoothAddrLE = cbor_field(0)
+    data: bytes = cbor_field(1)
 
 
-@dataclass_cbor()
 @dataclass
 class GetDeviceInfoResult:
-    board: str = field(0)
-    hw_rev: int = field(1)
-    device_id: bytes = field(2)
-    app_version: str = field(3)
-    app_build_version: str = field(4)
-    serial_number: str = field(5)
-    hostname: str = field(6)
-    mac_address: bytes = field(7)
-    ip_addresses: list[ipaddress.IPv4Address] = field(8)
+    board: str = cbor_field(0)
+    hw_rev: int = cbor_field(1)
+    device_id: bytes = cbor_field(2)
+    app_version: str = cbor_field(3)
+    app_build_version: str = cbor_field(4)
+    serial_number: str = cbor_field(5)
+    hostname: str = cbor_field(6)
+    mac_address: bytes = cbor_field(7)
+    ip_addresses: list[ipaddress.IPv4Address] = cbor_field(8)
 
 
-@dataclass_cbor()
 @dataclass
 class GetDeviceStatusResult:
-    uptime: int = field(0)
-    reboot_count: int = field(1)
-    reset_cause: int = field(2)
+    uptime: int = cbor_field(0)
+    reboot_count: int = cbor_field(1)
+    reset_cause: int = cbor_field(2)
 
 
-@dataclass_cbor()
 @dataclass
 class GetFirmwareInfoResult:
-    dfu_status: int = field(0)
-    app_version: int = field(1)
-    app_build_version: int = field(2)
-    net_version: int = field(3)
-    net_build_version: int = field(4)
+    dfu_status: int = cbor_field(0)
+    app_version: int = cbor_field(1)
+    app_build_version: int = cbor_field(2)
+    net_version: int = cbor_field(3)
+    net_build_version: int = cbor_field(4)
 
 
-@dataclass_cbor()
 @dataclass
 class GetPtpStatusResult:
-    port_state: str = field(0)
-    offset: str = field(1)
-    delay: str = field(2)
-    offset_histogram: [int] = field(3)
+    port_state: str = cbor_field(0)
+    offset: str = cbor_field(1)
+    delay: str = cbor_field(2)
+    offset_histogram: list[int] = cbor_field(3)
 
 
-@dataclass_cbor()
 @dataclass
 class DfuPrepareArgs:
-    size: int = field(0)
+    size: int = cbor_field(0)
 
 
-@dataclass_cbor()
 @dataclass
 class DfuWriteArgs:
-    offset: int = field(0)
-    data: int = field(1)
+    offset: int = cbor_field(0)
+    data: int = cbor_field(1)
 
 
-@dataclass_cbor()
 @dataclass
 class DfuApplyArgs:
-    permanent: int = field(0)
+    permanent: int = cbor_field(0)
 
 
-@dataclass_cbor()
 @dataclass
 class SetTimeArgs:
-    time: int = field(0)
+    time: int = cbor_field(0)
 
 
-@dataclass_cbor()
 @dataclass
 class GetTimeResult:
-    time: int = field(0)
+    time: int = cbor_field(0)
 
 
-@dataclass_cbor()
 @dataclass
 class NodeConnectedEvent(Notification):
-    address: BluetoothAddrLE = field(0)
+    address: BluetoothAddrLE = cbor_field(0)
 
 
-@dataclass_cbor()
 @dataclass
 class NodeDisconnectedEvent(Notification):
-    address: BluetoothAddrLE = field(0)
+    address: BluetoothAddrLE = cbor_field(0)
 
 
-@dataclass_cbor()
 @dataclass
 class NodeServiceDiscoveredEvent(Notification):
-    address: BluetoothAddrLE = field(0)
-    uuid: UUID = field(1)
+    address: BluetoothAddrLE = cbor_field(0)
+    uuid: UUID = cbor_field(1)
 
 
-@dataclass_cbor()
 @dataclass
 class AVSSReportNotifiedEvent(Notification):
-    address: BluetoothAddrLE = field(0)
-    value: bytes = field(1)
+    address: BluetoothAddrLE = cbor_field(0)
+    value: bytes = cbor_field(1)
 
 
-@dataclass_cbor()
 @dataclass
 class AVSSProgramNotifiedEvent(Notification):
-    address: BluetoothAddrLE = field(0)
-    value: bytes = field(1)
+    address: BluetoothAddrLE = cbor_field(0)
+    value: bytes = cbor_field(1)
 
 
-@dataclass_cbor()
 @dataclass
 class ScanNodesReceivedEvent(Notification):
-    address: BluetoothAddrLE = field(0)
-    rssi: int = field(1)
-    data: bytes = field(2)
+    address: BluetoothAddrLE = cbor_field(0)
+    rssi: int = cbor_field(1)
+    data: bytes = cbor_field(2)
 
 
 class UnknownNotification(Notification):
