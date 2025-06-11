@@ -2,9 +2,13 @@ import asyncio
 import logging
 from contextlib import contextmanager
 from typing import (
+    Any,
     AsyncGenerator,
     Callable,
     Generator,
+    Type,
+    TypeVar,
+    overload,
 )
 
 import cbor2
@@ -15,6 +19,8 @@ from . import models
 from .transport import Transport
 
 logger = logging.getLogger(__name__)
+
+T = TypeVar("T")
 
 
 class ProtocolError(Exception):
@@ -126,6 +132,14 @@ class TransceiverClient:
                 return result
             case [error, _]:
                 raise RequestError(method, error)
+
+    @overload
+    async def request(
+        self, method: str, arg: Any = None, /, *, result_type: Type[T]
+    ) -> T: ...
+
+    @overload
+    async def request(self, method: str, arg: Any = None, /) -> Any: ...
 
     async def request(self, method, arg=None, result_type=None):
         "Send a send a request and receive the response"
