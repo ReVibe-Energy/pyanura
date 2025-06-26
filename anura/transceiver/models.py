@@ -164,8 +164,8 @@ class GetFirmwareInfoResult:
 @dataclass
 class GetPtpStatusResult:
     port_state: str = cbor_field(0)
-    offset: str = cbor_field(1)
-    delay: str = cbor_field(2)
+    offset: int = cbor_field(1)
+    delay: int = cbor_field(2)
     offset_histogram: list[int] = cbor_field(3)
 
 
