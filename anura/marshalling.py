@@ -1,9 +1,12 @@
 import dataclasses
+import ipaddress
 import logging
 import types
 import typing
 from dataclasses import is_dataclass
-from typing import Any, Type, TypeVar
+from typing import Type, TypeVar
+
+import cbor2
 
 T = TypeVar("T")
 
@@ -40,6 +43,8 @@ def marshal(obj):
 def unmarshal(cls: Type[T], struct) -> T:
     if hasattr(cls, "_unmarshal"):
         return getattr(cls, "_unmarshal")(struct)
+    elif hook := _unmarshal_hooks.get(cls, None):
+        return hook(cls, struct)
     elif is_dataclass(cls):
         field_by_key = {
             field.metadata["cbor_key"]: field for field in dataclasses.fields(cls)
@@ -70,3 +75,16 @@ def unmarshal(cls: Type[T], struct) -> T:
         if not isinstance(struct, cls):
             raise TypeError(f"{repr(struct)} not decodable as type {cls}")
         return struct
+
+
+def _unmarshal_ipv4address(cls: Type[T], struct) -> T:
+    if not isinstance(struct, cbor2.CBORTag):
+        raise TypeError(f"{repr(struct)} not decodable as type {cls}")
+    if struct.tag != 52:
+        raise ValueError(f"Expected tag 52 but got {struct.tag}")
+    return ipaddress.IPv4Address(struct.value)
+
+
+_unmarshal_hooks = {
+    ipaddress.IPv4Address: _unmarshal_ipv4address
+}
