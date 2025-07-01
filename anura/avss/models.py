@@ -143,12 +143,12 @@ class HealthReport:
     battery_voltage: int = cbor_field(4)
     rssi: int = cbor_field(5)
     eh_voltage: int = cbor_field(6)
-    clock_sync_skew: float = cbor_field(7)
-    clock_sync_age: int = cbor_field(8)
-    clock_sync_diff: int = cbor_field(9)
+    clock_sync_skew: float | None = cbor_field(7, default=None)
+    clock_sync_age: int | None = cbor_field(8, default=None)
+    clock_sync_diff: int | None = cbor_field(9, default=None)
 
 
 @dataclass
 class SettingsReport:
-    settings: dict = cbor_field(0)
-    pending_settings: dict = cbor_field(1)
+    settings: dict | None = cbor_field(0, default=None)
+    pending_settings: dict | None = cbor_field(1, default=None)
