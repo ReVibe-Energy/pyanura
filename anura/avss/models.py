@@ -110,7 +110,7 @@ class GetFirmwareInfoResponse:
 @dataclass
 class SnippetReport:
     start_time: int = cbor_field(0)
-    sample_rate: int = cbor_field(1)
+    sample_rate: float = cbor_field(1)
     range_: int = cbor_field(2)
     samples: dict[int, bytes] = cbor_field(3)
     is_synced: bool = cbor_field(4)
