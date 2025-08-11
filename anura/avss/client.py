@@ -36,6 +36,7 @@ from .models import (
     SettingsReport,
     SnippetReport,
     TestThroughputArgs,
+    TriggerMeasurementArgs,
     WriteSettingsResponse,
     WriteSettingsV2Args,
     WriteSettingsV2Response,
