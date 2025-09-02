@@ -47,7 +47,16 @@ class BleakAVSSClient(AVSSClient):
         )
 
     async def disconnect(self):
-        await self.client.disconnect()
+        try:
+            await self.client.disconnect()
+        except EOFError:
+            if self._disconnected.done():
+                # on certain platforms EOFError is raised even
+                # though _disconnected "done" callback has been called
+                # so we decided to suppress the EOFError here
+                pass
+            else:
+                raise
 
     def _cp_indicate(self, sender, data):
         self._cp_response_q.put_nowait(data)
