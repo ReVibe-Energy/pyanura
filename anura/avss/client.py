@@ -5,6 +5,7 @@ import time
 import types
 from contextlib import contextmanager
 from dataclasses import dataclass
+from io import BytesIO
 from typing import (
     Any,
     AsyncGenerator,
@@ -365,8 +366,10 @@ class AVSSClient:
             return await self._request_impl(opcode, argument, timeout)
 
     async def _request_impl(self, opcode, argument, timeout=2.0):
-        req = bytearray([opcode])
-        req.extend(cbor2.dumps(marshal(argument)))
+        with BytesIO() as fp:
+            fp.write(bytes((opcode,)))
+            cbor2.dump(marshal(argument), fp)
+            req = fp.getvalue()
 
         try:
             logger.debug("Sending Control Point request")
