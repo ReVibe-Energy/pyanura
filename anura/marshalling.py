@@ -40,7 +40,7 @@ def marshal(obj):
         return obj
 
 
-def unmarshal(cls: Type[T], struct) -> T:
+def unmarshal(cls: type[T], struct) -> T:
     if hasattr(cls, "_unmarshal"):
         return getattr(cls, "_unmarshal")(struct)
     elif hook := _unmarshal_hooks.get(cls, None):
@@ -81,7 +81,7 @@ def unmarshal(cls: Type[T], struct) -> T:
         return struct
 
 
-def _unmarshal_ipv4address(cls: Type[T], struct) -> T:
+def _unmarshal_ipv4address(cls: type[T], struct) -> T:
     if not isinstance(struct, cbor2.CBORTag):
         raise TypeError(f"{repr(struct)} not decodable as type {cls}")
     if struct.tag != 52:

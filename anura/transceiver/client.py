@@ -6,7 +6,6 @@ from typing import (
     AsyncGenerator,
     Callable,
     Generator,
-    Type,
     TypeVar,
     overload,
 )
@@ -135,7 +134,7 @@ class TransceiverClient:
 
     @overload
     async def request(
-        self, method: str, arg: Any = None, /, *, result_type: Type[T]
+        self, method: str, arg: Any = None, /, *, result_type: type[T]
     ) -> T: ...
 
     @overload

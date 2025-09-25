@@ -12,7 +12,6 @@ from typing import (
     Generator,
     Literal,
     Optional,
-    Type,
     TypeAlias,
     TypeVar,
     overload,
@@ -408,7 +407,7 @@ class AVSSClient:
                 raise AVSSProtocolError("Expected response opcode")
 
     async def _typed_request(
-        self, type_: Type[_TResp], opcode, argument, timeout=2.0
+        self, type_: type[_TResp], opcode, argument, timeout=2.0
     ) -> _TResp:
         resp = await self._request(opcode, argument, timeout)
         if isinstance(resp, type_):
