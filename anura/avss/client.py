@@ -366,12 +366,8 @@ class AVSSClient:
 
     async def _request_impl(self, opcode, argument, timeout=2.0):
         req = bytearray([opcode])
-        if isinstance(argument, dict):
-            req.extend(cbor2.dumps(argument))
-        elif argument:
-            req.extend(cbor2.dumps(marshal(argument)))
-        else:
-            req.extend(cbor2.dumps(None))
+        req.extend(cbor2.dumps(marshal(argument)))
+
         try:
             logger.debug("Sending Control Point request")
             chrc_value = await self._request_raw(req, timeout)
