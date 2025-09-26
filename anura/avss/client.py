@@ -414,20 +414,23 @@ class AVSSClient:
         else:
             raise ValueError(f"Response type {type_} expected but got {type(resp)}")
 
+    async def _void_request(self, opcode, argument, timeout=2.0) -> None:
+        return await self._typed_request(opcode, type(None), argument, timeout)
+
     async def _program_write(self, value):
         raise NotImplementedError()
 
     async def report_snippets(self, count, auto_resume):
         arg = ReportSnippetArgs(count=count, auto_resume=auto_resume)
-        return await self._request(OpCode.ReportSnippet, arg)
+        return await self._void_request(OpCode.ReportSnippet, arg)
 
     async def report_capture(self, count, auto_resume):
         arg = ReportCaptureArgs(count=count, auto_resume=auto_resume)
-        return await self._request(OpCode.ReportCapture, arg)
+        return await self._void_request(OpCode.ReportCapture, arg)
 
     async def report_aggregates(self, count, auto_resume):
         arg = ReportAggregatesArgs(count=count, auto_resume=auto_resume)
-        return await self._request(OpCode.ReportAggregates, arg)
+        return await self._void_request(OpCode.ReportAggregates, arg)
 
     async def report_health(
         self, count: int | None = None, *, active: bool | None = None
@@ -440,11 +443,11 @@ class AVSSClient:
             arg = ReportHealthArgs(count=True)
         else:
             arg = ReportHealthArgs(count=count)
-        return await self._request(OpCode.ReportHealth, arg)
+        return await self._void_request(OpCode.ReportHealth, arg)
 
     async def report_settings(self, current=True, pending=False):
         arg = ReportSettings(current=current, pending=pending)
-        return await self._request(OpCode.ReportSettings, arg)
+        return await self._void_request(OpCode.ReportSettings, arg)
 
     async def apply_settings(self, persist: bool) -> ApplySettingsResponse:
         arg = ApplySettingsArgs(persist=persist)
@@ -454,18 +457,18 @@ class AVSSClient:
 
     async def prepare_upgrade(self, image, size, timeout=30.0):
         arg = PrepareUpgradeArgs(image=image, size=size)
-        return await self._request(OpCode.PrepareUpgrade, arg, timeout=timeout)
+        return await self._void_request(OpCode.PrepareUpgrade, arg, timeout=timeout)
 
     async def apply_upgrade(self):
         arg = ApplyUpgradeArgs()
-        return await self._request(OpCode.ApplyUpgrade, arg)
+        return await self._void_request(OpCode.ApplyUpgrade, arg)
 
     async def confirm_upgrade(self, image):
         arg = ConfirmUpgradeArgs(image=image)
-        return await self._request(OpCode.ConfirmUpgrade, arg)
+        return await self._void_request(OpCode.ConfirmUpgrade, arg)
 
     async def reboot(self):
-        return await self._request(OpCode.Reboot, None)
+        return await self._void_request(OpCode.Reboot, None)
 
     async def get_version(self) -> GetVersionResponse:
         return await self._typed_request(GetVersionResponse, OpCode.GetVersion, None)
@@ -478,15 +481,15 @@ class AVSSClient:
         )
 
     async def reset_settings(self):
-        return await self._request(OpCode.ResetSettings, None)
+        return await self._void_request(OpCode.ResetSettings, None)
 
     async def test_throughput(self, duration: int):
         args = TestThroughputArgs(duration=duration)
-        return await self._request(OpCode.TestThroughput, args)
+        return await self._void_request(OpCode.TestThroughput, args)
 
     async def deactivate(self, key: int):
         arg = DeactivateArgs(key=key)
-        return await self._request(OpCode.Deactivate, arg)
+        return await self._void_request(OpCode.Deactivate, arg)
 
     async def get_firmware_info(self) -> GetFirmwareInfoResponse:
         return await self._typed_request(
@@ -494,7 +497,7 @@ class AVSSClient:
         )
 
     async def reset_report(self):
-        return await self._request(OpCode.ResetReport, None)
+        return await self._void_request(OpCode.ResetReport, None)
 
     async def write_settings_v2(
         self, settings: dict[int, Any], reset_defaults: bool, apply: bool
@@ -511,7 +514,7 @@ class AVSSClient:
 
     async def trigger_measurement(self, duration_ms: int):
         arg = TriggerMeasurementArgs(duration_ms=duration_ms)
-        return await self._request(OpCode.TriggerMeasurement, arg)
+        return await self._void_request(OpCode.TriggerMeasurement, arg)
 
     def _on_program_notify(self, data):
         (offset,) = struct.unpack("<L", data)
