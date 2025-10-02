@@ -156,9 +156,9 @@ class GetDeviceStatusResult:
 class GetFirmwareInfoResult:
     dfu_status: int = cbor_field(0)
     app_version: int = cbor_field(1)
-    app_build_version: int = cbor_field(2)
+    app_build_version: str = cbor_field(2)
     net_version: int = cbor_field(3)
-    net_build_version: int = cbor_field(4)
+    net_build_version: str = cbor_field(4)
 
 
 @dataclass
