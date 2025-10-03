@@ -8,7 +8,8 @@ from pathlib import Path
 import click
 import zeroconf
 
-from anura.transceiver import BluetoothAddrLE, ScanNodesReceivedEvent, TransceiverClient
+from anura.transceiver.client import TransceiverClient
+from anura.transceiver.models import BluetoothAddrLE, ScanNodesReceivedEvent
 from anura.transceiver.proxy_avss_client import ProxyAVSSClient
 from anura.transceiver.transport import USBTransport
 
@@ -77,7 +78,7 @@ def browse():
 
     with zeroconf.Zeroconf() as zc:
         listener = EchoDistinctListener()
-        browser = zeroconf.ServiceBrowser(zc, "_revibe-anura._tcp.local.", listener)
+        zeroconf.ServiceBrowser(zc, "_revibe-anura._tcp.local.", listener)
         time.sleep(60.0)
 
 
@@ -182,50 +183,6 @@ async def avss_throughput(client: TransceiverClient, mode: str, duration: int):
 
 @transceiver_group.command()
 @with_transceiver_client
-async def snippet_throughput(client: TransceiverClient):
-    """Measure concurrent throughput of snippet data."""
-
-    async def test_throughput(addr):
-        async with ProxyAVSSClient(client, addr) as node:
-            with node.reports(parse=False) as reports:
-                click.echo(f"{addr}: Requesting snippet reports...")
-                await node.test_throughput(duration=duration * 1000)
-                test = await anext(reports)
-
-                if test.transfer_info.elapsed_time > 0:
-                    throughput = (
-                        test.transfer_info.num_bytes
-                        / test.transfer_info.elapsed_time
-                        / 1000
-                    )
-                else:
-                    throughput = "??"
-
-                click.echo(
-                    f"{addr}: Received {test.transfer_info.num_bytes} B "
-                    f"over {test.transfer_info.num_segments} segments "
-                    f"in {test.transfer_info.elapsed_time:.2f} s "
-                    f"({throughput:.2f} kB/s)"
-                )
-
-    assigned_nodes_resp = await client.get_assigned_nodes()
-    if len(assigned_nodes_resp.nodes) == 0:
-        click.echo(
-            "No nodes are assigned to the transceiver. Assign nodes and try again."
-        )
-        return
-
-    try:
-        async with asyncio.TaskGroup() as tg:
-            for node in assigned_nodes_resp.nodes:
-                tg.create_task(test_throughput(node.address))
-    except ExceptionGroup as ex_group:
-        for ex in ex_group.exceptions:
-            click.echo(ex)
-
-
-@transceiver_group.command()
-@with_transceiver_client
 async def get_device_info(client: TransceiverClient):
     """Get device info."""
     click.echo(await client.get_device_info())
@@ -269,7 +226,7 @@ async def set_time(client: TransceiverClient, time_):
     or current time if no time is specified. If the transceiver
     is acting in a PTP slave role, the set time command has
     no lasting result."""
-    if time_ != None:
+    if time_ is not None:
         time_ns = int(time_) * 1000000000
     else:
         time_ns = time.time_ns()

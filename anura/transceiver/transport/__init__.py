@@ -5,3 +5,9 @@ try:
 except ModuleNotFoundError:
     from .usb_dummy import USBTransport
 from .base import Transport
+
+__all__ = [
+    "TCPTransport",
+    "Transport",
+    "USBTransport",
+]

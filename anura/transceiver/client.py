@@ -2,17 +2,24 @@ import asyncio
 import logging
 from contextlib import contextmanager
 from typing import (
+    Any,
     AsyncGenerator,
     Callable,
     Generator,
+    TypeVar,
+    overload,
 )
 
 import cbor2
 
-from .models import *
+from anura.marshalling import marshal, unmarshal
+
+from . import models
 from .transport import Transport
 
 logger = logging.getLogger(__name__)
+
+T = TypeVar("T")
 
 
 class ProtocolError(Exception):
@@ -40,7 +47,9 @@ class TransceiverClient:
         self._known_methods = {}
         self._disconnected = asyncio.Future()
         self._connection_task: asyncio.Task = None
-        self._on_notification_callbacks: list[Callable[[Notification], None]] = []
+        self._on_notification_callbacks: list[
+            Callable[[models.Notification], None]
+        ] = []
 
     async def __aenter__(self):
         await self.connect()
@@ -66,14 +75,14 @@ class TransceiverClient:
                     break
                 message = cbor2.loads(payload)
                 match message:
-                    case [msg_type.Response, request_token, error, result]:
+                    case [models.msg_type.Response, request_token, error, result]:
                         response = self._pending_responses.pop(request_token, None)
                         if response and response.cancelled():
                             logger.warning("Response to cancelled request received")
                         elif response:
                             response.set_result([error, result])
-                    case [msg_type.Notification, type_, argument]:
-                        n = Notification.parse(type_, argument)
+                    case [models.msg_type.Notification, type_, argument]:
+                        n = models.Notification.parse(type_, argument)
                         for callback in self._on_notification_callbacks:
                             callback(n)
                     case _:
@@ -115,7 +124,7 @@ class TransceiverClient:
         response = loop.create_future()
         self._pending_responses[request_token] = response
         await self._send(
-            cbor2.dumps([msg_type.Request, request_token, method_id, param])
+            cbor2.dumps([models.msg_type.Request, request_token, method_id, param])
         )
         match await response:
             case [None, result]:
@@ -123,37 +132,47 @@ class TransceiverClient:
             case [error, _]:
                 raise RequestError(method, error)
 
+    @overload
+    async def request(
+        self, method: str, arg: Any = None, /, *, result_type: type[T]
+    ) -> T: ...
+
+    @overload
+    async def request(self, method: str, arg: Any = None, /) -> Any: ...
+
     async def request(self, method, arg=None, result_type=None):
         "Send a send a request and receive the response"
-        if hasattr(arg, "to_struct"):
-            arg = arg.to_struct()
-        result = await self._request_internal(method, arg)
+        result = await self._request_internal(method, marshal(arg))
         if result_type:
-            return result_type.from_struct(result)
+            return unmarshal(result_type, result)
         else:
             return result
 
     def _callback_and_generator(
         self,
-    ) -> tuple[Callable[[Notification], None], AsyncGenerator[Notification, None]]:
+    ) -> tuple[
+        Callable[[models.Notification], None], AsyncGenerator[models.Notification, None]
+    ]:
         # Queue to hold the incoming notifications
-        notifications: asyncio.Queue[Notification] = asyncio.Queue()
+        notifications: asyncio.Queue[models.Notification] = asyncio.Queue()
 
-        def _callback(msg: Notification) -> None:
+        def _callback(msg: models.Notification) -> None:
             """Put the new notification in the queue."""
             try:
                 notifications.put_nowait(msg)
             except asyncio.QueueFull:
                 self._logger.warning("Notification queue is full. Discarding message.")
 
-        async def _generator() -> AsyncGenerator[Notification, None]:
+        async def _generator() -> AsyncGenerator[models.Notification, None]:
             """Forward all notifications from the notification queue."""
             while True:
                 # Wait until we either:
                 #  1. Receive a notification
                 #  2. Disconnect from the transceiver
                 loop = asyncio.get_running_loop()
-                get: asyncio.Task[Message] = loop.create_task(notifications.get())
+                get: asyncio.Task[models.Message] = loop.create_task(
+                    notifications.get()
+                )
                 try:
                     done, _ = await asyncio.wait(
                         (get, self._disconnected), return_when=asyncio.FIRST_COMPLETED
@@ -178,7 +197,7 @@ class TransceiverClient:
     @contextmanager
     def notifications(
         self,
-    ) -> Generator[AsyncGenerator[Notification, None], None, None]:
+    ) -> Generator[AsyncGenerator[models.Notification, None], None, None]:
         """Context manager that creates a queue for incoming notifications.
 
         Returns:
@@ -202,11 +221,11 @@ class TransceiverClient:
         return await self.request("reboot")
 
     async def dfu_prepare(self, size: int):
-        args = DfuPrepareArgs(size=size)
+        args = models.DfuPrepareArgs(size=size)
         return await self.request("dfu_prepare", args)
 
     async def dfu_write(self, offset: int, data: bytes):
-        args = DfuWriteArgs(offset=offset, data=data)
+        args = models.DfuWriteArgs(offset=offset, data=data)
         return await self.request("dfu_write", args)
 
     async def dfu_write_image(self, image: bytes, chunk_size=300):
@@ -224,51 +243,55 @@ class TransceiverClient:
 
     async def dfu_apply(self, permanent=False):
         if permanent:
-            args = DfuApplyArgs(permanent=0x5045524D)  # ASCII "PERM"
+            args = models.DfuApplyArgs(permanent=0x5045524D)  # ASCII "PERM"
         else:
-            args = DfuApplyArgs(permanent=0)
+            args = models.DfuApplyArgs(permanent=0)
         return await self.request("dfu_apply", args)
 
     async def dfu_confirm(self):
         return await self.request("dfu_confirm")
 
-    async def set_assigned_nodes(self, addrs: list[BluetoothAddrLE]):
-        nodes = [AssignedNode(address=addr) for addr in addrs]
-        args = SetAssignedNodesArgs(nodes=nodes)
+    async def set_assigned_nodes(self, addrs: list[models.BluetoothAddrLE]):
+        nodes = [models.AssignedNode(address=addr) for addr in addrs]
+        args = models.SetAssignedNodesArgs(nodes=nodes)
         return await self.request("set_assigned_nodes", args)
 
-    async def get_assigned_nodes(self) -> GetAssignedNodesResult:
+    async def get_assigned_nodes(self) -> models.GetAssignedNodesResult:
         return await self.request(
-            "get_assigned_nodes", result_type=GetAssignedNodesResult
+            "get_assigned_nodes", result_type=models.GetAssignedNodesResult
         )
 
-    async def get_connected_nodes(self) -> GetConnectedNodesResult:
+    async def get_connected_nodes(self) -> models.GetConnectedNodesResult:
         return await self.request(
-            "get_connected_nodes", result_type=GetConnectedNodesResult
+            "get_connected_nodes", result_type=models.GetConnectedNodesResult
         )
 
-    async def get_device_info(self) -> GetDeviceInfoResult:
-        return await self.request("get_device_info", result_type=GetDeviceInfoResult)
-
-    async def get_device_status(self) -> GetDeviceStatusResult:
+    async def get_device_info(self) -> models.GetDeviceInfoResult:
         return await self.request(
-            "get_device_status", result_type=GetDeviceStatusResult
+            "get_device_info", result_type=models.GetDeviceInfoResult
         )
 
-    async def get_firmware_info(self) -> GetFirmwareInfoResult:
+    async def get_device_status(self) -> models.GetDeviceStatusResult:
         return await self.request(
-            "get_firmware_info", result_type=GetFirmwareInfoResult
+            "get_device_status", result_type=models.GetDeviceStatusResult
         )
 
-    async def get_ptp_status(self) -> GetPtpStatusResult:
-        return await self.request("get_ptp_status", result_type=GetPtpStatusResult)
+    async def get_firmware_info(self) -> models.GetFirmwareInfoResult:
+        return await self.request(
+            "get_firmware_info", result_type=models.GetFirmwareInfoResult
+        )
+
+    async def get_ptp_status(self) -> models.GetPtpStatusResult:
+        return await self.request(
+            "get_ptp_status", result_type=models.GetPtpStatusResult
+        )
 
     async def set_time(self, time: int):
-        args = SetTimeArgs(time=time)
+        args = models.SetTimeArgs(time=time)
         return await self.request("set_time", args)
 
-    async def get_time(self) -> GetTimeResult:
-        return await self.request("get_time", result_type=GetTimeResult)
+    async def get_time(self) -> models.GetTimeResult:
+        return await self.request("get_time", result_type=models.GetTimeResult)
 
     async def scan_nodes(self):
         return await self.request("scan_nodes")
@@ -283,15 +306,15 @@ class TransceiverClient:
     async def scan_nodes_stop(self):
         return await self.request("scan_nodes_stop")
 
-    async def avss_request(self, addr: BluetoothAddrLE, data: bytes):
-        args = AVSSRequestArgs(address=addr, data=data)
+    async def avss_request(self, addr: models.BluetoothAddrLE, data: bytes):
+        args = models.AVSSRequestArgs(address=addr, data=data)
         return await self.request("avss_request", args)
 
-    async def avss_program_write(self, addr: BluetoothAddrLE, data: bytes):
-        args = AVSSProgramWriteArgs(address=addr, data=data)
+    async def avss_program_write(self, addr: models.BluetoothAddrLE, data: bytes):
+        args = models.AVSSProgramWriteArgs(address=addr, data=data)
         return await self.request("avss_program_write", args)
 
-    async def find_avss_node_by_address(self, addr: BluetoothAddrLE):
+    async def find_avss_node_by_address(self, addr: models.BluetoothAddrLE):
         with self.notifications() as notifications:
             assigned_nodes = await self.get_assigned_nodes()
             is_assigned = any(node.address == addr for node in assigned_nodes.nodes)
@@ -304,5 +327,8 @@ class TransceiverClient:
                 return addr  # Already connected
 
             async for msg in notifications:
-                if isinstance(msg, NodeServiceDiscoveredEvent) and msg.address == addr:
+                if (
+                    isinstance(msg, models.NodeServiceDiscoveredEvent)
+                    and msg.address == addr
+                ):
                     return addr

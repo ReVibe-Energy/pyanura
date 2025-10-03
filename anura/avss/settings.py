@@ -26,7 +26,7 @@ class SettingsMapper:
         "aggregates_param_enable_32_63": 23,
     }
 
-    reverse_map = dict(reversed(item) for item in forward_map.items())
+    reverse_map = {key: name for name, key in forward_map.items()}
 
     @staticmethod
     def from_readable(settings):

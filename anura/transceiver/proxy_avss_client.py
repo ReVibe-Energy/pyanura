@@ -2,7 +2,12 @@ import asyncio
 
 import anura.avss as avss
 
-from .models import *
+from .models import (
+    AVSSProgramNotifiedEvent,
+    AVSSReportNotifiedEvent,
+    BluetoothAddrLE,
+    NodeDisconnectedEvent,
+)
 
 
 class ProxyAVSSClient(avss.AVSSClient):
@@ -48,5 +53,5 @@ class ProxyAVSSClient(avss.AVSSClient):
         result = await self.transceiver.avss_request(self.address, req)
         return result[0]
 
-    async def _program_write(self, val):
-        await self.transceiver.avss_program_write(self.address, val)
+    async def _program_write(self, value):
+        await self.transceiver.avss_program_write(self.address, value)
