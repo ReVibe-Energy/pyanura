@@ -406,7 +406,7 @@ class AVSSClient:
                 raise AVSSProtocolError("Expected response opcode")
 
     async def _typed_request(
-        self, type_: type[_TResp], opcode, argument, timeout=2.0
+        self, type_: type[_TResp], opcode: int, argument, timeout: float = 2.0
     ) -> _TResp:
         resp = await self._request(opcode, argument, timeout)
         if isinstance(resp, type_):
@@ -414,8 +414,8 @@ class AVSSClient:
         else:
             raise ValueError(f"Response type {type_} expected but got {type(resp)}")
 
-    async def _void_request(self, opcode, argument, timeout=2.0) -> None:
-        return await self._typed_request(opcode, type(None), argument, timeout)
+    async def _void_request(self, opcode: int, argument, timeout: float = 2.0) -> None:
+        return await self._typed_request(type(None), opcode, argument, timeout)
 
     async def _program_write(self, value):
         raise NotImplementedError()
