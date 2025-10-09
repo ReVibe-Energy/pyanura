@@ -4,7 +4,7 @@ import logging
 import types
 import typing
 from dataclasses import is_dataclass
-from typing import Type, TypeVar
+from typing import Any, TypeVar
 
 import cbor2
 
@@ -19,11 +19,10 @@ def cbor_field(cbor_key, /, **kwargs):
     return dataclasses.field(**kwargs)
 
 
-def marshal(obj):
+def marshal(obj) -> dict | list | Any:
     """
     Convert an object representation of a message or data type to
     a structure consisting of dicts, lists and primitive types
-
     """
     if hasattr(obj, "_marshal"):
         return obj._marshal()
@@ -40,7 +39,7 @@ def marshal(obj):
         return obj
 
 
-def unmarshal(cls: type[T], struct) -> T:
+def unmarshal(cls: type[T], struct: dict | list | Any) -> T:
     if hasattr(cls, "_unmarshal"):
         return getattr(cls, "_unmarshal")(struct)
     elif hook := _unmarshal_hooks.get(cls, None):
@@ -89,6 +88,4 @@ def _unmarshal_ipv4address(cls: type[T], struct) -> T:
     return ipaddress.IPv4Address(struct.value)
 
 
-_unmarshal_hooks = {
-    ipaddress.IPv4Address: _unmarshal_ipv4address
-}
+_unmarshal_hooks = {ipaddress.IPv4Address: _unmarshal_ipv4address}
