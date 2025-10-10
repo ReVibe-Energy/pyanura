@@ -58,6 +58,8 @@ def unmarshal(cls: type[T], struct) -> T:
     elif isinstance(cls, types.UnionType):
         match typing.get_args(cls):
             case inner_cls, types.NoneType:
+                if struct is None:
+                    return None
                 return unmarshal(inner_cls, struct)
             case _:
                 # In principle this could be extended, but `SomeClass | None`
