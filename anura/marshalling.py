@@ -45,13 +45,13 @@ def unmarshal(cls: type[T], struct: dict | list | Any) -> T:
     elif hook := _unmarshal_hooks.get(cls, None):
         return hook(cls, struct)
     elif is_dataclass(cls):
-        field_by_key = {
-            field.metadata["cbor_key"]: field for field in dataclasses.fields(cls)
-        }
+        if not isinstance(struct, dict):
+            raise ValueError(
+                f"Expected dict for dataclass {cls.__name__}, got {type(struct).__name__}"
+            )
         attributes = [
-            unmarshal(field.type, v)
-            for k, v in struct.items()
-            if (field := field_by_key.get(k, None))
+            struct.get(field.metadata["cbor_key"], None)
+            for field in dataclasses.fields(cls)
         ]
         return cls(*attributes)
     elif isinstance(cls, types.UnionType):
