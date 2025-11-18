@@ -49,11 +49,12 @@ def unmarshal(cls: type[T], struct: dict | list | Any) -> T:
             raise ValueError(
                 f"Expected dict for dataclass {cls.__name__}, got {type(struct).__name__}"
             )
-        attributes = [
-            struct.get(field.metadata["cbor_key"], None)
-            for field in dataclasses.fields(cls)
-        ]
-        return cls(*attributes)
+        attributes = {}
+        for field in dataclasses.fields(cls):
+            key = field.metadata["cbor_key"]
+            if key in struct:
+                attributes[field.name] = struct[key]
+        return cls(**attributes)
     elif isinstance(cls, types.UnionType):
         match typing.get_args(cls):
             case inner_cls, types.NoneType:
