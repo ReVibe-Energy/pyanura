@@ -54,3 +54,27 @@ def test_unmarshal_dataclass_requires_dict():
 
     with pytest.raises(ValueError):
         unmarshal(Foo, [])
+
+
+def test_unmarshal_dataclass_optional_field():
+    @dataclass
+    class ClassWithOptionalField:
+        optional: int = cbor_field(0, default=100)
+
+    # Optional field gets default value when unspecified.
+    assert unmarshal(ClassWithOptionalField, {}).optional == 100
+
+    # Optional field gets specified value if given.
+    assert unmarshal(ClassWithOptionalField, {0: 200}).optional == 200
+
+
+def test_unmarshal_dataclass_required_field():
+    @dataclass
+    class ClassWithRequiredField:
+        required: int = cbor_field(0)
+
+    # No error
+    unmarshal(ClassWithRequiredField, {0: 100})
+
+    with pytest.raises(TypeError):
+        unmarshal(ClassWithRequiredField, {})
