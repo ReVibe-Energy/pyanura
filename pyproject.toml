@@ -3,18 +3,18 @@ dynamic = ["version"]
 name = "pyanura"
 requires-python = ">=3.11"
 dependencies = [
-  "cbor2",
+    "cbor2>=5.7.1",
 ]
 
 [project.optional-dependencies]
 usb = [
-  "pyusb",
+    "pyusb>=1.3.1",
 ]
 cli = [
-  "click",
-  "bleak",
-  "pyusb",
-  "zeroconf",
+    "bleak>=1.1.1",
+    "click>=8.3.1",
+    "pyusb>=1.3.1",
+    "zeroconf>=0.148.0",
 ]
 
 [project.scripts]
@@ -25,4 +25,9 @@ requires = ["setuptools>=61.0","setuptools-scm"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools_scm]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.1",
+]
 
