@@ -1,7 +1,0 @@
-bleak==0.21.1
-cbor2==5.6.3
-click==8.1.7
-dbus-fast==2.21.1
-ifaddr==0.2.0
-zeroconf==0.132.2
-pyusb==1.2.1
