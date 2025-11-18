@@ -78,3 +78,18 @@ def test_unmarshal_dataclass_required_field():
 
     with pytest.raises(TypeError):
         unmarshal(ClassWithRequiredField, {})
+
+
+def test_unmarshal_dataclass_recursive():
+
+    @dataclass
+    class InnerClass:
+        a:int = cbor_field(0)
+
+    @dataclass
+    class OuterClass:
+        inner:InnerClass = cbor_field(0)
+
+    outer = unmarshal(OuterClass,{0:{0:1}})
+
+    assert(isinstance(outer.inner,InnerClass))
