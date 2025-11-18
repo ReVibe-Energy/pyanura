@@ -53,7 +53,7 @@ def unmarshal(cls: type[T], struct: dict | list | Any) -> T:
         for field in dataclasses.fields(cls):
             key = field.metadata["cbor_key"]
             if key in struct:
-                attributes[field.name] = struct[key]
+                attributes[field.name] = unmarshal(field.type,struct[key])
         return cls(**attributes)
     elif isinstance(cls, types.UnionType):
         match typing.get_args(cls):
