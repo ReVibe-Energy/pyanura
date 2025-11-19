@@ -6,6 +6,7 @@ from typing import List, Optional
 
 import usb.core
 import usb.util
+from usb.control import USBError
 
 from .base import Transport
 
@@ -53,7 +54,16 @@ class USBTransport(Transport, transport_type="usb"):
 
         # Set the configuration. See
         # https://libusb.sourceforge.io/api-1.0/libusb_caveats.html#configsel
-        self.dev.set_configuration()
+        try:
+            self.dev.set_configuration()
+        except USBError as e:
+            # On Linux, the kernel will have bound the cdc_acm driver to
+            # the CDC-ACM interface. While a kernel driver is attached to
+            # any interface `set_configuration` will return "[Errno 16]
+            # Resource busy". This is not a problem for us since our
+            # transceivers only have a single configuration. We just ignore
+            # the error and go ahead and use our vendor specific interface.
+            logger.debug(f"set_configuration raised: {e}")
 
         # Get rid of the kernel driver (if there is one)
         await self.loop.run_in_executor(None, self._detach_kernel_driver)
