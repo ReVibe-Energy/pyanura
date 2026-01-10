@@ -110,7 +110,13 @@ async def get_assigned_nodes(client: TransceiverClient):
 async def get_connected_nodes(client: TransceiverClient):
     """Get connected nodes."""
     for node in (await client.get_connected_nodes()).nodes:
-        click.echo(f"{node.address} RSSI: {node.rssi}")
+        if node.ready is None:
+            ready_str = "unknown"
+        elif node.ready:
+            ready_str = "ready"
+        else:
+            ready_str = "not ready"
+        click.echo(f"{node.address} RSSI: {node.rssi} dBm ({ready_str})")
 
 
 @transceiver_group.command()

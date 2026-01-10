@@ -113,6 +113,7 @@ class GetAssignedNodesResult:
 class ConnectedNode:
     address: BluetoothAddrLE = cbor_field(0)
     rssi: int = cbor_field(1)
+    ready: bool | None = cbor_field(2, default=None)
 
 
 @dataclass
