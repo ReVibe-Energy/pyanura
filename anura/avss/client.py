@@ -5,6 +5,7 @@ import time
 import types
 from contextlib import contextmanager
 from dataclasses import dataclass
+from enum import IntEnum
 from io import BytesIO
 from typing import (
     Any,
@@ -139,12 +140,14 @@ ResponseCode.OpCodeUnsupported = 3
 ResponseCode.Busy = 4
 ResponseCode.BadArgument = 5
 
-ReportType = types.SimpleNamespace()
-ReportType.Snippet = 2
-ReportType.AggregatedValues = 3
-ReportType.Health = 4
-ReportType.Settings = 5
-ReportType.Capture = 6
+
+class ReportType(IntEnum):
+    Snippet = 2
+    AggregatedValues = 3
+    Health = 4
+    Settings = 5
+    Capture = 6
+
 
 SEGMENT_FIRST = 0x80
 SEGMENT_LAST = 0x40
