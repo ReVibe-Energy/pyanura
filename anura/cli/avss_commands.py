@@ -414,9 +414,13 @@ async def quick_measurement(
                         report_type=report.report_type,
                         payload_cbor=report.payload_cbor,
                     )
-                    click.echo(
-                        f"Report Type '{avss.client.ReportType(report.report_type).name}' received"
-                    )
+                    try:
+                        report_type_str = avss.client.ReportType(
+                            report.report_type
+                        ).name
+                    except ValueError:
+                        report_type_str = str(report.report_type)
+                    click.echo(f"Report Type '{report_type_str}' received")
 
         try:
             await asyncio.wait_for(collect_reports(), duration)
