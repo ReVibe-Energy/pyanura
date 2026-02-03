@@ -331,6 +331,59 @@ async def trigger_measurement(client: avss.AVSSClient, duration: float):
 
 
 @avss_group.command()
+@click.option("--output", help="path to output file", required=True)
+@click.option("--snippets", is_flag=True, help="Fetch snippet reports")
+@click.option("--health", is_flag=True, help="Fetch health reports")
+@click.option("--captures", is_flag=True, help="Fetch capture reports")
+@click.option("--settings", is_flag=True, help="Fetch settings reports")
+@with_avss_client
+async def collect_reports(
+    client: avss.AVSSClient, output, snippets, health, captures, settings
+):
+    """Connect to a node and continuously save reports to file. Press Ctrl+C to stop."""
+
+    with client.reports(parse=False) as reports:
+        if snippets:
+            logger.info("Requesting snippet reports")
+            await client.report_snippets(count=None, auto_resume=True)
+
+        if health:
+            logger.info("Requesting health reports")
+            await client.report_health(count=None)
+
+        if captures:
+            logger.info("Requesting capture reports")
+            await client.report_capture(count=None, auto_resume=True)
+
+        if settings:
+            logger.info("Requesting settings report")
+            await client.report_settings()
+
+        click.echo(f"Collecting reports and saving to {output}. Press Ctrl+C to stop.")
+
+        with SessionFile(output, read_only=False) as f:
+            f.update_session_info(time.time_ns())
+
+            try:
+                async for report in reports:
+                    f.insert_avss_report(
+                        received_at=time.time_ns(),
+                        node_id="NODE",
+                        report_type=report.report_type,
+                        payload_cbor=report.payload_cbor,
+                    )
+                    try:
+                        report_type_str = avss.client.ReportType(
+                            report.report_type
+                        ).name
+                    except ValueError:
+                        report_type_str = str(report.report_type)
+                    click.echo(f"Received report type '{report_type_str}'")
+            except KeyboardInterrupt:
+                click.echo("\nStopping collection...")
+
+
+@avss_group.command()
 @click.option("--duration", default=4)
 @click.option("--output", help="path to output file", required=True)
 @click.option("--captures", is_flag=True, help="Fetch capture reports")
