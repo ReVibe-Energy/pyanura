@@ -119,7 +119,6 @@ class SnippetReport:
 @dataclass
 class CaptureReport:
     start_time: int = cbor_field(0)
-    unused_key: int = cbor_field(1)
     range_: int = cbor_field(2)
     samples: dict[int, bytes] = cbor_field(3)
     is_synced: bool = cbor_field(4)
