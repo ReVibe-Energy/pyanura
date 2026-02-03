@@ -123,7 +123,7 @@ class CaptureReport:
     range_: int = cbor_field(2)
     samples: dict[int, bytes] = cbor_field(3)
     is_synced: bool = cbor_field(4)
-    duration: bool = cbor_field(5)
+    duration: int = cbor_field(5)
     start_time_monotonic: int = cbor_field(6)
     duration_monotonic: int = cbor_field(7)
 
