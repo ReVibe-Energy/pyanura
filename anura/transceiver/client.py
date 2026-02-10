@@ -1,4 +1,6 @@
 import asyncio
+from io import BytesIO
+from os import SEEK_CUR
 import logging
 from contextlib import contextmanager
 from typing import (
@@ -73,7 +75,13 @@ class TransceiverClient:
                     payload = await self._transport.read()
                 except asyncio.IncompleteReadError:
                     break
-                message = cbor2.loads(payload)
+                with BytesIO(payload) as fp:
+                    message = cbor2.load(fp)
+                    if fp.seek(0, SEEK_CUR) != len(payload):
+                        logger.warning(
+                            "CBOR payload not fully consumed. %d bytes left",
+                            len(payload) - fp.seek(0, SEEK_CUR),
+                        )
                 match message:
                     case [models.msg_type.Response, request_token, error, result]:
                         response = self._pending_responses.pop(request_token, None)

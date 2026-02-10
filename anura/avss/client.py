@@ -1,5 +1,7 @@
 import asyncio
 import logging
+from io import BytesIO
+from os import SEEK_CUR
 import struct
 import time
 import types
@@ -191,7 +193,14 @@ class Report:
             ReportType.Capture: CaptureReport,
         }
         if report_class := report_classes.get(self.report_type):
-            return unmarshal(report_class, cbor2.loads(self.payload_cbor))
+            with BytesIO(self.payload_cbor) as fp:
+                payload = cbor2.load(fp)
+                if fp.seek(0, SEEK_CUR) != len(self.payload_cbor):
+                    logger.warning(
+                        "CBOR payload not fully consumed. %d bytes left",
+                        len(self.payload_cbor) - fp.seek(0, SEEK_CUR),
+                    )
+            return unmarshal(report_class, payload)
         else:
             return None
 
@@ -401,7 +410,14 @@ class AVSSClient:
                 OpCode.GetFirmwareInfoResponse: GetFirmwareInfoResponse,
             }
             if response_cls := response_map.get(response_opcode):
-                return unmarshal(response_cls, cbor2.loads(chrc_value[1:]))
+                with BytesIO(chrc_value[1:]) as fp:
+                    payload = cbor2.load(fp)
+                    if fp.seek(0, SEEK_CUR) != len(chrc_value[1:]):
+                        logger.warning(
+                            "CBOR payload not fully consumed. %d bytes left",
+                            len(chrc_value[1:]) - fp.seek(0, SEEK_CUR),
+                        )
+                return unmarshal(response_cls, payload)
             else:
                 raise AVSSProtocolError("Expected response opcode")
 
