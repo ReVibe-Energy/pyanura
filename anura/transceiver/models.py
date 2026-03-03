@@ -1,4 +1,5 @@
 import binascii
+import enum
 import ipaddress
 import re
 import types
@@ -11,6 +12,55 @@ msg_type = types.SimpleNamespace()
 msg_type.Request = 0
 msg_type.Response = 1
 msg_type.Notification = 2
+
+
+class APIErrorCode(enum.IntEnum):
+    """API error codes."""
+
+    RESERVED = 0
+    """Reserved."""
+
+    ARGUMENT_DECODE = 1
+    """Decoding the argument failed."""
+
+    VALUE_RANGE = 2
+    """An argument value was out of range."""
+
+    INVALID_STATE = 3
+    """Internal state prohibits the requested operation."""
+
+    OPERATION_FAILED = 4
+    """The requested operation was attempted, but failed."""
+
+    OUT_OF_ORDER = 5
+    """Operation attempted out of the required order."""
+
+    OUT_OF_BOUNDS = 6
+    """Operation would exceed bounds."""
+
+    NODE_UNAVAILABLE = 7
+    """Node is not connected or not fully initialized."""
+
+    RESPONSE_ENCODE = 8
+    """Failed to encode the response."""
+
+
+@dataclass
+class APIError:
+    """API error response.
+
+    Attributes:
+        code: Error code indicating the type of failure. See `APIErrorCode` enum
+            for defined values.
+        internal_code: Internal troubleshooting code. Not suitable for
+            external use or API stability guarantees.
+        message: Optional human-readable error description. Currently
+            unused but reserved for future use.
+    """
+
+    code: int = cbor_field(0)
+    internal_code: int | None = cbor_field(1, default=None)
+    message: str | None = cbor_field(2, default=None)
 
 
 class Notification:
@@ -30,14 +80,7 @@ class Notification:
             return UnknownNotification(notification_type, argument)
 
 
-@dataclass
-class APIError:
-    code: int = cbor_field(0)
-    internal_code: int = cbor_field(1)
-    message: str = cbor_field(2)
-
-
-@dataclass
+@dataclass(frozen=True)
 class BluetoothAddrLE:
     type: int
     address: bytes
@@ -124,6 +167,11 @@ class GetConnectedNodesResult:
 class AVSSRequestArgs:
     address: BluetoothAddrLE = cbor_field(0)
     data: bytes = cbor_field(1)
+
+
+@dataclass
+class AVSSRequestResult:
+    response: bytes = cbor_field(0)
 
 
 @dataclass
