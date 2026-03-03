@@ -1,52 +1,50 @@
-import asyncio
+"""Compatibility shim for ProxyAVSSClient using the new transport interface.
+
+This module provides backward compatibility for code using the old ProxyAVSSClient
+class. New code should use ProxyAVSSTransport directly.
+"""
+
+import warnings
 
 import anura.avss as avss
-
-from .models import (
-    AVSSProgramNotifiedEvent,
-    AVSSReportNotifiedEvent,
-    BluetoothAddrLE,
-    NodeDisconnectedEvent,
-)
+from anura.avss.transport import ProxyAVSSTransport
 
 
 class ProxyAVSSClient(avss.AVSSClient):
+    """Compatibility wrapper for ProxyAVSSClient.
+
+    This class maintains backward compatibility with the old interface while
+    using the new transport layer internally.
+
+    Deprecated: Use ProxyAVSSTransport with AVSSClient directly instead.
+    """
+
     def __init__(self, transceiver, address):
-        self.transceiver = transceiver
-        self.address = address
+        """Initialize ProxyAVSSClient.
 
-        if type(address) is not BluetoothAddrLE:
-            raise ValueError("Type of 'address' must be BluetoothAddrLE")
+        Args:
+            transceiver: The Transceiver instance to use for communication
+            address: BluetoothAddrLE of the target device
 
-        super().__init__()
+        Deprecated: Use ProxyAVSSTransport and AVSSClient instead:
+            transport = ProxyAVSSTransport(transceiver, address)
+            await transport.open()
+            client = AVSSClient(transport)
+        """
+        warnings.warn(
+            "ProxyAVSSClient is deprecated. Use ProxyAVSSTransport with AVSSClient instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        self._transport = ProxyAVSSTransport(transceiver, address)
+        super().__init__(self._transport)
 
     async def __aenter__(self):
-        async def loop():
-            with self.transceiver.notifications() as notifications:
-                try:
-                    async for msg in notifications:
-                        if (
-                            isinstance(msg, AVSSReportNotifiedEvent)
-                            and msg.address == self.address
-                        ):
-                            self._on_report_notify(msg.value)
-                        elif (
-                            isinstance(msg, AVSSProgramNotifiedEvent)
-                            and msg.address == self.address
-                        ):
-                            self._on_program_notify(msg.value)
-                        elif (
-                            isinstance(msg, NodeDisconnectedEvent)
-                            and msg.address == self.address
-                        ):
-                            return
-                finally:
-                    self._disconnected.set_result(None)
-
-        self._loop_task = asyncio.create_task(loop())
+        await self._transport.open()
         return self
 
     async def __aexit__(self, exc_type, exc, tb):
+<<<<<<< HEAD
         self._loop_task.cancel()
         # Make sure the loop is shut down before we complete the exit.
         await asyncio.wait([self._loop_task])
@@ -57,3 +55,6 @@ class ProxyAVSSClient(avss.AVSSClient):
 
     async def _program_write(self, value):
         await self.transceiver.avss_program_write(self.address, value)
+=======
+        await self._transport.close()
+>>>>>>> 4b7d540 (transceiver: Overhauled error handling)
