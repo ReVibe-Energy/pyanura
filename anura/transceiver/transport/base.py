@@ -13,7 +13,7 @@ class Transport(ABC):
         pass
 
     @abstractmethod
-    async def send(self, payload: bytes) -> None:
+    async def send(self, payload: bytes, /) -> None:
         pass
 
     @abstractmethod
