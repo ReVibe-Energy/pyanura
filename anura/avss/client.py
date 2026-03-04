@@ -85,7 +85,7 @@ class ReportTransferInfo:
 class Report:
     report_type: int
     payload_cbor: bytes
-    transfer_info: Optional[ReportTransferInfo]
+    _transfer_info: Optional[ReportTransferInfo]
 
     def __init__(
         self,
@@ -95,7 +95,7 @@ class Report:
     ):
         self.report_type = report_type
         self.payload_cbor = payload_cbor
-        self.transfer_info = transfer_info
+        self._transfer_info = transfer_info
 
     @staticmethod
     def from_record(

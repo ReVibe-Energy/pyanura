@@ -211,24 +211,25 @@ async def throughput(client: avss.AVSSClient, duration: float):
     # it lets us access the transfer info.
     with client.reports(parse=False) as reports:
         click.echo(f"Starting {duration} s throughput test...")
-        await client.test_throughput(duration=duration * 1000)
+        await client.test_throughput(duration=int(duration * 1000))
         test = await anext(reports)
 
-        if test.transfer_info.elapsed_time > 0:
-            throughput = (
-                test.transfer_info.num_bytes / test.transfer_info.elapsed_time / 1000
-            )
+        if test._transfer_info is None:
+            raise RuntimeError("Transfer info not available")
+
+        transfer_info = test._transfer_info
+
+        if transfer_info and transfer_info.elapsed_time > 0:
+            throughput = transfer_info.num_bytes / transfer_info.elapsed_time / 1000
         else:
             throughput = "??"
 
-        segment_size = math.ceil(
-            test.transfer_info.num_bytes / test.transfer_info.num_segments
-        )
+        segment_size = math.ceil(transfer_info.num_bytes / transfer_info.num_segments)
 
         click.echo(
-            f"Received {test.transfer_info.num_bytes} B "
-            f"over {test.transfer_info.num_segments} segments "
-            f"in {test.transfer_info.elapsed_time:.2f} s"
+            f"Received {transfer_info.num_bytes} B "
+            f"over {transfer_info.num_segments} segments "
+            f"in {transfer_info.elapsed_time:.2f} s"
         )
 
         click.echo(f"Throughput:   {throughput:.2f} kB/s")
@@ -326,7 +327,7 @@ async def get_firmware_info(client: avss.AVSSClient):
 @with_avss_client
 async def trigger_measurement(client: avss.AVSSClient, duration: float):
     """Trigger measurement"""
-    resp = await client.trigger_measurement(duration_ms=duration * 1000)
+    resp = await client.trigger_measurement(duration_ms=int(duration * 1000))
     click.echo(resp)
 
 

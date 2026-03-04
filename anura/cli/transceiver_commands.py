@@ -145,19 +145,20 @@ async def avss_throughput(client: TransceiverClient, mode: str, duration: int):
                     await node.report_snippets(count=None, auto_resume=True)
 
                 async for test in reports:
-                    if test.transfer_info.elapsed_time > 0:
+                    transfer_info = test._transfer_info
+                    if transfer_info is None:
+                        raise RuntimeError("Transfer info not available")
+                    if transfer_info.elapsed_time > 0:
                         throughput = (
-                            test.transfer_info.num_bytes
-                            / test.transfer_info.elapsed_time
-                            / 1000
+                            transfer_info.num_bytes / transfer_info.elapsed_time / 1000
                         )
                     else:
                         throughput = "??"
 
                     click.echo(
-                        f"{addr}: Received {test.transfer_info.num_bytes} B "
-                        f"over {test.transfer_info.num_segments} segments "
-                        f"in {test.transfer_info.elapsed_time:.2f} s "
+                        f"{addr}: Received {transfer_info.num_bytes} B "
+                        f"over {transfer_info.num_segments} segments "
+                        f"in {transfer_info.elapsed_time:.2f} s "
                         f"({throughput:.2f} kB/s)"
                     )
 
