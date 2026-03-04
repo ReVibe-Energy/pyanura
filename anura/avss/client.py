@@ -2,14 +2,12 @@ import asyncio
 import logging
 import struct
 import time
-import types
 from contextlib import contextmanager
 from dataclasses import dataclass
-from enum import IntEnum
 from io import BytesIO
 from typing import (
     Any,
-    AsyncGenerator,
+    AsyncIterator,
     Callable,
     Generator,
     Literal,
@@ -23,6 +21,12 @@ import cbor2
 
 from anura.marshalling import marshal, unmarshal
 
+from .exceptions import (
+    AVSSConnectionError,
+    AVSSControlPointError,
+    AVSSProtocolError,
+    AVSSTransportError,
+)
 from .models import (
     AggregatedValuesReport,
     ApplySettingsArgs,
@@ -49,7 +53,9 @@ from .models import (
     WriteSettingsV2Args,
     WriteSettingsV2Response,
 )
+from .protocol import OpCode, ReportType, ResponseCode
 from .settings import SettingsMapper
+from .transport.base import AVSSTransport
 
 _TResp = TypeVar("_TResp")
 
@@ -62,93 +68,6 @@ _ParsedReport: TypeAlias = (
     | SettingsReport
     | SnippetReport
 )
-
-
-class AVSSError(Exception):
-    pass
-
-
-class AVSSProtocolError(AVSSError):
-    pass
-
-
-class DisconnectedError(AVSSError):
-    pass
-
-
-class AVSSControlPointError(AVSSError):
-    pass
-
-    @staticmethod
-    def from_response_code(rc):
-        if rc == ResponseCode.OK:
-            raise ValueError("Not an error response code")
-        if rc == ResponseCode.Error:
-            return AVSSControlPointError("Unspecified error")
-        elif rc == ResponseCode.OpCodeUnsupported:
-            return AVSSOpCodeUnsupportedError()
-        elif rc == ResponseCode.Busy:
-            return AVSSBusyError()
-        elif rc == ResponseCode.BadArgument:
-            return AVSSBadArgumentError()
-        else:
-            return AVSSControlPointError(f"Response code {rc}")
-
-
-class AVSSBusyError(AVSSControlPointError):
-    pass
-
-
-class AVSSBadArgumentError(AVSSControlPointError):
-    pass
-
-
-class AVSSOpCodeUnsupportedError(AVSSControlPointError):
-    pass
-
-
-OpCode = types.SimpleNamespace()
-OpCode.ResponseCode = 1
-OpCode.ReportSnippet = 2
-OpCode.ReportAggregates = 3
-OpCode.ReportHealth = 4
-OpCode.GetVersion = 5
-OpCode.GetVersionResponse = 6
-OpCode.WriteSettings = 7
-OpCode.WriteSettingsResponse = 8
-OpCode.ReportSettings = 9
-OpCode.ApplySettings = 10
-OpCode.ApplySettingsResponse = 11
-OpCode.TestThroughput = 12
-OpCode.ReportCapture = 13
-OpCode.WriteSettingsV2 = 14
-OpCode.WriteSettingsV2Response = 15
-OpCode.Deactivate = 16
-OpCode.TriggerMeasurement = 17
-OpCode.GetFirmwareInfo = 18
-OpCode.GetFirmwareInfoResponse = 19
-OpCode.ResetReport = 20
-OpCode.ResetSettings = 21
-OpCode.TriggerCapture = 22
-OpCode.PrepareUpgrade = 100
-OpCode.ApplyUpgrade = 101
-OpCode.ConfirmUpgrade = 102
-OpCode.Reboot = 103
-
-ResponseCode = types.SimpleNamespace()
-ResponseCode.OK = 1
-ResponseCode.Error = 2
-ResponseCode.OpCodeUnsupported = 3
-ResponseCode.Busy = 4
-ResponseCode.BadArgument = 5
-
-
-class ReportType(IntEnum):
-    Snippet = 2
-    AggregatedValues = 3
-    Health = 4
-    Settings = 5
-    Capture = 6
 
 
 SEGMENT_FIRST = 0x80
@@ -188,12 +107,12 @@ class Report:
         )
 
     def parse(self) -> _ParsedReport | None:
-        report_classes = {
-            ReportType.Snippet: SnippetReport,
-            ReportType.AggregatedValues: AggregatedValuesReport,
-            ReportType.Health: HealthReport,
-            ReportType.Settings: SettingsReport,
-            ReportType.Capture: CaptureReport,
+        report_classes: dict[int, type] = {
+            int(ReportType.SNIPPET): SnippetReport,
+            int(ReportType.AGGREGATES): AggregatedValuesReport,
+            int(ReportType.HEALTH): HealthReport,
+            int(ReportType.SETTINGS): SettingsReport,
+            int(ReportType.CAPTURE): CaptureReport,
         }
         if report_class := report_classes.get(self.report_type):
             return unmarshal(report_class, cbor2.loads(self.payload_cbor))
@@ -201,7 +120,7 @@ class Report:
             return None
 
 
-class ReportBuffer:
+class _ReportBuffer:
     def __init__(self):
         self.start_time: float = time.time()
         self.end_time: Optional[float] = None
@@ -229,94 +148,91 @@ class ReportBuffer:
 
 
 class AVSSClient:
-    def __init__(self):
+    def __init__(self, transport: AVSSTransport):
+        """Initialize AVSSClient with a transport.
+
+        Args:
+            transport: An AVSSTransport instance to use for communication.
+                       The transport should be opened by the caller before use.
+        """
+        self._transport = transport
+        self._transport_closed = asyncio.Event()
         self._report_buf = None
         self._on_report_callbacks = []
-        self._disconnected = asyncio.Future()
         self._program_lock = asyncio.Lock()
         self._program_nack_queue = None
         self._control_point_lock = asyncio.Lock()
 
-    async def __aenter__(self):
-        return self
+        # Register callbacks with transport
+        transport.set_report_callback(self._on_report_notify)
+        transport.set_program_callback(self._on_program_notify)
+        transport.set_closed_callback(self._transport_closed.set)
 
-    async def __aexit__(self, exc_type, exc, tb):
-        pass
+    async def wait_for_disconnection(self) -> None:
+        await self._transport_closed.wait()
 
     def _callback_and_generator(
-        self, parse: bool
-    ) -> tuple[Callable[[Report], None], AsyncGenerator[Report | _ParsedReport, None]]:
-        # Queue to hold the incoming reports
-        reports: asyncio.Queue[Report | _ParsedReport] = asyncio.Queue()
+        self,
+    ) -> tuple[Callable[[Report], None], AsyncIterator[Report]]:
 
-        def _callback(msg: Report) -> None:
-            """Put the new Report in the queue."""
-            try:
-                if parse:
-                    if parsed := msg.parse():
-                        reports.put_nowait(parsed)
-                    else:
-                        logger.warning(
-                            "Unknown report type skipped in reports generator."
-                        )
-                else:
-                    reports.put_nowait(msg)
-            except asyncio.QueueFull:
-                logger.warning("Report queue is full. Discarding message.")
+        queue: asyncio.Queue[Report] = asyncio.Queue()
 
-        async def _generator() -> AsyncGenerator[Report | _ParsedReport, None]:
-            """Forward all Reports from the report queue."""
-            while True:
-                # Wait until we either:
-                #  1. Receive a Report
-                #  2. Disconnect from the node
-                loop = asyncio.get_running_loop()
-                get = loop.create_task(reports.get())
-                try:
+        def _callback(report: Report) -> None:
+            queue.put_nowait(report)
+
+        async def _generator() -> AsyncIterator[Report]:
+            async with asyncio.TaskGroup() as tg:
+                monitor_task = tg.create_task(self._transport_closed.wait())
+
+                while True:
+                    get_task = tg.create_task(queue.get())
+
                     done, _ = await asyncio.wait(
-                        (get, self._disconnected), return_when=asyncio.FIRST_COMPLETED
+                        (monitor_task, get_task), return_when=asyncio.FIRST_COMPLETED
                     )
-                except asyncio.CancelledError:
-                    # If the asyncio.wait is cancelled, we must make sure
-                    # to also cancel the underlying tasks.
-                    get.cancel()
-                    raise
-                if get in done:
-                    # We received a Report. Return the result.
-                    yield get.result()
-                else:
-                    # We got disconnected. Cancel the "get" task.
-                    get.cancel()
-                    # Stop the generator with the following exception
-                    raise DisconnectedError("Disconnected during Report iteration")
+
+                    if get_task in done:
+                        yield get_task.result()
+                    else:
+                        get_task.cancel()
+                        break
+
+            raise AVSSConnectionError("Disconnected during report iteration.")
 
         return _callback, _generator()
 
     @overload
     def reports(
         self, parse: Literal[False]
-    ) -> Generator[AsyncGenerator[Report, None], None, None]: ...
+    ) -> Generator[AsyncIterator[Report], None, None]: ...
 
     @overload
     def reports(
         self, parse: Literal[True]
-    ) -> Generator[AsyncGenerator[_ParsedReport, None], None, None]: ...
+    ) -> Generator[AsyncIterator[_ParsedReport], None, None]: ...
 
     @contextmanager
     def reports(
         self, parse: bool = True
-    ) -> Generator[AsyncGenerator[Report | _ParsedReport, None], None, None]:
+    ) -> Generator[AsyncIterator[Report | _ParsedReport], None, None]:
         """Context manager that creates a queue for incoming Reports.
 
         Returns:
             An async generator that yields reports from the underlying queue.
         """
-        callback, generator = self._callback_and_generator(parse)
+        callback, generator = self._callback_and_generator()
         try:
             # Add to the list of callbacks to call when a message is received
             self._on_report_callbacks.append(callback)
+
             # Back to the caller (run whatever is inside the with statement)
-            yield generator
+            if parse:
+                parsed_report_generator = (
+                    parsed async for report in generator if (parsed := report.parse())
+                )
+                yield parsed_report_generator
+            else:
+                yield generator
         finally:
             # We are exiting the with statement. Remove the callback from the list.
             self._on_report_callbacks.remove(callback)
@@ -333,7 +249,7 @@ class AVSSClient:
         if segment_hdr & SEGMENT_FIRST:
             if self._report_buf is not None:
                 logger.warning("Report aborted")
-            self._report_buf = ReportBuffer()
+            self._report_buf = _ReportBuffer()
             self._report_next_segment_number = segment_number
 
         if self._report_buf is None:
@@ -363,79 +279,111 @@ class AVSSClient:
                     logger.error("Handling report failed", exc_info=True)
             self._report_buf = None
 
-    async def _request_raw(self, req, timeout):
-        raise NotImplementedError()
+    async def _request(
+        self, opcode: OpCode, argument: Any, *, timeout: float | bool | None = True
+    ) -> tuple[OpCode, bytes]:
+        """Send request and return raw response.
 
-    async def _request(self, opcode, argument, timeout=2.0):
-        async with self._control_point_lock:
-            return await self._request_impl(opcode, argument, timeout)
+        This is the primary internal request method for Control Point requests.
+        It handles serialization, error responses (OpCode.RESPONSE), and returns
+        the raw response for the caller to parse based on expected response type(s).
 
-    async def _request_impl(self, opcode, argument, timeout=2.0):
+        Args:
+            opcode: Request opcode to send
+            argument: Request argument (will be marshaled to CBOR)
+            timeout: Timeout in seconds, True for default, None for no timeout
+
+        Returns:
+            Tuple of (response_opcode, response_payload) where:
+            - response_opcode: The opcode from the response
+            - response_payload: Raw bytes after the opcode byte (ready for unmarshaling)
+
+        Raises:
+            TimeoutError: If the request times out
+            AVSSControlPointError: If response code is not OK
+            AVSSProtocolError: If response is malformed or opcode mismatch occurs
+        """
+        if timeout is True:
+            timeout = 5.0  # TODO: self._control_point_timeout
+
+        if not timeout:
+            timeout = None
+
+        # Serialize request
         with BytesIO() as fp:
             fp.write(bytes((opcode,)))
             cbor2.dump(marshal(argument), fp)
-            req = fp.getvalue()
+            req_bytes = fp.getvalue()
 
+        # Send request and await response
+        async with asyncio.timeout(timeout):
+            try:
+                async with self._control_point_lock:
+                    resp_bytes = await self._transport.control_point_request(req_bytes)
+            except AVSSConnectionError:
+                raise
+            except Exception as e:
+                raise AVSSTransportError(f"Request failed: {str(e)}") from e
+
+        # Get response opcode
         try:
-            logger.debug("Sending Control Point request")
-            chrc_value = await self._request_raw(req, timeout)
-            logger.debug("Control Point request completed")
-        except Exception:
-            logger.error("Control Point request aborted")
-            raise
-        response_opcode = chrc_value[0]
+            resp_opcode = OpCode(resp_bytes[0])
+        except IndexError:
+            raise AVSSProtocolError("Received empty response") from None
+        except ValueError:
+            raise AVSSProtocolError(
+                f"Unknown response opcode: received {resp_bytes[0]}, "
+                f"expected response for {opcode.name}"
+            ) from None
 
-        if response_opcode == OpCode.ResponseCode:
-            request_opcode = chrc_value[1]
-            response_code = chrc_value[2]
-            if request_opcode != opcode:
-                logger.warning(
-                    "Request opcode mismatch received: %d expected: %d",
-                    request_opcode,
-                    opcode,
+        # Handle RESPONSE opcode mismatch and error response codes
+        if resp_opcode == OpCode.RESPONSE:
+            if len(resp_bytes) != 3:
+                raise AVSSProtocolError(
+                    f"Malformed payload for {OpCode.RESPONSE.name} opcode."
                 )
-            if response_code != ResponseCode.OK:
-                raise AVSSControlPointError.from_response_code(response_code)
-            return None
-        else:
-            response_map = {
-                OpCode.GetVersionResponse: GetVersionResponse,
-                OpCode.WriteSettingsResponse: WriteSettingsResponse,
-                OpCode.WriteSettingsV2Response: WriteSettingsV2Response,
-                OpCode.ApplySettingsResponse: ApplySettingsResponse,
-                OpCode.GetFirmwareInfoResponse: GetFirmwareInfoResponse,
-            }
-            if response_cls := response_map.get(response_opcode):
-                return unmarshal(response_cls, cbor2.loads(chrc_value[1:]))
-            else:
-                raise AVSSProtocolError("Expected response opcode")
+            resp_request_opcode = resp_bytes[1]
+            resp_response_code = resp_bytes[2]
 
-    async def _typed_request(
-        self, type_: type[_TResp], opcode: int, argument, timeout: float = 2.0
-    ) -> _TResp:
-        resp = await self._request(opcode, argument, timeout)
-        if isinstance(resp, type_):
-            return resp
-        else:
-            raise ValueError(f"Response type {type_} expected but got {type(resp)}")
+            # Match request opcode in the response to the opcode we sent.
+            if resp_request_opcode != opcode:
+                raise AVSSProtocolError(
+                    f"Response opcode mismatch: received response for "
+                    f"{OpCode._safe_name(resp_request_opcode)}, "
+                    f"expected response for {opcode.name}"
+                )
 
-    async def _void_request(self, opcode: int, argument, timeout: float = 2.0) -> None:
-        return await self._typed_request(type(None), opcode, argument, timeout)
+            # Raise exception if response code is not OK
+            if resp_response_code != ResponseCode.OK:
+                raise AVSSControlPointError.from_response(
+                    resp_response_code, opcode=opcode
+                )
 
-    async def _program_write(self, value):
-        raise NotImplementedError()
+        return resp_opcode, resp_bytes[1:]
+
+    async def _void_request(
+        self, opcode: OpCode, argument, *, timeout: float | bool | None = True
+    ) -> None:
+        resp_opcode, _ = await self._request(opcode, argument, timeout=timeout)
+
+        if resp_opcode != OpCode.RESPONSE:
+            raise AVSSProtocolError.unexpected_response(
+                opcode, resp_opcode, expected=OpCode.RESPONSE
+            )
+
+        return None
 
     async def report_snippets(self, count, auto_resume):
         arg = ReportSnippetArgs(count=count, auto_resume=auto_resume)
-        return await self._void_request(OpCode.ReportSnippet, arg)
+        return await self._void_request(OpCode.REPORT_SNIPPETS, arg)
 
     async def report_capture(self, count, auto_resume):
         arg = ReportCaptureArgs(count=count, auto_resume=auto_resume)
-        return await self._void_request(OpCode.ReportCapture, arg)
+        return await self._void_request(OpCode.REPORT_CAPTURE, arg)
 
     async def report_aggregates(self, count, auto_resume):
         arg = ReportAggregatesArgs(count=count, auto_resume=auto_resume)
-        return await self._void_request(OpCode.ReportAggregates, arg)
+        return await self._void_request(OpCode.REPORT_AGGREGATES, arg)
 
     async def report_health(
         self, count: int | None = None, *, active: bool | None = None
@@ -448,82 +396,127 @@ class AVSSClient:
             arg = ReportHealthArgs(count=True)
         else:
             arg = ReportHealthArgs(count=count)
-        return await self._void_request(OpCode.ReportHealth, arg)
+        return await self._void_request(OpCode.REPORT_HEALTH, arg)
 
     async def report_settings(self, current=True, pending=False):
         arg = ReportSettings(current=current, pending=pending)
-        return await self._void_request(OpCode.ReportSettings, arg)
+        return await self._void_request(OpCode.REPORT_SETTINGS, arg)
 
-    async def apply_settings(self, persist: bool) -> ApplySettingsResponse:
+    async def apply_settings(self, persist: bool) -> ApplySettingsResponse | None:
+        """Apply settings to node.
+
+        Returns ApplySettingsResponse for newer firmware (v24.6.0+), None for older
+        firmware that only sends generic OK response.
+        """
         arg = ApplySettingsArgs(persist=persist)
-        return await self._typed_request(
-            ApplySettingsResponse, OpCode.ApplySettings, arg
-        )
+        resp_opcode, resp_payload = await self._request(OpCode.APPLY_SETTINGS, arg)
+        match resp_opcode:
+            case OpCode.RESPONSE:
+                # Older firmware (< v24.6.0) - generic OK response
+                return None
+            case OpCode.APPLY_SETTINGS_RESPONSE:
+                # Newer firmware (v24.6.0+) - detailed response
+                return unmarshal(ApplySettingsResponse, cbor2.loads(resp_payload))
+            case _:
+                raise AVSSProtocolError.unexpected_response(
+                    OpCode.APPLY_SETTINGS,
+                    resp_opcode,
+                    expected={OpCode.RESPONSE, OpCode.APPLY_SETTINGS_RESPONSE},
+                )
 
     async def prepare_upgrade(self, image, size, timeout=30.0):
         arg = PrepareUpgradeArgs(image=image, size=size)
-        return await self._void_request(OpCode.PrepareUpgrade, arg, timeout=timeout)
+        return await self._void_request(OpCode.PREPARE_UPGRADE, arg, timeout=timeout)
 
     async def apply_upgrade(self):
         arg = ApplyUpgradeArgs()
-        return await self._void_request(OpCode.ApplyUpgrade, arg)
+        return await self._void_request(OpCode.APPLY_UPGRADE, arg)
 
     async def confirm_upgrade(self, image):
         arg = ConfirmUpgradeArgs(image=image)
-        return await self._void_request(OpCode.ConfirmUpgrade, arg)
+        return await self._void_request(OpCode.CONFIRM_UPGRADE, arg)
 
     async def reboot(self):
-        return await self._void_request(OpCode.Reboot, None)
+        return await self._void_request(OpCode.REBOOT, None)
 
     async def get_version(self) -> GetVersionResponse:
-        return await self._typed_request(GetVersionResponse, OpCode.GetVersion, None)
+        resp_opcode, resp_payload = await self._request(OpCode.GET_VERSION, None)
+        if resp_opcode != OpCode.GET_VERSION_RESPONSE:
+            raise AVSSProtocolError.unexpected_response(
+                OpCode.GET_VERSION, resp_opcode, expected=OpCode.GET_VERSION_RESPONSE
+            )
+        return unmarshal(GetVersionResponse, cbor2.loads(resp_payload))
 
-    async def write_settings(self, settings: dict) -> WriteSettingsResponse:
-        return await self._typed_request(
-            WriteSettingsResponse,
-            OpCode.WriteSettings,
-            SettingsMapper.from_readable(settings),
-        )
+    async def write_settings(self, settings: dict) -> WriteSettingsResponse | None:
+        """Write settings to node.
+
+        Returns WriteSettingsResponse for newer firmware (v24.4.1+), None for older
+        firmware that only sends generic OK response.
+        """
+        arg = SettingsMapper.from_readable(settings)
+        resp_opcode, resp_param = await self._request(OpCode.WRITE_SETTINGS, arg)
+        match resp_opcode:
+            case OpCode.RESPONSE:
+                # Older firmware (< v24.4.1) - generic OK response
+                return None
+            case OpCode.WRITE_SETTINGS_RESPONSE:
+                # Newer firmware (v24.4.1+) - detailed response
+                return unmarshal(WriteSettingsResponse, cbor2.loads(resp_param))
+            case _:
+                raise AVSSProtocolError.unexpected_response(
+                    OpCode.WRITE_SETTINGS,
+                    resp_opcode,
+                    expected={OpCode.RESPONSE, OpCode.WRITE_SETTINGS_RESPONSE},
+                )
 
     async def reset_settings(self):
-        return await self._void_request(OpCode.ResetSettings, None)
+        return await self._void_request(OpCode.RESET_SETTINGS, None)
 
     async def test_throughput(self, duration: int):
         args = TestThroughputArgs(duration=duration)
-        return await self._void_request(OpCode.TestThroughput, args)
+        return await self._void_request(OpCode.TEST_THROUGHPUT, args)
 
     async def deactivate(self, key: int):
         arg = DeactivateArgs(key=key)
-        return await self._void_request(OpCode.Deactivate, arg)
+        return await self._void_request(OpCode.DEACTIVATE, arg)
 
     async def get_firmware_info(self) -> GetFirmwareInfoResponse:
-        return await self._typed_request(
-            GetFirmwareInfoResponse, OpCode.GetFirmwareInfo, None
-        )
+        resp_opcode, resp_payload = await self._request(OpCode.GET_FIRMWARE_INFO, None)
+        if resp_opcode != OpCode.GET_FIRMWARE_INFO_RESPONSE:
+            raise AVSSProtocolError.unexpected_response(
+                OpCode.GET_FIRMWARE_INFO,
+                resp_opcode,
+                expected=OpCode.GET_FIRMWARE_INFO_RESPONSE,
+            )
+        return unmarshal(GetFirmwareInfoResponse, cbor2.loads(resp_payload))
 
     async def reset_report(self):
-        return await self._void_request(OpCode.ResetReport, None)
+        return await self._void_request(OpCode.RESET_REPORT, None)
 
     async def write_settings_v2(
         self, settings: dict[int, Any], reset_defaults: bool, apply: bool
     ) -> WriteSettingsV2Response:
-        return await self._typed_request(
-            WriteSettingsV2Response,
-            OpCode.WriteSettingsV2,
-            WriteSettingsV2Args(
-                settings=SettingsMapper.from_readable(settings),
-                reset_defaults=reset_defaults,
-                apply=apply,
-            ),
+        arg = WriteSettingsV2Args(
+            settings=SettingsMapper.from_readable(settings),
+            reset_defaults=reset_defaults,
+            apply=apply,
         )
+        resp_opcode, resp_payload = await self._request(OpCode.WRITE_SETTINGS_V2, arg)
+        if resp_opcode != OpCode.WRITE_SETTINGS_V2_RESPONSE:
+            raise AVSSProtocolError.unexpected_response(
+                OpCode.WRITE_SETTINGS_V2,
+                resp_opcode,
+                expected=OpCode.WRITE_SETTINGS_V2_RESPONSE,
+            )
+        return unmarshal(WriteSettingsV2Response, cbor2.loads(resp_payload))
 
     async def trigger_measurement(self, duration_ms: int):
         arg = TriggerMeasurementArgs(duration_ms=duration_ms)
-        return await self._void_request(OpCode.TriggerMeasurement, arg)
+        return await self._void_request(OpCode.TRIGGER_MEASUREMENT, arg)
 
     async def trigger_capture(self, duration_ms: int):
         arg = TriggerCaptureArgs(duration_ms=duration_ms)
-        return await self._void_request(OpCode.TriggerCapture, arg)
+        return await self._void_request(OpCode.TRIGGER_CAPTURE, arg)
 
     def _on_program_notify(self, data):
         (offset,) = struct.unpack("<L", data)
@@ -568,4 +561,4 @@ class AVSSClient:
                 logger.info(
                     f"Program {offset}/{len(binary)} ({offset * 100 / len(binary):.0f} %)"
                 )
-                await self._program_write(req)
+                await self._transport.program_write(bytes(req))

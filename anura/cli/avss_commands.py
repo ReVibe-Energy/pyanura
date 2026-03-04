@@ -245,7 +245,7 @@ async def read_settings(client: avss.AVSSClient):
 
         logger.info("Waiting for settings report")
         async for msg in reports:
-            if isinstance(msg, avss.SettingsReport):
+            if isinstance(msg, avss.models.SettingsReport):
                 click.echo(json.dumps(avss.SettingsMapper.to_readable(msg.settings)))
                 break
 
@@ -270,7 +270,7 @@ async def write_settings(client: avss.AVSSClient, file: str, reset_defaults: boo
             settings, reset_defaults=reset_defaults, apply=True
         )
         click.echo(resp)
-    except avss.client.AVSSOpCodeUnsupportedError:
+    except avss.AVSSOpCodeUnsupportedError:
         logger.info("Write Settings v2 opcode not supported, using fallback...")
         resp = await client.write_settings(settings)
         click.echo(resp)
@@ -295,7 +295,7 @@ async def health_report(client: avss.AVSSClient):
 
         logger.info("Waiting for health report")
         async for msg in reports:
-            if isinstance(msg, avss.HealthReport):
+            if isinstance(msg, avss.models.HealthReport):
                 click.echo(f"Health report: {msg}")
                 break
 
@@ -445,7 +445,7 @@ async def quick_measurement(
     await client.write_settings(settings)
     resp = await client.apply_settings(persist=True)
 
-    if resp.will_reboot:
+    if resp and resp.will_reboot:
         click.echo(
             "Rebooting node to apply settings, re-run command to start measurement"
         )
