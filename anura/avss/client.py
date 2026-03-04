@@ -9,7 +9,7 @@ from typing import (
     Any,
     AsyncIterator,
     Callable,
-    Generator,
+    Iterator,
     Literal,
     Optional,
     TypeAlias,
@@ -202,19 +202,19 @@ class AVSSClient:
         return _callback, _generator()
 
     @overload
-    def reports(
-        self, parse: Literal[False]
-    ) -> Generator[AsyncIterator[Report], None, None]: ...
+    @contextmanager
+    def reports(self, parse: Literal[False]) -> Iterator[AsyncIterator[Report]]: ...
 
     @overload
+    @contextmanager
     def reports(
-        self, parse: Literal[True]
-    ) -> Generator[AsyncIterator[_ParsedReport], None, None]: ...
+        self, parse: Literal[True] = True
+    ) -> Iterator[AsyncIterator[_ParsedReport]]: ...
 
     @contextmanager
     def reports(
         self, parse: bool = True
-    ) -> Generator[AsyncIterator[Report | _ParsedReport], None, None]:
+    ) -> Iterator[AsyncIterator[_ParsedReport]] | Iterator[AsyncIterator[Report]]:
         """Context manager that creates a queue for incoming Reports.
 
         Returns:
