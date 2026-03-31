@@ -16,9 +16,6 @@ from .protocol import OpCode, ReportType, ResponseCode
 from .settings import SettingsMapper
 
 __all__ = [
-    # from .client
-    "AVSSClient",
-    "Report",
     # from .exceptions
     "AVSSBadArgumentError",
     "AVSSConnectionError",
@@ -27,6 +24,9 @@ __all__ = [
     "AVSSOpCodeUnsupportedError",
     "AVSSProtocolError",
     "AVSSTransportError",
+    # from .client
+    "AVSSClient",
+    "Report",
     # from .protocol
     "OpCode",
     "ReportType",
