@@ -23,7 +23,7 @@ class AnuraSupervisor:
     async def on_avss_open(self, node: avss.AVSSClient, node_id: str):
         pass
 
-    async def on_avss_report(self, node: avss.AVSSClient, node_id: str):
+    async def on_avss_report(self, node: avss.AVSSClient, report, node_id: str):
         pass
 
     async def on_transceiver_connect(self, transceiver: TransceiverClient):
@@ -113,9 +113,9 @@ class AnuraSupervisor:
 class Forwarder(AnuraSupervisor):
     def __init__(self, config: dict) -> None:
         super().__init__(config)
-        self.mqtt_client: mqtt.Client
+        self.mqtt_client: mqtt.Client | None
         self.mqtt_port: int
-        self.mqtt_host: str
+        self.mqtt_host: str | None
         self.mqtt_client_id: str
         self._parse_config()
 
@@ -137,7 +137,7 @@ class Forwarder(AnuraSupervisor):
         self.mqtt_host = broker_url.hostname
         self.mqtt_client_id = self.config["mqtt"]["client_id"]
 
-    def _connect_mqtt(self, host, port, client_id) -> mqtt.Client:
+    def _connect_mqtt(self, host, port, client_id) -> mqtt.Client | None:
         connack_event = threading.Event()
         mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=client_id)
 
@@ -182,6 +182,7 @@ class Forwarder(AnuraSupervisor):
         if not isinstance(value, bytes):
             value = bytes(value)
 
+        assert self.mqtt_client is not None
         self.mqtt_client.publish(f"{self.mqtt_client_id}/{topic}", value)
 
     def run(self):
