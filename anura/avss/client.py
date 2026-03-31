@@ -43,6 +43,7 @@ from .models import (
     SettingsReport,
     SnippetReport,
     TestThroughputArgs,
+    TriggerCaptureArgs,
     TriggerMeasurementArgs,
     WriteSettingsResponse,
     WriteSettingsV2Args,
@@ -128,6 +129,7 @@ OpCode.GetFirmwareInfo = 18
 OpCode.GetFirmwareInfoResponse = 19
 OpCode.ResetReport = 20
 OpCode.ResetSettings = 21
+OpCode.TriggerCapture = 22
 OpCode.PrepareUpgrade = 100
 OpCode.ApplyUpgrade = 101
 OpCode.ConfirmUpgrade = 102
@@ -518,6 +520,10 @@ class AVSSClient:
     async def trigger_measurement(self, duration_ms: int):
         arg = TriggerMeasurementArgs(duration_ms=duration_ms)
         return await self._void_request(OpCode.TriggerMeasurement, arg)
+
+    async def trigger_capture(self, duration_ms: int):
+        arg = TriggerCaptureArgs(duration_ms=duration_ms)
+        return await self._void_request(OpCode.TriggerCapture, arg)
 
     def _on_program_notify(self, data):
         (offset,) = struct.unpack("<L", data)
