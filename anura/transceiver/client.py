@@ -59,6 +59,8 @@ class TransceiverClient:
         logger.debug("Closing connection")
         if self._connection_task:
             self._connection_task.cancel()
+            # Make sure the _connection_task is shut down before we complete the exit.
+            await asyncio.wait([self._connection_task])
         await self._transport.close()
 
     async def connect(self):
