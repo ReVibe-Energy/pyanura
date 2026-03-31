@@ -12,6 +12,13 @@ from .exceptions import (
     AVSSProtocolError,
     AVSSTransportError,
 )
+from .models import (
+    AggregatedValuesReport,
+    CaptureReport,
+    HealthReport,
+    SettingsReport,
+    SnippetReport,
+)
 from .protocol import OpCode, ReportType, ResponseCode
 from .settings import SettingsMapper
 
@@ -27,6 +34,12 @@ __all__ = [
     # from .client
     "AVSSClient",
     "Report",
+    # from .models
+    "AggregatedValuesReport",
+    "CaptureReport",
+    "HealthReport",
+    "SettingsReport",
+    "SnippetReport",
     # from .protocol
     "OpCode",
     "ReportType",
