@@ -13,9 +13,9 @@ logger = logging.getLogger(__name__)
 
 
 @click.group()
-def anura_cli():
+def cli():
     pass
 
 
-anura_cli.add_command(avss_commands.avss_group)
-anura_cli.add_command(transceiver_commands.transceiver_group)
+cli.add_command(avss_commands.avss_group)
+cli.add_command(transceiver_commands.transceiver_group)

@@ -1,18 +1,17 @@
 [project]
 dynamic = ["version"]
-name = "pyanura"
+name = "pyanura-cli"
 requires-python = ">=3.11"
 dependencies = [
-    "cbor2>=5.7.1",
+    "pyanura",
+    "bleak>=1.1.1",
+    "click>=8.3.1",
+    "pyusb>=1.3.1",
+    "zeroconf>=0.148.0",
 ]
 
-[project.optional-dependencies]
-usb = [
-    "pyusb>=1.3.1",
-]
-ble = [
-    "bleak>=1.1.1",
-]
+[project.scripts]
+anura = "pyanura_cli:cli"
 
 [build-system]
 requires = ["setuptools>=61.0", "setuptools-scm"]
@@ -22,11 +21,7 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.setuptools_scm]
+root = "../.."
 
-[tool.uv.workspace]
-members = ["packages/pyanura-cli"]
-
-[dependency-groups]
-dev = [
-    "pytest>=9.0.1",
-]
+[tool.uv.sources]
+pyanura = { workspace = true }

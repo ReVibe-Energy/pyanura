@@ -56,5 +56,5 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v6
 
-      - name: Build package
-        run: uv build
+      - name: Build packages
+        run: uv build --all-packages
