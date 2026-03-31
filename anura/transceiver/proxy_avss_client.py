@@ -48,6 +48,8 @@ class ProxyAVSSClient(avss.AVSSClient):
 
     async def __aexit__(self, exc_type, exc, tb):
         self._loop_task.cancel()
+        # Make sure the loop is shut down before we complete the exit.
+        await asyncio.wait([self._loop_task])
 
     async def _request_raw(self, req, timeout):
         result = await self.transceiver.avss_request(self.address, req)
