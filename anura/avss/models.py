@@ -70,6 +70,11 @@ class TriggerMeasurementArgs:
 
 
 @dataclass
+class TriggerCaptureArgs:
+    duration_ms: int = cbor_field(0)
+
+
+@dataclass
 class ApplySettingsResponse:
     will_reboot: bool = cbor_field(0)
 

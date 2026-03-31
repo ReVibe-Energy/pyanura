@@ -331,6 +331,15 @@ async def trigger_measurement(client: avss.AVSSClient, duration: float):
 
 
 @avss_group.command()
+@click.option("--duration", default=1, help="Time(seconds) to run capture, 0 to stop")
+@with_avss_client
+async def trigger_capture(client: avss.AVSSClient, duration: float):
+    """Trigger capture"""
+    resp = await client.trigger_capture(duration_ms=duration * 1000)
+    click.echo(resp)
+
+
+@avss_group.command()
 @click.option("--output", help="path to output file", required=True)
 @click.option("--snippets", is_flag=True, help="Fetch snippet reports")
 @click.option("--health", is_flag=True, help="Fetch health reports")
