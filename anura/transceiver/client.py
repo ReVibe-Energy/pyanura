@@ -72,7 +72,8 @@ class TransceiverClient:
                 try:
                     payload = await self._transport.read()
                 except asyncio.IncompleteReadError:
-                    break
+                    msg = "Disconnected during receive"
+                    raise TransceiverClientError(msg)
                 message = cbor2.loads(payload)
                 match message:
                     case [models.msg_type.Response, request_token, error, result]:
@@ -99,6 +100,9 @@ class TransceiverClient:
                 async with asyncio.TaskGroup() as tg:
                     tg.create_task(recv_task())
                     tg.create_task(ping_task())
+            except* TransceiverClientError as ex:
+                logger.debug("Closing connection due to client error: %s", ex)
+                pass
             finally:
                 self._disconnected.set_result(None)
                 logger.debug("Connection closed")
