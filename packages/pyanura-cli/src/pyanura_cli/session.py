@@ -1,13 +1,9 @@
 import logging
 import sqlite3
 import sys
-import time
 from contextlib import closing
 from pathlib import Path
-from typing import Iterator
 
-import anura.avss as avss
-from anura.avss.client import Report
 
 logger = logging.getLogger(__name__)
 

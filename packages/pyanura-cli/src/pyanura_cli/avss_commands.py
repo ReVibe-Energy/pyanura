@@ -7,15 +7,14 @@ import sys
 import time
 from pathlib import Path
 
-import click
-from bleak import BleakScanner
-from bleak.exc import BleakError
-
 import anura.avss as avss
+import click
 from anura.avss.bleak_avss_client import BleakAVSSClient
 from anura.transceiver.client import TransceiverClient
 from anura.transceiver.models import BluetoothAddrLE
 from anura.transceiver.proxy_avss_client import ProxyAVSSClient
+from bleak import BleakScanner
+from bleak.exc import BleakError
 
 from .session import SessionFile
 
