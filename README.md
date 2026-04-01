@@ -69,3 +69,7 @@ dependencies you can launch the examples from the `pyanura` root directory
 as follows:
 
     python3 -m examples.forwarder --config examples/forwarder/example-config.json
+
+## License
+
+`pyanura` is available under the [Apache License, Version 2.0](LICENSE).
