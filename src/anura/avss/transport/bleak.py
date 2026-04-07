@@ -113,4 +113,4 @@ class BleakAVSSTransport(AVSSTransport):
         self._program_callback = callback
 
     def set_closed_callback(self, callback) -> None:
-        self._closed_callback = _closed_callback
+        self._closed_callback = callback
