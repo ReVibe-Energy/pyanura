@@ -3,6 +3,8 @@ name: Publish
 on:
   push:
     branches: ["wip/v1"] # TODO "main"
+    tags: ["v*"]
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
