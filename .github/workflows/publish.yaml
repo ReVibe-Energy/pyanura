@@ -25,6 +25,20 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
 
+      - name: Install dependencies
+        run: uv sync --dev --all-packages
+
+      - name: Update VERSION for a snapshot release
+        run: |
+          REF_ARG=""
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            REF_ARG="--ref ${{ github.event.pull_request.head.sha }}"
+          fi
+          uv run scripts/reltool.py update-version --snapshot $REF_ARG
+
+      - name: Install dependencies
+        run: uv sync --dev --all-packages
+
       - name: Build packages
         run: uv build --all-packages --wheel
 
