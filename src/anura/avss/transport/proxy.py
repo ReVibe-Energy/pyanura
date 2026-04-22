@@ -73,20 +73,17 @@ class ProxyAVSSTransport(AVSSTransport):
                 await self._transceiver.avss_request(self._address, get_version_request)
                 break
             except TransceiverRequestError as e:
-                if api_error := e.api_error():
-                    if api_error.code == APIErrorCode.NODE_UNAVAILABLE:
-                        other_error_count = 0
-                    else:
-                        logger.warning(
-                            f"Unexpected error while waiting for {self._address} to become available: {api_error}"
-                        )
-                        other_error_count += 1
-                        if other_error_count >= 3:
-                            raise AVSSConnectionError(
-                                f"Transceiver report an error when polling for node: {api_error}"
-                            ) from e
+                if e.error.code == APIErrorCode.NODE_UNAVAILABLE:
+                    other_error_count = 0
                 else:
-                    raise  # failing to parse api error is never expected
+                    logger.warning(
+                        f"Unexpected error while waiting for {self._address} to become available: {api_error}"
+                    )
+                    other_error_count += 1
+                    if other_error_count >= 3:
+                        raise AVSSConnectionError(
+                            f"Transceiver report an error when polling for node: {api_error}"
+                        ) from e
             await asyncio.sleep(1.0)
 
     def _on_closed(self, task: asyncio.Task):
@@ -140,11 +137,10 @@ class ProxyAVSSTransport(AVSSTransport):
             result = await self._transceiver.avss_request(self._address, req)
             return result.response
         except TransceiverRequestError as e:
-            if api_error := e.api_error():
-                if api_error.code == APIErrorCode.NODE_UNAVAILABLE:
-                    raise AVSSConnectionError(
-                        "Node not available via transceiver"
-                    ) from None
+            if e.error.code == APIErrorCode.NODE_UNAVAILABLE:
+                raise AVSSConnectionError(
+                    "Node not available via transceiver"
+                ) from None
             raise
 
     async def program_write(self, value: bytes) -> None:

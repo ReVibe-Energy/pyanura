@@ -131,7 +131,7 @@ class TransceiverClient:
 
     async def _request_internal(
         self, method: str, param, *, timeout: float | None = None
-    ):
+    ) -> tuple[Any, Any]:
         if not self._connection_task:
             raise RuntimeError("Client has not been connected")
 
@@ -145,7 +145,9 @@ class TransceiverClient:
         self._next_request_token = (self._next_request_token + 1) & 0xFFFFFFFF
 
         try:
-            response_fut = asyncio.get_running_loop().create_future()
+            response_fut: asyncio.Future[tuple[Any, Any]] = (
+                asyncio.get_running_loop().create_future()
+            )
             self._pending_responses[request_token] = response_fut
 
             payload = cbor2.dumps(
@@ -164,11 +166,7 @@ class TransceiverClient:
                     response_fut.cancel()
 
                 if response_fut in done:
-                    match response_fut.result():
-                        case (None, result):
-                            return result
-                        case (error, _):
-                            raise TransceiverRequestError(method, error)
+                    return response_fut.result()
                 else:
                     if self._connection_exception:
                         raise TransceiverConnectionError(
@@ -192,11 +190,16 @@ class TransceiverClient:
 
     async def request(self, method, arg=None, result_type=None):
         "Send a send a request and receive the response"
-        result = await self._request_internal(method, marshal(arg))
-        if result_type:
-            return unmarshal(result_type, result)
-        else:
-            return result
+        match await self._request_internal(method, marshal(arg)):
+            case (None, result):
+                if result_type:
+                    return unmarshal(result_type, result)
+                else:
+                    return result
+            case (error, _):
+                # TODO: Handle not-found error
+                api_error = unmarshal(models.APIError, error)
+                raise TransceiverRequestError(method, api_error)
 
     def _callback_and_generator(
         self,

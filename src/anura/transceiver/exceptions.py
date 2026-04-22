@@ -24,13 +24,6 @@ class TransceiverConnectionError(TransceiverError):
 class TransceiverRequestError(TransceiverError):
     """Raised when an API request returns an error."""
 
-    def __init__(self, method, error: dict):
-        self.error = error
+    def __init__(self, method, error: APIError):
+        self.error: APIError = error
         super().__init__(f'Request "{method}" returned an error response: {error}')
-
-    def api_error(self) -> APIError | None:
-        try:
-            return unmarshal(APIError, self.error)
-        except Exception:
-            logger.exception("wtflol")
-            return None
