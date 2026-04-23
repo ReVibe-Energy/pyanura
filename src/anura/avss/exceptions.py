@@ -121,12 +121,7 @@ class AVSSOpCodeUnsupportedError(AVSSControlPointError):
     """Raised when an operation is not supported by the node firmware."""
 
     def __init__(self, opcode: OpCode, response_code: int | ResponseCode):
-        try:
-            op_name = OpCode(opcode).name
-            msg = f"Operation {op_name} not supported by node"
-        except ValueError:
-            msg = f"Operation {opcode} not supported by node"
-
+        msg = f"Operation '{OpCode._safe_name(opcode)}' not supported by node"
         super().__init__(msg, response_code=response_code, opcode=opcode)
 
 
