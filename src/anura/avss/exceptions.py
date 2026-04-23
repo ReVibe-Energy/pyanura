@@ -133,11 +133,6 @@ class AVSSOpCodeUnsupportedError(AVSSControlPointError):
 class AVSSBadArgumentError(AVSSControlPointError):
     """Raised when an invalid argument is provided to a control point operation."""
 
-    def __init__(self, opcode: int | OpCode, response_code: int | ResponseCode):
-        try:
-            op_name = OpCode(opcode).name
-            msg = f"Operation {op_name} not supported by node"
-        except ValueError:
-            msg = f"Operation {opcode} not supported by node"
-
+    def __init__(self, opcode: OpCode, response_code: int | ResponseCode):
+        msg = "Invalid argument"
         super().__init__(msg, response_code=response_code, opcode=opcode)
