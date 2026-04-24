@@ -33,13 +33,11 @@ class AVSSTransport(ABC):
 
         Args:
             req: The request bytes to send
-            timeout: Maximum time to wait for response in seconds
 
         Returns:
             Response bytes from the control point
 
         Raises:
-            TimeoutError: If response not received within timeout
             AVSSConnectionError: If transport is not open or connection lost
         """
 
