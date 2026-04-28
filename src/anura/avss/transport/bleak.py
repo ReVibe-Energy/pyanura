@@ -39,6 +39,9 @@ class BleakAVSSTransport(AVSSTransport):
         def disconnected_callback(client: BleakClient):
             self._closed_event.set()
 
+            if self._closed_callback:
+                self._closed_callback()
+
         def report_notify(sender, data):
             if self._report_callback:
                 self._report_callback(data)
@@ -76,9 +79,8 @@ class BleakAVSSTransport(AVSSTransport):
             # On some platforms EOFError is raised by _client.disconnect()
             # even after disconnected callback has been called, so we suppress it
             pass
-        finally:
-            self._client = None
-            self._closed_event.set()
+
+        await self._closed_event.wait()
 
     async def control_point_request(self, req: bytes) -> bytes:
         if self._client is None:
