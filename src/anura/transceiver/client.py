@@ -18,6 +18,7 @@ from . import models
 from .exceptions import (
     TransceiverConnectionError,
     TransceiverError,
+    TransceiverMethodNotFoundError,
     TransceiverRequestError,
 )
 from .transport import Transport
@@ -197,9 +198,11 @@ class TransceiverClient:
                 else:
                     return result
             case (error, _):
-                # TODO: Handle not-found error
-                api_error = unmarshal(models.APIError, error)
-                raise TransceiverRequestError(method, api_error)
+                if error == ".well-known/not-found":
+                    raise TransceiverMethodNotFoundError(method)
+                else:
+                    api_error = unmarshal(models.APIError, error)
+                    raise TransceiverRequestError(method, api_error)
 
     def _callback_and_generator(
         self,

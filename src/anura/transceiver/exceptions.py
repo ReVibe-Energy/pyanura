@@ -1,7 +1,5 @@
 import logging
 
-from anura.marshalling import unmarshal
-
 from .models import APIError
 
 __all__ = [
@@ -19,6 +17,13 @@ class TransceiverError(Exception):
 
 class TransceiverConnectionError(TransceiverError):
     """Raised when the transceiver connection has broken."""
+
+
+class TransceiverMethodNotFoundError(TransceiverError):
+    """Raised when an API request returns an error."""
+
+    def __init__(self, method):
+        super().__init__(f"Method '{method}' not found.")
 
 
 class TransceiverRequestError(TransceiverError):
