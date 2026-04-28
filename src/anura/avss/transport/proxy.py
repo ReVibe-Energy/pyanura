@@ -124,7 +124,7 @@ class ProxyAVSSTransport(AVSSTransport):
                         if cb := self._program_callback:
                             asyncio.get_running_loop().call_soon(cb, notification.value)
                     case NodeDisconnectedEvent(address=self._address):
-                        break  # connection
+                        break  # connection broken
 
     async def control_point_request(self, req: bytes) -> bytes:
         if self._state is _State.CREATED:
