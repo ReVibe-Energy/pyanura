@@ -163,6 +163,9 @@ class AVSSClient:
         self._program_nack_queue = None
         self._control_point_lock = asyncio.Lock()
 
+        self.control_point_timeout: float | None = 5.0
+        """Default timeout for control point requests."""
+
         # Register callbacks with transport
         transport.set_report_callback(self._on_report_notify)
         transport.set_program_callback(self._on_program_notify)
@@ -304,7 +307,7 @@ class AVSSClient:
             AVSSProtocolError: If response is malformed or opcode mismatch occurs
         """
         if timeout is True:
-            timeout = 5.0  # TODO: self._control_point_timeout
+            timeout = self.control_point_timeout
 
         if not timeout:
             timeout = None
