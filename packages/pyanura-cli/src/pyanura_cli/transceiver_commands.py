@@ -251,7 +251,12 @@ async def reset(client: TransceiverClient):
 )
 @click.option("--file", metavar="FILE", help="Path to firmware image.")
 @click.option("--confirm-only", is_flag=True, help="Run only the confirm step.")
-def upgrade(host, port, file, confirm_only):
+@click.option(
+    "--no-confirm",
+    is_flag=True,
+    help="Make update permanent without a confirmation step. (Not recommended)",
+)
+def upgrade(host, port, file, confirm_only, no_confirm):
     """Upgrade transceiver firmware"""
 
     if not confirm_only and not file:
@@ -261,34 +266,44 @@ def upgrade(host, port, file, confirm_only):
         )
         sys.exit(1)
 
+    if no_confirm and not file:
+        click.echo(
+            "Error: '--no-confirm' can only be used together with the '--file' option.",
+            err=True,
+        )
+        sys.exit(1)
+
     if file:
         image = Path(file).read_bytes()
+    else:
+        image = None
 
     async def do():
         try:
-            if not confirm_only:
+            if image:
                 async with TransceiverClient(host, port) as trx:
                     await trx.dfu_prepare(size=len(image))
                     await trx.dfu_write_image(image)
-                    await trx.dfu_apply()
+                    await trx.dfu_apply(permanent=no_confirm)
 
-                click.echo(
-                    "Waiting for transceiver to reboot with new firmware image..."
-                )
-                # Wait at last 5 seconds to make sure we don't find the device
-                # before it has actually rebooted and started swapping images.
-                await asyncio.sleep(5)
+                if not no_confirm:
+                    click.echo(
+                        "Waiting for transceiver to reboot with new firmware image..."
+                    )
+                    # Wait at last 5 seconds to make sure we don't find the device
+                    # before it has actually rebooted and started swapping images.
+                    await asyncio.sleep(5)
 
-            wait_end = time.time() + 55
-            while time.time() < wait_end:
-                try:
-                    async with TransceiverClient(host, port) as trx:
-                        click.echo("Confirming new image")
-                        await trx.dfu_confirm()
-                        return
-                except TimeoutError:
-                    pass
-            click.echo("Timed out")
+            if not no_confirm:
+                wait_end = time.time() + 55
+                while time.time() < wait_end:
+                    try:
+                        async with TransceiverClient(host, port) as trx:
+                            click.echo("Confirming new image")
+                            await trx.dfu_confirm()
+                            break
+                    except TimeoutError:
+                        click.echo("Timed out")
         except Exception as ex:
             click.echo(f"Error: {ex}", err=True)
             sys.exit(1)
