@@ -28,6 +28,11 @@ class ReportHealthArgs:
 
 
 @dataclass
+class ReportEventsArgs:
+    count: Union[bool, int] = cbor_field(0)
+
+
+@dataclass
 class ReportSettings:
     current: bool = cbor_field(0)
     pending: bool = cbor_field(1)
@@ -156,3 +161,9 @@ class HealthReport:
 class SettingsReport:
     settings: dict | None = cbor_field(0, default=None)
     pending_settings: dict | None = cbor_field(1, default=None)
+
+
+@dataclass
+class EventReport:
+    type: int = cbor_field(0)
+    timestamp: int = cbor_field(1)

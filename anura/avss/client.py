@@ -31,12 +31,14 @@ from .models import (
     CaptureReport,
     ConfirmUpgradeArgs,
     DeactivateArgs,
+    EventReport,
     GetFirmwareInfoResponse,
     GetVersionResponse,
     HealthReport,
     PrepareUpgradeArgs,
     ReportAggregatesArgs,
     ReportCaptureArgs,
+    ReportEventsArgs,
     ReportHealthArgs,
     ReportSettings,
     ReportSnippetArgs,
@@ -58,6 +60,7 @@ logger = logging.getLogger(__name__)
 _ParsedReport: TypeAlias = (
     AggregatedValuesReport
     | CaptureReport
+    | EventReport
     | HealthReport
     | SettingsReport
     | SnippetReport
@@ -130,6 +133,7 @@ OpCode.GetFirmwareInfoResponse = 19
 OpCode.ResetReport = 20
 OpCode.ResetSettings = 21
 OpCode.TriggerCapture = 22
+OpCode.ReportEvents = 23
 OpCode.PrepareUpgrade = 100
 OpCode.ApplyUpgrade = 101
 OpCode.ConfirmUpgrade = 102
@@ -149,6 +153,11 @@ class ReportType(IntEnum):
     Health = 4
     Settings = 5
     Capture = 6
+    Event = 8
+
+
+class EventType(IntEnum):
+    MotionStart = 1
 
 
 SEGMENT_FIRST = 0x80
@@ -194,6 +203,7 @@ class Report:
             ReportType.Health: HealthReport,
             ReportType.Settings: SettingsReport,
             ReportType.Capture: CaptureReport,
+            ReportType.Event: EventReport,
         }
         if report_class := report_classes.get(self.report_type):
             return unmarshal(report_class, cbor2.loads(self.payload_cbor))
@@ -449,6 +459,17 @@ class AVSSClient:
         else:
             arg = ReportHealthArgs(count=count)
         return await self._void_request(OpCode.ReportHealth, arg)
+
+    async def report_events(
+        self, count: int | None = None, *, active: bool | None = None
+    ):
+        if active is not None:
+            arg = ReportEventsArgs(count=active)
+        elif count is None:
+            arg = ReportEventsArgs(count=True)
+        else:
+            arg = ReportEventsArgs(count=count)
+        return await self._void_request(OpCode.ReportEvents, arg)
 
     async def report_settings(self, current=True, pending=False):
         arg = ReportSettings(current=current, pending=pending)

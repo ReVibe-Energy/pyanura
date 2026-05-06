@@ -150,6 +150,7 @@ class GetDeviceStatusResult:
     uptime: int = cbor_field(0)
     reboot_count: int = cbor_field(1)
     reset_cause: int = cbor_field(2)
+    temperature: float | None = cbor_field(3, default=None)
 
 
 @dataclass
