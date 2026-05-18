@@ -18,6 +18,12 @@ class AVSSTransport(ABC):
         """Make transport operational for AVSS communication.
 
         This method should be idempotent or raise an error if already open.
+
+        Raises:
+            AVSSConnectionError: If the connection to the device cannot be
+                established.
+            AVSSTransportError: If the underlying transport fails for reasons
+                unrelated to connectivity.
         """
 
     @abstractmethod

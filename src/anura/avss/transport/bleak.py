@@ -2,8 +2,10 @@ import asyncio
 import logging
 
 from bleak import BleakClient
+from bleak.exc import BleakError
 
 import anura.avss as avss
+from anura.avss.exceptions import AVSSConnectionError, AVSSTransportError
 
 from .base import AVSSTransport
 
@@ -57,16 +59,19 @@ class BleakAVSSTransport(AVSSTransport):
             self._addr, disconnected_callback=disconnected_callback
         )
 
-        await self._client.connect()
-        await self._client.start_notify(
-            avss.uuids.ReportCharacteristicUuid, report_notify
-        )
-        await self._client.start_notify(
-            avss.uuids.ControlPointCharacteristicUuid, cp_indicate
-        )
-        await self._client.start_notify(
-            avss.uuids.ProgramCharacteristicUuid, program_notify
-        )
+        try:
+            await self._client.connect()
+            await self._client.start_notify(
+                avss.uuids.ReportCharacteristicUuid, report_notify
+            )
+            await self._client.start_notify(
+                avss.uuids.ControlPointCharacteristicUuid, cp_indicate
+            )
+            await self._client.start_notify(
+                avss.uuids.ProgramCharacteristicUuid, program_notify
+            )
+        except BleakError as e:
+            raise AVSSConnectionError(str(e)) from e
 
     async def close(self) -> None:
         """Disconnect from the BLE device."""
@@ -79,6 +84,8 @@ class BleakAVSSTransport(AVSSTransport):
             # On some platforms EOFError is raised by _client.disconnect()
             # even after disconnected callback has been called, so we suppress it
             pass
+        except BleakError as e:
+            raise AVSSTransportError(str(e)) from e
 
         await self._closed_event.wait()
 
@@ -92,9 +99,12 @@ class BleakAVSSTransport(AVSSTransport):
             await self._cp_response_q.get()
             self._cp_response_q.task_done()
 
-        await self._client.write_gatt_char(
-            avss.uuids.ControlPointCharacteristicUuid, req
-        )
+        try:
+            await self._client.write_gatt_char(
+                avss.uuids.ControlPointCharacteristicUuid, req
+            )
+        except BleakError as e:
+            raise AVSSConnectionError(str(e)) from e
 
         response = await self._cp_response_q.get()
         self._cp_response_q.task_done()
@@ -104,9 +114,12 @@ class BleakAVSSTransport(AVSSTransport):
         if self._client is None:
             raise RuntimeError("BleakAVSSTransport is not open")
 
-        await self._client.write_gatt_char(
-            avss.uuids.ProgramCharacteristicUuid, value, response=False
-        )
+        try:
+            await self._client.write_gatt_char(
+                avss.uuids.ProgramCharacteristicUuid, value, response=False
+            )
+        except BleakError as e:
+            raise AVSSConnectionError(str(e)) from e
 
     def set_report_callback(self, callback) -> None:
         self._report_callback = callback
