@@ -8,7 +8,11 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-pyanura = { path = "../.." }
+# Resolve pyanura from the parent checkout, editable, for in-tree development.
+# To run this example standalone (without a pyanura checkout above), remove
+# this section and configure a [[tool.uv.index]] pointing at the public
+# package index — see the top-level README for the URL.
+pyanura = { path = "../..", editable = true }
 
 [dependency-groups]
 dev = [

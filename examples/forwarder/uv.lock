@@ -56,7 +56,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "paho-mqtt", specifier = ">=2.0.0" },
-    { name = "pyanura", directory = "../../" },
+    { name = "pyanura", editable = "../../" },
 ]
 
 [package.metadata.requires-dev]
@@ -73,7 +73,7 @@ wheels = [
 
 [[package]]
 name = "pyanura"
-source = { directory = "../../" }
+source = { editable = "../../" }
 dependencies = [
     { name = "cbor2" },
 ]
@@ -84,10 +84,13 @@ requires-dist = [
     { name = "cbor2", specifier = ">=5.7.1" },
     { name = "pyusb", marker = "extra == 'usb'", specifier = ">=1.3.1" },
 ]
-provides-extras = ["usb", "ble"]
+provides-extras = ["ble", "usb"]
 
 [package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=9.0.1" }]
+dev = [
+    { name = "packaging", specifier = ">=26.0" },
+    { name = "pytest", specifier = ">=9.0.1" },
+]
 
 [[package]]
 name = "ty"
