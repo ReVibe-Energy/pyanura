@@ -59,8 +59,8 @@ class ProxyAVSSTransport(AVSSTransport):
         await self._wait_available()
 
     async def _wait_available(self):
-        # TODO: This will wait indefintely if transceiver is not assigned to the node
-        # a sanity check would be good.
+        # TODO: This will wait indefinitely if transceiver is not assigned to
+        # the node; a sanity check would be good.
 
         # We expect NODE_UNAVAILABLE errors while waiting for the node but tolerate
         # a limited count of other errors.
