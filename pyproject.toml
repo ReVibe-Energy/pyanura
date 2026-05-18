@@ -4,13 +4,38 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pyanura"
+description = "Python library for communicating with ReVibe Anura sensors and transceivers."
+readme = "README.md"
 requires-python = ">=3.11"
 dynamic = ["version"]
 license = "Apache-2.0"
 license-files = ["LICENSE"]
+authors = [
+    { name = "ReVibe Energy AB" },
+]
+keywords = ["anura", "revibe", "sensor", "transceiver", "bluetooth", "ble", "iot"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Communications",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
 dependencies = [
     "cbor2>=5.7.1",
 ]
+
+[project.urls]
+Homepage = "https://github.com/ReVibe-Energy/pyanura"
+Source = "https://github.com/ReVibe-Energy/pyanura"
+Issues = "https://github.com/ReVibe-Energy/pyanura/issues"
+Documentation = "https://docs.revibeenergy.com/"
 
 [project.optional-dependencies]
 usb = [
