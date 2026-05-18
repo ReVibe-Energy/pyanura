@@ -49,6 +49,7 @@ ble = [
 dev = [
     "packaging>=26.0",
     "pytest>=9.0.1",
+    "ruff>=0.15.13",
 ]
 
 [tool.hatch.build.targets.wheel]

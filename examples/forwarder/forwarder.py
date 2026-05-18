@@ -70,7 +70,7 @@ class AnuraSupervisor:
                 return transceiver
             except asyncio.CancelledError:
                 raise
-            except:
+            except Exception:
                 logger.info("Could not connect to %s", host)
                 # Retry connection after a short delay
                 await asyncio.sleep(1.0)
