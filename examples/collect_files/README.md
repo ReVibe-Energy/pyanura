@@ -1,25 +1,19 @@
 # collect_files example
 
-Example showing how to use pyanura library to connect to a transceiver and
-request reports from its connected nodes. It does not assign nodes to
+Example showing how to use the pyanura library to connect to a transceiver
+and request reports from its connected nodes. It does not assign nodes to
 the transceiver or set any node settings. Those steps have to be carried
-out manually before running the example, e.g. using the `anura`` cli.
+out manually before running the example, e.g. using the `anura` CLI.
 
-Create and activate a virtual environment:
+This example is a self-contained `uv` project that depends on the
+`pyanura` checkout above it. From this directory, sync its environment:
 
-    python3 -m venv venv
-    source venv/bin/activate
+    uv sync
 
-Install the pyanura package (relative path assuming working directory is
-the collect_files example directory). The [cli] variant is not strictly
-necessary but it will install the `anura` command in the virtual environment
-which can be used to manually perform required setup not handled by the example.
+You will also need the `anura` CLI for the setup steps below. The
+simplest way is to install it via `pipx` from the workspace package:
 
-    pip3 install ../../[cli]
-
-Install other dependencies
-
-    pip3 install numpy
+    pipx install ../../packages/pyanura-cli
 
 Find your transceiver (abort with Ctrl+C):
 
@@ -39,7 +33,7 @@ Assign a node to your transceiver:
 
 Run the example to collect reports:
 
-    python3 main.py --host anura-ec9a0cb2000b.local. --output out
+    uv run python main.py --host anura-ec9a0cb2000b.local. --output out
 
 Example output:
 

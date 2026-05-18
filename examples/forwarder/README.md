@@ -64,10 +64,11 @@ The available settings are documented separately.
 
 ## Running the example
 
-Assuming a virtual environment with all necessary dependencies has been installed.
-Run the following command from the `pyanura` repository root directory:
+This example is a self-contained `uv` project. From this directory, sync
+its environment and launch it:
 
-    python3 -m examples.forwarder --config examples/forwarder/example-config.json
+    uv sync
+    uv run python -m forwarder --config example-config.json
 
 Example output:
 
