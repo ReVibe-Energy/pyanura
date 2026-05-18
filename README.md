@@ -28,13 +28,29 @@ anura transceiver browse
 to search for transceivers on the local network.
 
 
-## Installing libusb
-`libusb` must be manually installed to use USB transceivers in Windows.
+## USB transceiver setup
+
+### Windows: install libusb
+`libusb` must be manually installed to use USB transceivers on Windows.
 1. Download `libusb` binaries, e.g. from the [Github releases page of `libusb`](https://github.com/libusb/libusb/releases)
 2. Extract them to a directory suitable for keeping the files long-term
 3. Add the `VS2022\MS64\dll` subfolder to your PATH environment variable. Example path: `C:\libusb-1.0.27\VS2022\MS64\dll`
 4. Restart terminal/IDE in which you're invoking the CLI so that the new entry in PATH is loaded
 5. Run pyanura
+
+### Linux: install udev rules
+On most Linux distributions `libusb` is available from the package
+manager (e.g. `apt install libusb-1.0-0`). To allow non-root users to
+access the USB transceiver, install the udev rules file shipped with
+this repository:
+
+    sudo cp 99-anura.rules /etc/udev/rules.d/
+    sudo udevadm control --reload-rules
+    sudo udevadm trigger
+
+The rules grant access to the `plugdev` group, so make sure your user
+is a member of it (`sudo usermod -aG plugdev "$USER"` if not, then log
+out and back in). Replug the transceiver after installing the rules.
 
 
 ## Development setup
