@@ -1,7 +1,8 @@
-# pyanura Package
+# pyanura
 
-The pyanura package contains classes and command line utilities for interfacing
-the ReVibe Anura sensors and transceivers.
+`pyanura` is a Python library for interfacing with ReVibe Anura sensors and
+transceivers. A companion command-line utility, `anura`, is distributed
+separately as the `pyanura-cli` package.
 
 ## Installing the package for programmatic use
 
@@ -31,7 +32,7 @@ to search for transceivers on the local network.
 `libusb` must be manually installed to use USB transceivers in Windows.
 1. Download `libusb` binaries, e.g. from the [Github releases page of `libusb`](https://github.com/libusb/libusb/releases)
 2. Extract them to a directory suitable for keeping the files long-term
-3. Add the `VS2022\MS64\dll` subfolder to your PATH environment variable. Example path: `C:\Users\felix\libusb-1.0.27\VS2022\MS64\dll`
+3. Add the `VS2022\MS64\dll` subfolder to your PATH environment variable. Example path: `C:\libusb-1.0.27\VS2022\MS64\dll`
 4. Restart terminal/IDE in which you're invoking the CLI so that the new entry in PATH is loaded
 5. Run pyanura
 
