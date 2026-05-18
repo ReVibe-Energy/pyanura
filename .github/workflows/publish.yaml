@@ -28,6 +28,9 @@ jobs:
       - name: Install dependencies
         run: uv sync --dev --all-packages
 
+      - name: Validate VERSION against ref
+        run: uv run scripts/reltool.py validate-version "${{ github.ref_type }}" "${{ github.ref_name }}"
+
       - name: Update VERSION for a snapshot release
         run: |
           REF_ARG=""
@@ -35,9 +38,6 @@ jobs:
             REF_ARG="--ref ${{ github.event.pull_request.head.sha }}"
           fi
           uv run scripts/reltool.py update-version --snapshot $REF_ARG
-
-      - name: Install dependencies
-        run: uv sync --dev --all-packages
 
       - name: Build packages
         run: uv build --all-packages --wheel
@@ -66,8 +66,15 @@ jobs:
         with:
           api-key: ${{ secrets.CLOUDSMITH_API_KEY }}
 
-      - name: Push to Cloudsmith
+      - name: Push to Cloudsmith public-dev
         run: |
           for f in dist/*.whl; do
             cloudsmith push python revibe-energy/public-dev "$f"
+          done
+
+      - name: Push to Cloudsmith public (tagged releases only)
+        if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
+        run: |
+          for f in dist/*.whl; do
+            cloudsmith push python revibe-energy/public "$f"
           done
