@@ -27,7 +27,8 @@ def __getattr__(name):
     if name == "BleakAVSSTransport":
         if not HAS_BLEAK:
             raise ImportError(
-                "BleakAVSSTransport requires the 'bleak' package."
+                "BleakAVSSTransport requires the 'bleak' package. "
+                "Install it via the 'ble' extra: pip install pyanura[ble]"
             ) from None
         else:
             # This should be unreachable as we only expect __getattr__ to be

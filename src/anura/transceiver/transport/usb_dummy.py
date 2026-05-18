@@ -12,7 +12,10 @@ class USBTransport(Transport, transport_type="usb"):
     """
 
     def __init__(self, serial_number: str, _unused_port) -> None:
-        raise RuntimeError("Can't instantiate USBTransport due a missing module.")
+        raise RuntimeError(
+            "USBTransport requires the 'pyusb' package. "
+            "Install it via the 'usb' extra: pip install pyanura[usb]"
+        )
 
     @staticmethod
     def list_devices() -> list[str]:
