@@ -4,6 +4,8 @@ on:
   push:
     branches: ["wip/v1"] # TODO "main"
     tags: ["v*"]
+  # Manually dispatched runs publish to public-dev; if dispatched against
+  # a v* tag ref, the public-push step will also fire. Use sparingly.
   workflow_dispatch:
 
 concurrency:
