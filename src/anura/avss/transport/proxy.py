@@ -77,12 +77,12 @@ class ProxyAVSSTransport(AVSSTransport):
                     other_error_count = 0
                 else:
                     logger.warning(
-                        f"Unexpected error while waiting for {self._address} to become available: {api_error}"
+                        f"Unexpected error while waiting for {self._address} to become available: {e.error}"
                     )
                     other_error_count += 1
                     if other_error_count >= 3:
                         raise AVSSConnectionError(
-                            f"Transceiver report an error when polling for node: {api_error}"
+                            f"Transceiver report an error when polling for node: {e.error}"
                         ) from e
             await asyncio.sleep(1.0)
 
