@@ -5,27 +5,20 @@ the ReVibe Anura sensors and transceivers.
 
 ## Installing the package for programmatic use
 
-The package is installable using `pip3` by pointing to the top level directory (the one containing this README file).
-First you should set up and actiavte a suitable virtual environment for your project.
-After that you can install the pyanura package using `pip3`.
+Released versions of `pyanura` are published to ReVibe Energy's public
+Cloudsmith index. Set up and activate a suitable virtual environment for
+your project, then install `pyanura` from the index:
 
-Example (assuming the package is located in the Downloads directory):
-
-    pip3 install ~/Downloads/pyanura
+    pip3 install pyanura --index-url https://dl.cloudsmith.io/public/revibe-energy/public/python/simple/
 
 ## Installing command-line interface
 
-The command-line interface lives in a separate `pyanura-cli` distribution
-under `packages/pyanura-cli`. If you just want to install the `anura`
-command-line utility and make it available on your `PATH` the best option
-is likely to install `pipx` using your system's package manager and then
-install `pyanura-cli` using `pipx`.
+The command-line interface is distributed as a separate `pyanura-cli`
+package. The recommended way to install it is via
+[`pipx`](https://pipx.pypa.io/), which manages its own virtual environment
+and exposes the `anura` script on your `PATH`:
 
-    pipx install ~/Downloads/pyanura/packages/pyanura-cli
-
-Using this method you don't have to manually set up a virtual environment as `pipx`
-will create one for you. Additionally it will add a script to your `PATH` that will
-launch the command-line in the appropriate virtual environment.
+    pipx install --index-url https://dl.cloudsmith.io/public/revibe-energy/public/python/simple/ pyanura-cli
 
 At this point, you should be able to run CLI commands from your terminal - for example:
 ```
