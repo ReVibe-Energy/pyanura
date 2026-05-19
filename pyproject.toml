@@ -61,3 +61,13 @@ pattern = "(?P<version>.+)"
 
 [tool.uv.workspace]
 members = ["packages/pyanura-cli"]
+
+[tool.ruff]
+extend-exclude = ["scripts/reltool.py"]
+
+[tool.ruff.lint]
+extend-select = ["I", "B", "UP", "RUF"]
+# RUF009 fires on `cbor_field(N)` defaults in dataclasses, but cbor_field is a
+# thin wrapper around `dataclasses.field()` (see anura/marshalling.py). Ruff
+# has no way to know it's safe; suppress the rule rather than add ~25 noqa's.
+ignore = ["RUF009"]

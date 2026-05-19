@@ -4,7 +4,6 @@ import sys
 from contextlib import closing
 from pathlib import Path
 
-
 logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 1

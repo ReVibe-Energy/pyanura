@@ -134,7 +134,7 @@ class BluetoothAddrLE:
             case type_, address:
                 return cls(type_, address)
             case _:
-                raise ValueError(f"'{repr(value)}' not decodable as BluetoothAddrLE")
+                raise ValueError(f"'{value!r}' not decodable as BluetoothAddrLE")
 
 
 @dataclass

@@ -1,5 +1,8 @@
+from typing import ClassVar
+
+
 class SettingsMapper:
-    forward_map = {
+    forward_map: ClassVar[dict[str, int]] = {
         "base_sample_rate_hz": 0,
         "snippet_interval_ms": 1,
         "snippet_length": 2,
@@ -26,7 +29,7 @@ class SettingsMapper:
         "aggregates_param_enable_32_63": 23,
     }
 
-    reverse_map = {key: name for name, key in forward_map.items()}
+    reverse_map: ClassVar[dict[int, str]] = {key: name for name, key in forward_map.items()}
 
     @staticmethod
     def from_readable(settings):
@@ -37,7 +40,7 @@ class SettingsMapper:
                 try:
                     return int(key)
                 except ValueError:
-                    raise ValueError(f"Invalid key {key}")
+                    raise ValueError(f"Invalid key {key}") from None
 
         return {map_key(k): v for k, v in settings.items()}
 

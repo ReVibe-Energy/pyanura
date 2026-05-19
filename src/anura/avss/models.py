@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Union
+from typing import Any
 
 from anura.marshalling import cbor_field
 
@@ -24,7 +24,7 @@ class ReportCaptureArgs:
 
 @dataclass
 class ReportHealthArgs:
-    count: Union[bool, int] = cbor_field(0)
+    count: bool | int = cbor_field(0)
 
 
 @dataclass

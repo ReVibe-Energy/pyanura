@@ -1,8 +1,9 @@
 from abc import ABC, abstractmethod
+from typing import ClassVar
 
 
 class Transport(ABC):
-    _registry = {}
+    _registry: ClassVar[dict[str, type["Transport"]]] = {}
 
     def __init_subclass__(cls, transport_type: str, **kwargs):
         super().__init_subclass__(**kwargs)

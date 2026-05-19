@@ -3,8 +3,8 @@ import logging
 from .models import APIError
 
 __all__ = [
-    "TransceiverError",
     "TransceiverConnectionError",
+    "TransceiverError",
     "TransceiverRequestError",
 ]
 

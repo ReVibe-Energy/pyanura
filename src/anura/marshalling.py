@@ -3,8 +3,9 @@ import ipaddress
 import logging
 import types
 import typing
+from collections.abc import Callable
 from dataclasses import is_dataclass
-from typing import Any, Callable, TypeVar
+from typing import Any, TypeVar
 
 import cbor2
 
@@ -41,7 +42,7 @@ def marshal(obj) -> dict | list | Any:
 
 def unmarshal(cls: type[T], struct: dict | list | Any) -> T:
     if hasattr(cls, "_unmarshal"):
-        return getattr(cls, "_unmarshal")(struct)
+        return cls._unmarshal(struct)
     elif hook := _unmarshal_hooks.get(cls, None):
         return hook(cls, struct)
     elif is_dataclass(cls):
@@ -77,7 +78,7 @@ def unmarshal(cls: type[T], struct: dict | list | Any) -> T:
             raise ValueError("Unsupported generic type.")
     else:
         if not isinstance(struct, cls):
-            raise TypeError(f"{repr(struct)} not decodable as type {cls}")
+            raise TypeError(f"{struct!r} not decodable as type {cls}")
         return struct
 
 
@@ -87,7 +88,7 @@ def _unmarshal_ipv4address(
     assert cls is ipaddress.IPv4Address
 
     if not isinstance(struct, cbor2.CBORTag):
-        raise TypeError(f"{repr(struct)} not decodable as type {cls}")
+        raise TypeError(f"{struct!r} not decodable as type {cls}")
     if struct.tag != 52:
         raise ValueError(f"Expected tag 52 but got {struct.tag}")
 

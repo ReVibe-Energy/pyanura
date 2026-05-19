@@ -1,11 +1,9 @@
 import asyncio
 import logging
+from collections.abc import AsyncIterator, Callable, Generator
 from contextlib import contextmanager
 from typing import (
     Any,
-    AsyncIterator,
-    Callable,
-    Generator,
     TypeVar,
     overload,
 )
@@ -85,7 +83,7 @@ class TransceiverClient:
                 tg.create_task(keep_alive())
         except* TransceiverError as eg:
             if len(eg.exceptions) == 1:
-                raise eg.exceptions[0]
+                raise eg.exceptions[0] from None
             else:
                 raise
         finally:

@@ -2,16 +2,13 @@ import asyncio
 import logging
 import struct
 import time
+from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from io import BytesIO
 from typing import (
     Any,
-    AsyncIterator,
-    Callable,
-    Iterator,
     Literal,
-    Optional,
     TypeAlias,
     TypeVar,
     overload,
@@ -86,13 +83,13 @@ class ReportTransferInfo:
 class Report:
     report_type: int
     payload_cbor: bytes
-    _transfer_info: Optional[ReportTransferInfo]
+    _transfer_info: ReportTransferInfo | None
 
     def __init__(
         self,
         report_type: int,
         payload_cbor: bytes,
-        transfer_info: Optional[ReportTransferInfo] = None,
+        transfer_info: ReportTransferInfo | None = None,
     ):
         self.report_type = report_type
         self.payload_cbor = payload_cbor
@@ -100,7 +97,7 @@ class Report:
 
     @staticmethod
     def from_record(
-        record: bytes, transfer_info: Optional[ReportTransferInfo] = None
+        record: bytes, transfer_info: ReportTransferInfo | None = None
     ) -> "Report":
         return Report(
             report_type=record[0], payload_cbor=record[1:], transfer_info=transfer_info
@@ -123,7 +120,7 @@ class Report:
 class _ReportBuffer:
     def __init__(self):
         self.start_time: float = time.time()
-        self.end_time: Optional[float] = None
+        self.end_time: float | None = None
         self.num_segments: int = 0
         self._buffer = bytearray()
         self._finished = False
@@ -326,7 +323,7 @@ class AVSSClient:
             except AVSSConnectionError:
                 raise
             except Exception as e:
-                raise AVSSTransportError(f"Request failed: {str(e)}") from e
+                raise AVSSTransportError(f"Request failed: {e!s}") from e
 
         # Get response opcode
         try:

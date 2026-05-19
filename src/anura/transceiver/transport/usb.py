@@ -2,7 +2,6 @@ import asyncio
 import errno
 import logging
 import struct
-from typing import List, Optional
 
 import usb.core
 import usb.util
@@ -34,10 +33,10 @@ class USBTransport(Transport, transport_type="usb"):
         self.in_ep = IN_ENDPOINT
         self.out_ep = OUT_ENDPOINT
         self.max_packet_size = MAX_PACKET_SIZE
-        self.dev: Optional[usb.core.Device] = None
+        self.dev: usb.core.Device | None = None
         self.receive_queue: asyncio.Queue = asyncio.Queue()
         self.loop = asyncio.get_event_loop()
-        self.reader_task: Optional[asyncio.Task] = None
+        self.reader_task: asyncio.Task | None = None
 
     async def open_connection(self) -> None:
         device = await self.loop.run_in_executor(
@@ -112,7 +111,7 @@ class USBTransport(Transport, transport_type="usb"):
         await self.receive_queue.put(EOF_SENTINEL)
 
     @staticmethod
-    def list_devices() -> List[str]:
+    def list_devices() -> list[str]:
         """Get a list of serial numbers of connected transceivers."""
         devices = usb.core.find(find_all=True, idVendor=VENDOR_ID, idProduct=PRODUCT_ID)
         device_list = []
@@ -134,7 +133,7 @@ class USBTransport(Transport, transport_type="usb"):
         except NotImplementedError:
             logger.debug("Couldn't detach kernel driver (expected on Windows)")
 
-    def _find_device_by_serial(self, serial_number: str) -> Optional[usb.core.Device]:
+    def _find_device_by_serial(self, serial_number: str) -> usb.core.Device | None:
         devices = usb.core.find(
             find_all=True, idVendor=self.vendor_id, idProduct=self.product_id
         )
