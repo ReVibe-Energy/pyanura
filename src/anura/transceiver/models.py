@@ -234,7 +234,7 @@ class DfuPrepareArgs:
 @dataclass
 class DfuWriteArgs:
     offset: Annotated[int, CborKey(0)]
-    data: Annotated[int, CborKey(1)]
+    data: Annotated[bytes, CborKey(1)]
 
 
 @dataclass
