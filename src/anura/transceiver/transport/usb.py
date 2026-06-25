@@ -2,9 +2,10 @@ import asyncio
 import errno
 import logging
 import struct
+from typing import Any
 
-import usb.core
-import usb.util
+import usb.core  # pyright: ignore[reportMissingImports]
+import usb.util  # pyright: ignore[reportMissingImports]
 
 from .base import Transport
 
@@ -113,7 +114,11 @@ class USBTransport(Transport, transport_type="usb"):
     @staticmethod
     def list_devices() -> list[str]:
         """Get a list of serial numbers of connected transceivers."""
-        devices = usb.core.find(find_all=True, idVendor=VENDOR_ID, idProduct=PRODUCT_ID)
+        # pyusb's find() stub doesn't model the find_all=True iterator, nor the
+        # iSerialNumber descriptor attribute, so treat the result as dynamic.
+        devices: Any = usb.core.find(
+            find_all=True, idVendor=VENDOR_ID, idProduct=PRODUCT_ID
+        )
         device_list = []
         for device in devices:
             serial = usb.util.get_string(device, device.iSerialNumber)
@@ -136,7 +141,7 @@ class USBTransport(Transport, transport_type="usb"):
             logger.debug("Couldn't detach kernel driver (expected on Windows)")
 
     def _find_device_by_serial(self, serial_number: str) -> usb.core.Device | None:
-        devices = usb.core.find(
+        devices: Any = usb.core.find(
             find_all=True, idVendor=self.vendor_id, idProduct=self.product_id
         )
         for device in devices:

@@ -1,8 +1,8 @@
 import asyncio
 import logging
 
-from bleak import BleakClient
-from bleak.exc import BleakError
+from bleak import BleakClient  # pyright: ignore[reportMissingImports]
+from bleak.exc import BleakError  # pyright: ignore[reportMissingImports]
 
 import anura.avss as avss
 from anura.avss.exceptions import AVSSConnectionError, AVSSTransportError
