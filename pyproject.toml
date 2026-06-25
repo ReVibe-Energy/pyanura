@@ -48,6 +48,7 @@ ble = [
 [dependency-groups]
 dev = [
     "packaging>=26.0",
+    "pyright>=1.1.411",
     "pytest>=9.0.1",
     "ruff>=0.15.13",
 ]
@@ -61,6 +62,12 @@ pattern = "(?P<version>.+)"
 
 [tool.uv.workspace]
 members = ["packages/pyanura-cli"]
+
+[tool.pyright]
+include = ["src"]
+# Check against the lowest supported runtime so we don't lean on newer syntax.
+pythonVersion = "3.11"
+typeCheckingMode = "standard"
 
 [tool.ruff]
 extend-exclude = ["scripts/reltool.py"]
