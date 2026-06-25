@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- CI: a pyright type-check job that runs both with and without the optional `ble`/`usb` extras, keeping the library type-clean in either configuration.
+
+### Changed
+- Reworked CBOR (un)marshalling to carry wire keys via `typing.Annotated` (`CborKey`) plus a per-type codec registry, replacing the `cbor_field` helper. Protocol model dataclasses now keep their real field types, so constructing and consuming them is fully type-checked. The on-the-wire CBOR format is unchanged.
+
+### Removed
+- The internal `cbor_field` helper, superseded by `Annotated[..., CborKey(n)]` and `register_codec`.
+
+### Fixed
+- `DfuWriteArgs.data` is now correctly typed as `bytes` (it was previously annotated `int`).
+- pyanura now type-checks cleanly under pyright; corrected latent `Optional`-narrowing and return-type annotations in the USB and TCP transports.
+
+## [1.0.0a4] - 2026-05-19
+
+### Added
 - `py.typed` marker so downstream type checkers see pyanura's annotations.
 - Helpful error messages when the optional `bleak` (`pip install pyanura[ble]`) or `pyusb` (`pip install pyanura[usb]`) dependencies are missing.
 - `control_point_timeout` attribute on `AVSSClient`.
@@ -22,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `BleakError` from the underlying `bleak` library is now wrapped in pyanura's AVSS exception hierarchy.
 - `TransceiverClient` now unmarshals API errors using the same path as successful responses, giving callers consistent error objects.
 - Cleaner error messages in `AVSSOpCodeUnsupportedError` and `AVSSBadArgumentError`.
+- Enabled an extended set of ruff lint rules (`I`, `B`, `UP`, `RUF`) and fixed the resulting findings.
 
 ### Fixed
 - `ProxyAVSSTransport._wait_available` no longer raises `NameError` when the transceiver returns an unexpected API error.
@@ -70,7 +86,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - `TransceiverClient` now awaits the connection task in `__aexit__` to ensure the connection is fully torn down before the context manager returns.
 
-[Unreleased]: https://github.com/ReVibe-Energy/pyanura/compare/v1.0a3...HEAD
+[Unreleased]: https://github.com/ReVibe-Energy/pyanura/compare/v1.0a4...HEAD
+[1.0.0a4]: https://github.com/ReVibe-Energy/pyanura/compare/v1.0a3...v1.0a4
 [1.0.0a3]: https://github.com/ReVibe-Energy/pyanura/compare/v1.0a2...v1.0a3
 [1.0.0a2]: https://github.com/ReVibe-Energy/pyanura/compare/v1.0a1...v1.0a2
 [1.0.0a1]: https://github.com/ReVibe-Energy/pyanura/compare/v0.14.0...v1.0a1
