@@ -1,42 +1,42 @@
 from dataclasses import dataclass
-from typing import Any
+from typing import Annotated, Any
 
-from anura.marshalling import cbor_field
+from anura.marshalling import CborKey
 
 
 @dataclass
 class ReportSnippetArgs:
-    count: int = cbor_field(0)
-    auto_resume: bool = cbor_field(1)
+    count: Annotated[int, CborKey(0)]
+    auto_resume: Annotated[bool, CborKey(1)]
 
 
 @dataclass
 class ReportAggregatesArgs:
-    count: int = cbor_field(0)
-    auto_resume: bool = cbor_field(1)
+    count: Annotated[int, CborKey(0)]
+    auto_resume: Annotated[bool, CborKey(1)]
 
 
 @dataclass
 class ReportCaptureArgs:
-    count: int = cbor_field(0)
-    auto_resume: bool = cbor_field(1)
+    count: Annotated[int, CborKey(0)]
+    auto_resume: Annotated[bool, CborKey(1)]
 
 
 @dataclass
 class ReportHealthArgs:
-    count: bool | int = cbor_field(0)
+    count: Annotated[bool | int, CborKey(0)]
 
 
 @dataclass
 class ReportSettings:
-    current: bool = cbor_field(0)
-    pending: bool = cbor_field(1)
+    current: Annotated[bool, CborKey(0)]
+    pending: Annotated[bool, CborKey(1)]
 
 
 @dataclass
 class PrepareUpgradeArgs:
-    image: int = cbor_field(0)
-    size: int = cbor_field(1)
+    image: Annotated[int, CborKey(0)]
+    size: Annotated[int, CborKey(1)]
 
 
 @dataclass
@@ -46,113 +46,113 @@ class ApplyUpgradeArgs:
 
 @dataclass
 class ConfirmUpgradeArgs:
-    image: int = cbor_field(0)
+    image: Annotated[int, CborKey(0)]
 
 
 @dataclass
 class TestThroughputArgs:
-    duration: int = cbor_field(0)
+    duration: Annotated[int, CborKey(0)]
 
 
 @dataclass
 class ApplySettingsArgs:
-    persist: int = cbor_field(0)
+    persist: Annotated[int, CborKey(0)]
 
 
 @dataclass
 class DeactivateArgs:
-    key: int = cbor_field(0)
+    key: Annotated[int, CborKey(0)]
 
 
 @dataclass
 class TriggerMeasurementArgs:
-    duration_ms: int = cbor_field(0)
+    duration_ms: Annotated[int, CborKey(0)]
 
 
 @dataclass
 class TriggerCaptureArgs:
-    duration_ms: int = cbor_field(0)
+    duration_ms: Annotated[int, CborKey(0)]
 
 
 @dataclass
 class ApplySettingsResponse:
-    will_reboot: bool = cbor_field(0)
+    will_reboot: Annotated[bool, CborKey(0)]
 
 
 @dataclass
 class WriteSettingsResponse:
-    num_unhandled: int = cbor_field(0)
+    num_unhandled: Annotated[int, CborKey(0)]
 
 
 @dataclass
 class WriteSettingsV2Args:
-    settings: dict[int, Any] = cbor_field(0)
-    reset_defaults: bool = cbor_field(1)
-    apply: bool = cbor_field(2)
+    settings: Annotated[dict[int, Any], CborKey(0)]
+    reset_defaults: Annotated[bool, CborKey(1)]
+    apply: Annotated[bool, CborKey(2)]
 
 
 @dataclass
 class WriteSettingsV2Response:
-    num_unhandled: int = cbor_field(0)
-    will_reboot: bool = cbor_field(1)
+    num_unhandled: Annotated[int, CborKey(0)]
+    will_reboot: Annotated[bool, CborKey(1)]
 
 
 @dataclass
 class GetVersionResponse:
-    version: str = cbor_field(0)
-    build_version: str = cbor_field(1)
+    version: Annotated[str, CborKey(0)]
+    build_version: Annotated[str, CborKey(1)]
 
 
 @dataclass
 class GetFirmwareInfoResponse:
-    app_version: int = cbor_field(0)
-    app_build_version: str = cbor_field(1)
-    app_status: int = cbor_field(2)
-    net_version: int = cbor_field(3)
-    net_build_version: str = cbor_field(4)
+    app_version: Annotated[int, CborKey(0)]
+    app_build_version: Annotated[str, CborKey(1)]
+    app_status: Annotated[int, CborKey(2)]
+    net_version: Annotated[int, CborKey(3)]
+    net_build_version: Annotated[str, CborKey(4)]
 
 
 @dataclass
 class SnippetReport:
-    start_time: int = cbor_field(0)
-    sample_rate: float = cbor_field(1)
-    range_: int = cbor_field(2)
-    samples: dict[int, bytes] = cbor_field(3)
-    is_synced: bool = cbor_field(4)
+    start_time: Annotated[int, CborKey(0)]
+    sample_rate: Annotated[float, CborKey(1)]
+    range_: Annotated[int, CborKey(2)]
+    samples: Annotated[dict[int, bytes], CborKey(3)]
+    is_synced: Annotated[bool, CborKey(4)]
 
 
 @dataclass
 class CaptureReport:
-    start_time: int = cbor_field(0)
-    range_: int = cbor_field(2)
-    samples: dict[int, bytes] = cbor_field(3)
-    is_synced: bool = cbor_field(4)
-    duration: int = cbor_field(5)
-    start_time_monotonic: int = cbor_field(6)
-    duration_monotonic: int = cbor_field(7)
+    start_time: Annotated[int, CborKey(0)]
+    range_: Annotated[int, CborKey(2)]
+    samples: Annotated[dict[int, bytes], CborKey(3)]
+    is_synced: Annotated[bool, CborKey(4)]
+    duration: Annotated[int, CborKey(5)]
+    start_time_monotonic: Annotated[int, CborKey(6)]
+    duration_monotonic: Annotated[int, CborKey(7)]
 
 
 @dataclass
 class AggregatedValuesReport:
-    start_time: int = cbor_field(0)
-    values: dict[int, float] = cbor_field(2)
+    start_time: Annotated[int, CborKey(0)]
+    values: Annotated[dict[int, float], CborKey(2)]
 
 
 @dataclass
 class HealthReport:
-    uptime: int = cbor_field(0)
-    reboot_count: int = cbor_field(1)
-    reset_cause: int = cbor_field(2)
-    temperature: float = cbor_field(3)
-    battery_voltage: int = cbor_field(4)
-    rssi: int = cbor_field(5)
-    eh_voltage: int = cbor_field(6)
-    clock_sync_skew: float | None = cbor_field(7, default=None)
-    clock_sync_age: int | None = cbor_field(8, default=None)
-    clock_sync_diff: int | None = cbor_field(9, default=None)
+    uptime: Annotated[int, CborKey(0)]
+    reboot_count: Annotated[int, CborKey(1)]
+    reset_cause: Annotated[int, CborKey(2)]
+    temperature: Annotated[float, CborKey(3)]
+    battery_voltage: Annotated[int, CborKey(4)]
+    rssi: Annotated[int, CborKey(5)]
+    eh_voltage: Annotated[int, CborKey(6)]
+    clock_sync_skew: Annotated[float | None, CborKey(7)] = None
+    clock_sync_age: Annotated[int | None, CborKey(8)] = None
+    clock_sync_diff: Annotated[int | None, CborKey(9)] = None
 
 
 @dataclass
 class SettingsReport:
-    settings: dict | None = cbor_field(0, default=None)
-    pending_settings: dict | None = cbor_field(1, default=None)
+    settings: Annotated[dict | None, CborKey(0)] = None
+    pending_settings: Annotated[dict | None, CborKey(1)] = None

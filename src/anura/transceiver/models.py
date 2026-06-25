@@ -4,9 +4,10 @@ import ipaddress
 import re
 import types
 from dataclasses import dataclass
+from typing import Annotated
 from uuid import UUID
 
-from anura.marshalling import cbor_field, unmarshal
+from anura.marshalling import CborKey, register_codec, unmarshal
 
 msg_type = types.SimpleNamespace()
 msg_type.Request = 0
@@ -58,9 +59,9 @@ class APIError:
             unused but reserved for future use.
     """
 
-    code: int = cbor_field(0)
-    internal_code: int | None = cbor_field(1, default=None)
-    message: str | None = cbor_field(2, default=None)
+    code: Annotated[int, CborKey(0)]
+    internal_code: Annotated[int | None, CborKey(1)] = None
+    message: Annotated[str | None, CborKey(2)] = None
 
 
 class Notification:
@@ -125,157 +126,165 @@ class BluetoothAddrLE:
         addr_str = addr_raw.replace(":", "").replace("-", "")
         return BluetoothAddrLE(type=addr_type, address=bytes.fromhex(addr_str))
 
-    def _marshal(self) -> tuple[int, bytes]:
-        return (self.type, self.address)
 
-    @classmethod
-    def _unmarshal(cls, value) -> "BluetoothAddrLE":
-        match value:
-            case type_, address:
-                return cls(type_, address)
-            case _:
-                raise ValueError(f"'{value!r}' not decodable as BluetoothAddrLE")
+def _marshal_bluetooth_addr(addr: BluetoothAddrLE) -> tuple[int, bytes]:
+    return (addr.type, addr.address)
+
+
+def _unmarshal_bluetooth_addr(value) -> BluetoothAddrLE:
+    match value:
+        case type_, address:
+            return BluetoothAddrLE(type_, address)
+        case _:
+            raise ValueError(f"'{value!r}' not decodable as BluetoothAddrLE")
+
+
+register_codec(
+    BluetoothAddrLE,
+    marshal=_marshal_bluetooth_addr,
+    unmarshal=_unmarshal_bluetooth_addr,
+)
 
 
 @dataclass
 class AssignedNode:
-    address: BluetoothAddrLE = cbor_field(0)
+    address: Annotated[BluetoothAddrLE, CborKey(0)]
 
 
 @dataclass
 class SetAssignedNodesArgs:
-    nodes: list[AssignedNode] = cbor_field(0)
+    nodes: Annotated[list[AssignedNode], CborKey(0)]
 
 
 @dataclass
 class GetAssignedNodesResult:
-    nodes: list[AssignedNode] = cbor_field(0)
+    nodes: Annotated[list[AssignedNode], CborKey(0)]
 
 
 @dataclass
 class ConnectedNode:
-    address: BluetoothAddrLE = cbor_field(0)
-    rssi: int = cbor_field(1)
+    address: Annotated[BluetoothAddrLE, CborKey(0)]
+    rssi: Annotated[int, CborKey(1)]
 
 
 @dataclass
 class GetConnectedNodesResult:
-    nodes: list[ConnectedNode] = cbor_field(0)
+    nodes: Annotated[list[ConnectedNode], CborKey(0)]
 
 
 @dataclass
 class AVSSRequestArgs:
-    address: BluetoothAddrLE = cbor_field(0)
-    data: bytes = cbor_field(1)
+    address: Annotated[BluetoothAddrLE, CborKey(0)]
+    data: Annotated[bytes, CborKey(1)]
 
 
 @dataclass
 class AVSSRequestResult:
-    response: bytes = cbor_field(0)
+    response: Annotated[bytes, CborKey(0)]
 
 
 @dataclass
 class AVSSProgramWriteArgs:
-    address: BluetoothAddrLE = cbor_field(0)
-    data: bytes = cbor_field(1)
+    address: Annotated[BluetoothAddrLE, CborKey(0)]
+    data: Annotated[bytes, CborKey(1)]
 
 
 @dataclass
 class GetDeviceInfoResult:
-    board: str = cbor_field(0)
-    hw_rev: int = cbor_field(1)
-    device_id: bytes = cbor_field(2)
-    app_version: str = cbor_field(3)
-    app_build_version: str = cbor_field(4)
-    serial_number: str = cbor_field(5)
-    hostname: str = cbor_field(6)
-    mac_address: bytes = cbor_field(7)
-    ip_addresses: list[ipaddress.IPv4Address] = cbor_field(8)
+    board: Annotated[str, CborKey(0)]
+    hw_rev: Annotated[int, CborKey(1)]
+    device_id: Annotated[bytes, CborKey(2)]
+    app_version: Annotated[str, CborKey(3)]
+    app_build_version: Annotated[str, CborKey(4)]
+    serial_number: Annotated[str, CborKey(5)]
+    hostname: Annotated[str, CborKey(6)]
+    mac_address: Annotated[bytes, CborKey(7)]
+    ip_addresses: Annotated[list[ipaddress.IPv4Address], CborKey(8)]
 
 
 @dataclass
 class GetDeviceStatusResult:
-    uptime: int = cbor_field(0)
-    reboot_count: int = cbor_field(1)
-    reset_cause: int = cbor_field(2)
+    uptime: Annotated[int, CborKey(0)]
+    reboot_count: Annotated[int, CborKey(1)]
+    reset_cause: Annotated[int, CborKey(2)]
 
 
 @dataclass
 class GetFirmwareInfoResult:
-    dfu_status: int = cbor_field(0)
-    app_version: int = cbor_field(1)
-    app_build_version: str = cbor_field(2)
-    net_version: int = cbor_field(3)
-    net_build_version: str = cbor_field(4)
+    dfu_status: Annotated[int, CborKey(0)]
+    app_version: Annotated[int, CborKey(1)]
+    app_build_version: Annotated[str, CborKey(2)]
+    net_version: Annotated[int, CborKey(3)]
+    net_build_version: Annotated[str, CborKey(4)]
 
 
 @dataclass
 class GetPtpStatusResult:
-    port_state: str = cbor_field(0)
-    offset: int = cbor_field(1)
-    delay: int = cbor_field(2)
-    offset_histogram: list[int] = cbor_field(3)
+    port_state: Annotated[str, CborKey(0)]
+    offset: Annotated[int, CborKey(1)]
+    delay: Annotated[int, CborKey(2)]
+    offset_histogram: Annotated[list[int], CborKey(3)]
 
 
 @dataclass
 class DfuPrepareArgs:
-    size: int = cbor_field(0)
+    size: Annotated[int, CborKey(0)]
 
 
 @dataclass
 class DfuWriteArgs:
-    offset: int = cbor_field(0)
-    data: int = cbor_field(1)
+    offset: Annotated[int, CborKey(0)]
+    data: Annotated[int, CborKey(1)]
 
 
 @dataclass
 class DfuApplyArgs:
-    permanent: int = cbor_field(0)
+    permanent: Annotated[int, CborKey(0)]
 
 
 @dataclass
 class SetTimeArgs:
-    time: int = cbor_field(0)
+    time: Annotated[int, CborKey(0)]
 
 
 @dataclass
 class GetTimeResult:
-    time: int = cbor_field(0)
+    time: Annotated[int, CborKey(0)]
 
 
 @dataclass
 class NodeConnectedEvent(Notification):
-    address: BluetoothAddrLE = cbor_field(0)
+    address: Annotated[BluetoothAddrLE, CborKey(0)]
 
 
 @dataclass
 class NodeDisconnectedEvent(Notification):
-    address: BluetoothAddrLE = cbor_field(0)
+    address: Annotated[BluetoothAddrLE, CborKey(0)]
 
 
 @dataclass
 class NodeServiceDiscoveredEvent(Notification):
-    address: BluetoothAddrLE = cbor_field(0)
-    uuid: UUID = cbor_field(1)
+    address: Annotated[BluetoothAddrLE, CborKey(0)]
+    uuid: Annotated[UUID, CborKey(1)]
 
 
 @dataclass
 class AVSSReportNotifiedEvent(Notification):
-    address: BluetoothAddrLE = cbor_field(0)
-    value: bytes = cbor_field(1)
+    address: Annotated[BluetoothAddrLE, CborKey(0)]
+    value: Annotated[bytes, CborKey(1)]
 
 
 @dataclass
 class AVSSProgramNotifiedEvent(Notification):
-    address: BluetoothAddrLE = cbor_field(0)
-    value: bytes = cbor_field(1)
+    address: Annotated[BluetoothAddrLE, CborKey(0)]
+    value: Annotated[bytes, CborKey(1)]
 
 
 @dataclass
 class ScanNodesReceivedEvent(Notification):
-    address: BluetoothAddrLE = cbor_field(0)
-    rssi: int = cbor_field(1)
-    data: bytes = cbor_field(2)
+    address: Annotated[BluetoothAddrLE, CborKey(0)]
+    rssi: Annotated[int, CborKey(1)]
+    data: Annotated[bytes, CborKey(2)]
 
 
 class UnknownNotification(Notification):
