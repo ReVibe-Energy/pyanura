@@ -1,9 +1,10 @@
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from typing import ClassVar
 
 
 class Transport(ABC):
-    _registry: ClassVar[dict[str, type["Transport"]]] = {}
+    _registry: ClassVar[dict[str, Callable[..., "Transport"]]] = {}
 
     def __init_subclass__(cls, transport_type: str, **kwargs):
         super().__init_subclass__(**kwargs)

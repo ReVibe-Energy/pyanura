@@ -28,7 +28,7 @@ class USBTransport(Transport, transport_type="usb"):
         pass
 
     async def read(self):
-        pass
+        return b""
 
     async def close(self):
         pass
