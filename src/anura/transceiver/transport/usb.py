@@ -52,7 +52,7 @@ class USBTransport(Transport, transport_type="usb"):
 
         # Set the configuration. See
         # https://libusb.sourceforge.io/api-1.0/libusb_caveats.html#configsel
-        self.dev.set_configuration()
+        device.set_configuration()
 
         # Get rid of the kernel driver (if there is one)
         await self.loop.run_in_executor(None, self._detach_kernel_driver)
@@ -123,6 +123,8 @@ class USBTransport(Transport, transport_type="usb"):
         return device_list
 
     def _detach_kernel_driver(self):
+        assert self.dev is not None, "Not connected"
+
         # These operations are not available on Windows and cause
         # NotImplementedError. See libusb docs:
         # https://libusb.sourceforge.io/api-1.0/group__libusb__dev.html#ga1cabd4660a274f715eeb82de112e0779
@@ -143,6 +145,8 @@ class USBTransport(Transport, transport_type="usb"):
                 return device
 
     async def flush_in_endpoint(self) -> None:
+        assert self.dev is not None, "Not connected"
+
         while True:
             try:
                 _data = await self.loop.run_in_executor(
