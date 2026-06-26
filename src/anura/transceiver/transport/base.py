@@ -1,6 +1,16 @@
 from abc import ABC, abstractmethod
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import ClassVar
+
+
+@dataclass(frozen=True)
+class TransportInfo:
+    """Base for transport-specific connection info.
+
+    Subclasses add fields describing a particular transport's live
+    connection. Transports with nothing extra to report use this base.
+    """
 
 
 class Transport(ABC):
@@ -25,6 +35,10 @@ class Transport(ABC):
     @abstractmethod
     async def close(self) -> None:
         pass
+
+    def get_transport_info(self) -> TransportInfo:
+        """Return transport-specific info about the live connection."""
+        return TransportInfo()
 
     @classmethod
     def create(cls, target_spec: str, *args, **kwargs):

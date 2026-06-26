@@ -1,7 +1,16 @@
 import asyncio
 import struct
+from dataclasses import dataclass
 
-from .base import Transport
+from .base import Transport, TransportInfo
+
+
+@dataclass(frozen=True)
+class TCPTransportInfo(TransportInfo):
+    """Connection info for a TCP transport."""
+
+    #: Resolved remote endpoint ``(host, port)``, or ``None`` if not connected.
+    peer_address: tuple[str, int] | None
 
 
 class TCPTransport(Transport, transport_type="tcp"):
@@ -39,3 +48,14 @@ class TCPTransport(Transport, transport_type="tcp"):
         self._writer.close()
         await self._writer.wait_closed()
         self._writer = None
+
+    def get_transport_info(self) -> TCPTransportInfo:
+        return TCPTransportInfo(peer_address=self._peer_address())
+
+    def _peer_address(self) -> tuple[str, int] | None:
+        if self._writer is None:
+            return None
+        peer = self._writer.get_extra_info("peername")
+        if peer is None:
+            return None
+        return peer[0], peer[1]

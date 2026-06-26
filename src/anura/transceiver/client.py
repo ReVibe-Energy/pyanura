@@ -19,7 +19,7 @@ from .exceptions import (
     TransceiverMethodNotFoundError,
     TransceiverRequestError,
 )
-from .transport import Transport
+from .transport import Transport, TransportInfo
 
 logger = logging.getLogger(__name__)
 
@@ -105,6 +105,14 @@ class TransceiverClient:
 
         # Discover methods automatically
         await self.discover_methods()
+
+    def get_transport_info(self) -> TransportInfo:
+        """Return transport-specific info about the live connection.
+
+        The concrete type depends on the active transport (e.g.
+        ``TCPTransportInfo``); narrow with ``isinstance`` to read its fields.
+        """
+        return self._transport.get_transport_info()
 
     def _on_disconnected(self, task: asyncio.Task):
         assert task is self._connection_task
