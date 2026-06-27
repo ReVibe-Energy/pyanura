@@ -1,33 +1,76 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
-dynamic = ["version"]
 name = "pyanura"
+description = "Python library for communicating with ReVibe Anura sensors and transceivers."
+readme = "README.md"
 requires-python = ">=3.11"
+dynamic = ["version"]
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [
+    { name = "ReVibe Energy AB" },
+]
+keywords = ["anura", "revibe", "sensor", "transceiver", "bluetooth", "ble", "iot"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Communications",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
 dependencies = [
     "cbor2>=5.7.1",
 ]
+
+[project.urls]
+Homepage = "https://github.com/ReVibe-Energy/pyanura"
+Source = "https://github.com/ReVibe-Energy/pyanura"
+Issues = "https://github.com/ReVibe-Energy/pyanura/issues"
+Documentation = "https://docs.revibeenergy.com/"
 
 [project.optional-dependencies]
 usb = [
     "pyusb>=1.3.1",
 ]
-cli = [
+ble = [
     "bleak>=1.1.1",
-    "click>=8.3.1",
-    "pyusb>=1.3.1",
-    "zeroconf>=0.148.0",
 ]
-
-[project.scripts]
-anura = "anura.cli:anura_cli"
-
-[build-system]
-requires = ["setuptools>=61.0","setuptools-scm"]
-build-backend = "setuptools.build_meta"
-
-[tool.setuptools_scm]
 
 [dependency-groups]
 dev = [
+    "packaging>=26.0",
+    "pyright>=1.1.411",
     "pytest>=9.0.1",
+    "ruff>=0.15.13",
 ]
 
+[tool.hatch.build.targets.wheel]
+packages = ["src/anura"]
+
+[tool.hatch.version]
+path = "VERSION"
+pattern = "(?P<version>.+)"
+
+[tool.uv.workspace]
+members = ["packages/pyanura-cli"]
+
+[tool.pyright]
+include = ["src"]
+# Check against the lowest supported runtime so we don't lean on newer syntax.
+pythonVersion = "3.11"
+typeCheckingMode = "standard"
+
+[tool.ruff]
+extend-exclude = ["scripts/reltool.py"]
+
+[tool.ruff.lint]
+extend-select = ["I", "B", "UP", "RUF"]

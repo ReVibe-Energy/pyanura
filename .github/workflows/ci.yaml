@@ -2,16 +2,29 @@ name: CI
 
 on:
   push:
-    branches:
-      - "*"
-    tags:
-      - "v*"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+
+      - name: Install dependencies
+        run: uv sync --locked --dev
+
+      - name: Run ruff
+        run: uv run ruff check
+
   test:
     name: Test (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
@@ -24,15 +37,14 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-tags: true
           fetch-depth: 0
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
-          enable-cache: true
           python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
@@ -41,6 +53,44 @@ jobs:
       - name: Run tests
         run: uv run pytest -v
 
+  typecheck-examples:
+    name: Type check examples
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+
+      - name: Type check examples
+        run: |
+          for dir in examples/*/; do
+            uv run --project "$dir" --group dev ty check "$dir"
+          done
+
+  typecheck:
+    name: Type check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+
+      - name: Type check without optional backends
+        run: |
+          uv sync --locked --dev
+          uv run pyright
+
+      - name: Type check with optional backends
+        run: |
+          uv sync --locked --all-extras --dev
+          uv run --all-extras pyright
+
   build:
     name: Build package
     runs-on: ubuntu-latest
@@ -48,13 +98,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-tags: true
           fetch-depth: 0
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
 
-      - name: Build package
-        run: uv build
+      - name: Build packages
+        run: uv build --all-packages

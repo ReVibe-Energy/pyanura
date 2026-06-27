@@ -1,14 +1,15 @@
 from dataclasses import dataclass
+from typing import Annotated
 
 import pytest
 
-from anura.marshalling import cbor_field, unmarshal
+from anura.marshalling import CborKey, unmarshal
 
 
 def test_unmarshal_dataclass_unknown_key():
     @dataclass
     class ClassWithAField:
-        field_with_key_0: int = cbor_field(0)
+        field_with_key_0: Annotated[int, CborKey(0)]
 
     # An unknown key (1) is present
     unmarshal(ClassWithAField, {0: 0, 1: 0})
@@ -21,13 +22,13 @@ def test_unmarshal_field_order_independence():
 
     @dataclass
     class FooBar:
-        foo: int = cbor_field(0)
-        bar: bool = cbor_field(1)
+        foo: Annotated[int, CborKey(0)]
+        bar: Annotated[bool, CborKey(1)]
 
     @dataclass
     class BarFoo:
-        bar: bool = cbor_field(1)
-        foo: int = cbor_field(0)
+        bar: Annotated[bool, CborKey(1)]
+        foo: Annotated[int, CborKey(0)]
 
     test_data = {
         0: 100,
@@ -59,7 +60,7 @@ def test_unmarshal_dataclass_requires_dict():
 def test_unmarshal_dataclass_optional_field():
     @dataclass
     class ClassWithOptionalField:
-        optional: int = cbor_field(0, default=100)
+        optional: Annotated[int, CborKey(0)] = 100
 
     # Optional field gets default value when unspecified.
     assert unmarshal(ClassWithOptionalField, {}).optional == 100
@@ -71,7 +72,7 @@ def test_unmarshal_dataclass_optional_field():
 def test_unmarshal_dataclass_required_field():
     @dataclass
     class ClassWithRequiredField:
-        required: int = cbor_field(0)
+        required: Annotated[int, CborKey(0)]
 
     # No error
     unmarshal(ClassWithRequiredField, {0: 100})
@@ -84,12 +85,12 @@ def test_unmarshal_dataclass_recursive():
 
     @dataclass
     class InnerClass:
-        a:int = cbor_field(0)
+        a: Annotated[int, CborKey(0)]
 
     @dataclass
     class OuterClass:
-        inner:InnerClass = cbor_field(0)
+        inner: Annotated[InnerClass, CborKey(0)]
 
-    outer = unmarshal(OuterClass,{0:{0:1}})
+    outer = unmarshal(OuterClass, {0: {0: 1}})
 
-    assert(isinstance(outer.inner,InnerClass))
+    assert isinstance(outer.inner, InnerClass)

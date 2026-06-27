@@ -1,0 +1,20 @@
+[project]
+name = "collect-files"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "pyanura",
+    "numpy",
+]
+
+[tool.uv.sources]
+# Resolve pyanura from the parent checkout, editable, for in-tree development.
+# To run this example standalone (without a pyanura checkout above), remove
+# this section and configure a [[tool.uv.index]] pointing at the public
+# package index — see the top-level README for the URL.
+pyanura = { path = "../..", editable = true }
+
+[dependency-groups]
+dev = [
+    "ty",
+]
