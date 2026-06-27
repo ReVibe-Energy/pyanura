@@ -70,8 +70,17 @@ class BleakAVSSTransport(AVSSTransport):
             await self._client.start_notify(
                 avss.uuids.ProgramCharacteristicUuid, program_notify
             )
-        except BleakError as e:
-            raise AVSSConnectionError(str(e)) from e
+        except BaseException as e:
+            # Tear down on any failure so close() can't hang on a half-open
+            # client or leak a live connection.
+            try:
+                await self._client.disconnect()
+            except BleakError:
+                pass
+            self._client = None
+            if isinstance(e, BleakError):
+                raise AVSSConnectionError(str(e)) from e
+            raise
 
     async def close(self) -> None:
         """Disconnect from the BLE device."""
