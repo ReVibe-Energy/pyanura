@@ -119,6 +119,10 @@ class SnippetReport:
     range_: Annotated[int, CborKey(2)]
     samples: Annotated[dict[int, bytes], CborKey(3)]
     is_synced: Annotated[bool, CborKey(4)]
+    duration: Annotated[int | None, CborKey(5)] = None
+    start_time_monotonic: Annotated[int | None, CborKey(6)] = None
+    duration_monotonic: Annotated[int | None, CborKey(7)] = None
+    transmission_offset: Annotated[int | None, CborKey(8)] = None
 
 
 @dataclass
@@ -130,6 +134,7 @@ class CaptureReport:
     duration: Annotated[int, CborKey(5)]
     start_time_monotonic: Annotated[int, CborKey(6)]
     duration_monotonic: Annotated[int, CborKey(7)]
+    transmission_offset: Annotated[int | None, CborKey(8)] = None
 
 
 @dataclass
