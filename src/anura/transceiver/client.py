@@ -1,5 +1,4 @@
 import asyncio
-import logging
 from collections.abc import AsyncIterator, Callable, Generator
 from contextlib import contextmanager
 from typing import (
@@ -20,8 +19,6 @@ from .exceptions import (
     TransceiverRequestError,
 )
 from .transport import Transport
-
-logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
@@ -277,18 +274,28 @@ class TransceiverClient:
         args = models.DfuWriteArgs(offset=offset, data=data)
         return await self.request("dfu_write", args)
 
-    async def dfu_write_image(self, image: bytes, chunk_size=300):
+    async def dfu_write_image(
+        self,
+        image: bytes,
+        chunk_size: int = 300,
+        progress: Callable[[int], None] | None = None,
+    ):
+        """Write a firmware image in chunks, optionally reporting progress.
+
+        Args:
+            image:      Raw firmware binary (after ``dfu_prepare`` was called).
+            chunk_size: Number of bytes per ``dfu_write`` request.
+            progress:   Optional callback invoked with the cumulative number of
+                        bytes written so far, after each chunk.
+        """
         offset = 0
-        while offset < len(image):
-            if offset + chunk_size < len(image):
-                chunk = image[offset : (offset + chunk_size)]
-            else:
-                chunk = image[offset:]
-            logger.info(
-                f"Writing image offset={offset} ({int(offset / len(image) * 100)}%)"
-            )
-            await self.dfu_write(offset, chunk)
-            offset += len(chunk)
+        total = len(image)
+        while offset < total:
+            end = min(offset + chunk_size, total)
+            await self.dfu_write(offset, image[offset:end])
+            offset = end
+            if progress is not None:
+                progress(offset)
 
     async def dfu_apply(self, permanent=False):
         if permanent:

@@ -13,6 +13,8 @@ from anura.transceiver.models import BluetoothAddrLE, ScanNodesReceivedEvent
 from anura.transceiver.proxy_avss_client import ProxyAVSSClient
 from anura.transceiver.transport import USBTransport
 
+from .progress import upload_progress
+
 logger = logging.getLogger(__name__)
 
 
@@ -270,7 +272,10 @@ def upgrade(host, port, file, confirm_only):
             if not confirm_only:
                 async with TransceiverClient(host, port) as trx:
                     await trx.dfu_prepare(size=len(image))
-                    await trx.dfu_write_image(image)
+                    with upload_progress(
+                        len(image), "Uploading firmware"
+                    ) as on_progress:
+                        await trx.dfu_write_image(image, progress=on_progress)
                     await trx.dfu_apply()
 
                 click.echo(
