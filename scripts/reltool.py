@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.10"
+# dependencies = [
+#     "packaging>=26.0",
+# ]
+# ///
 """
 reltool.py — A release management tool for Python projects.
 
@@ -47,7 +53,7 @@ def _git(
 ) -> subprocess.CompletedProcess:
     """Run a git command.  Output is captured unless capture=False."""
     return subprocess.run(
-        ["git"] + args,
+        ["git", *args],
         capture_output=capture,
         text=True,
         check=check,
@@ -65,11 +71,11 @@ def git_do(args: list[str], dry_run: bool, description: str = "") -> None:
     In dry-run mode the command is only printed, never executed.
     Exits with a non-zero status on failure.
     """
-    cmd_str = shlex.join(["git"] + args)
+    cmd_str = shlex.join(["git", *args])
     prefix = "[dry-run] " if dry_run else ""
     print(f"  {prefix}$ {cmd_str}")
     if not dry_run:
-        result = subprocess.run(["git"] + args, text=True)
+        result = subprocess.run(["git", *args], text=True)
         if result.returncode != 0:
             label = description or f"git {args[0]}"
             print(f"ERROR: {label} failed", file=sys.stderr)
@@ -182,7 +188,7 @@ def bump_part(
         else:
             ver = ver.__replace__(pre=(part, 1))
     else:
-        assert False, "unreachable"
+        raise AssertionError("unreachable")
 
     return make_dev_version(ver)
 
@@ -408,7 +414,8 @@ def cmd_validate_version(args: argparse.Namespace) -> None:
         # UNTAGGED / DEVELOPMENT BUILD RULES
         if ver.dev != 0:
             print(
-                "::error::Development builds (untagged) must have 'dev0' in VERSION file"
+                "::error::Development builds (untagged) must have 'dev0' in "
+                "VERSION file"
             )
             sys.exit(1)
 
@@ -548,18 +555,21 @@ def cmd_create_release_branch(args: argparse.Namespace) -> None:
         sys.exit(1)
     print("  ✓ Version is a dev version")
 
-    # TODO: Relax this requirement to only check that it's not an rc
-    if is_pre_release(ver):
+    # A release branch may be created from a plain dev version or from an
+    # alpha/beta dev version (e.g. 1.0a5.dev0+local on main). An rc is rejected,
+    # since an rc already lives on a release branch.
+    if ver.pre is not None and ver.pre[0] == "rc":
         print(
-            f"ERROR: VERSION at '{ref}' ({ver}) is a pre-release. "
-            "Cannot create a new release branch from a pre-release state.",
+            f"ERROR: VERSION at '{ref}' ({ver}) is a release candidate. "
+            "Cannot create a new release branch from an rc state "
+            "(it is already part of a release cycle).",
             file=sys.stderr,
         )
         sys.exit(1)
-    print("  ✓ Version is not a pre-release")
+    print("  ✓ Version is not a release candidate")
 
-    # Derive the branch name by stripping dev and local markers
-    clean_ver = ver.__replace__(dev=None, local=None)
+    # Derive the branch name by stripping pre-release, dev and local markers
+    clean_ver = ver.__replace__(pre=None, dev=None, local=None)
     branch = f"{RELEASE_PREFIX}{clean_ver}"
     print(f"  ✓ Derived branch name: '{branch}'")
 
@@ -656,8 +666,8 @@ def cmd_tag_release(args: argparse.Namespace) -> None:
     else:  # --rc or final
         if not branch.startswith(RELEASE_PREFIX):
             print(
-                f"ERROR: Current branch '{branch}' does not start with '{RELEASE_PREFIX}'. "
-                "Switch to a release/... branch first.",
+                f"ERROR: Current branch '{branch}' does not start with "
+                f"'{RELEASE_PREFIX}'. Switch to a release/... branch first.",
                 file=sys.stderr,
             )
             sys.exit(1)
@@ -764,7 +774,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Three modes (mutually exclusive):\n"
             "  update-version 2.2          set base version  → 2.2.dev0+local\n"
             "  update-version --bump PART  bump a component  → e.g. 2.0.dev0+local\n"
-            "  update-version --snapshot   stamp a snapshot, or no-op on a clean release tag"
+            "  update-version --snapshot   stamp a snapshot, or no-op on a clean release tag"  # noqa: E501
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -865,7 +875,10 @@ def build_parser() -> argparse.ArgumentParser:
         "ref",
         nargs="?",
         default=None,
-        help="Git ref to branch from (commit hash, branch name, tag). Defaults to HEAD.",
+        help=(
+            "Git ref to branch from (commit hash, branch name, tag). "
+            "Defaults to HEAD."
+        ),
     )
     p_branch.add_argument(
         "--push",
@@ -892,7 +905,10 @@ def build_parser() -> argparse.ArgumentParser:
     _pre_group.add_argument(
         "--alpha",
         action="store_true",
-        help="Create an alpha pre-release (bumps alpha counter, not on release/ branch).",
+        help=(
+            "Create an alpha pre-release (bumps alpha counter, not on "
+            "release/ branch)."
+        ),
     )
     _pre_group.add_argument(
         "--beta",
