@@ -523,7 +523,20 @@ class AVSSClient:
         if self._program_nack_queue:
             self._program_nack_queue.put_nowait(offset)
 
-    async def program_transfer(self, binary, att_mtu=243):
+    async def program_transfer(
+        self,
+        binary,
+        att_mtu=243,
+        progress: Callable[[int], None] | None = None,
+    ):
+        """Transfer a firmware binary to a node, optionally reporting progress.
+
+        Args:
+            binary:   Raw firmware binary (after ``prepare_upgrade`` was called).
+            att_mtu:  ATT MTU for the connection.
+            progress: Optional callback invoked with the cumulative number of
+                      bytes written so far, after each chunk.
+        """
         # Write without response is limited to ATT MTU - 3 and
         # we use 4 bytes for offset.
         chunk_size = (att_mtu - 3) - 4
@@ -558,7 +571,8 @@ class AVSSClient:
                 else:
                     req.extend(binary[offset:])
                 offset = end
-                logger.info(
-                    f"Program {offset}/{len(binary)} ({offset * 100 / len(binary):.0f} %)"
-                )
                 await self._transport.program_write(bytes(req))
+                if progress is not None:
+                    # offset can overshoot on the final chunk since it is not
+                    # clamped above; report the true byte count.
+                    progress(min(offset, len(binary)))

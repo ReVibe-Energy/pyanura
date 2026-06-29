@@ -17,6 +17,7 @@ from anura.transceiver.client import TransceiverClient
 from anura.transceiver.models import BluetoothAddrLE
 from anura.transceiver.proxy_avss_client import ProxyAVSSClient
 
+from .progress import upload_progress
 from .session import SessionFile
 
 logger = logging.getLogger(__name__)
@@ -123,7 +124,10 @@ def upgrade(transceiver, transceiver_port, address, file, confirm_only):
             if not confirm_only:
                 async with BleakAVSSClient(device) as client:
                     await client.prepare_upgrade(image_index, len(binary))
-                    await client.program_transfer(binary)
+                    with upload_progress(
+                        len(binary), "Uploading firmware"
+                    ) as on_progress:
+                        await client.program_transfer(binary, progress=on_progress)
                     await client.apply_upgrade()
 
                 click.echo("Waiting for node to reboot with new firmware image...")
@@ -156,7 +160,12 @@ def upgrade(transceiver, transceiver_port, address, file, confirm_only):
                 if not confirm_only:
                     async with ProxyAVSSClient(trx_client, address) as client:
                         await client.prepare_upgrade(image_index, len(binary))
-                        await client.program_transfer(binary)
+                        with upload_progress(
+                            len(binary), "Uploading firmware"
+                        ) as on_progress:
+                            await client.program_transfer(
+                                binary, progress=on_progress
+                            )
                         await client.apply_upgrade()
 
                     click.echo("Waiting for node to reboot with new firmware image...")
