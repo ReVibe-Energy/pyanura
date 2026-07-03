@@ -13,6 +13,10 @@ class AVSSTransportError(AVSSError):
     """Raised when there has been an error in the underlying transport."""
 
 
+class AVSSProgramTransferError(AVSSError):
+    """Raised when a firmware program transfer fails."""
+
+
 class AVSSProtocolError(AVSSError):
     """Raised when a protocol violation has occurred."""
 

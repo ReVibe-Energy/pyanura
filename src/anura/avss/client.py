@@ -1,7 +1,9 @@
 import asyncio
+import hashlib
 import logging
 import struct
 import time
+from collections import deque
 from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -21,6 +23,8 @@ from anura.marshalling import marshal, unmarshal
 from .exceptions import (
     AVSSConnectionError,
     AVSSControlPointError,
+    AVSSOpCodeUnsupportedError,
+    AVSSProgramTransferError,
     AVSSProtocolError,
     AVSSTransportError,
 )
@@ -36,6 +40,8 @@ from .models import (
     GetVersionResponse,
     HealthReport,
     PrepareUpgradeArgs,
+    PrepareUpgradeV2Args,
+    PrepareUpgradeV2Response,
     ReportAggregatesArgs,
     ReportCaptureArgs,
     ReportHealthArgs,
@@ -70,6 +76,13 @@ _ParsedReport: TypeAlias = (
 SEGMENT_FIRST = 0x80
 SEGMENT_LAST = 0x40
 SEGMENT_NUMBER_MASK = 0x3F
+
+PROGRAM_OFFSET_ABORT = 0xFFFFFFFF
+# A windowed transfer with an exhausted window and no notification for this
+# long rewinds to the acked offset and retransmits, in case an ack was lost.
+PROGRAM_STALL_TIMEOUT = 2.0
+# Consecutive stalls without progress before the transfer is failed.
+PROGRAM_STALL_LIMIT = 15
 
 
 @dataclass
@@ -157,7 +170,7 @@ class AVSSClient:
         self._report_buf = None
         self._on_report_callbacks = []
         self._program_lock = asyncio.Lock()
-        self._program_nack_queue = None
+        self._program_notify_queue: asyncio.Queue[bytes] | None = None
         self._control_point_lock = asyncio.Lock()
 
         self.control_point_timeout: float | None = 5.0
@@ -428,6 +441,43 @@ class AVSSClient:
         arg = PrepareUpgradeArgs(image=image, size=size)
         return await self._void_request(OpCode.PREPARE_UPGRADE, arg, timeout=timeout)
 
+    async def prepare_upgrade_v2(
+        self, image: int, size: int, digest: bytes, timeout=30.0
+    ) -> PrepareUpgradeV2Response:
+        """Prepare the node for a windowed firmware transfer.
+
+        Combines the upgrade preparation of ``prepare_upgrade`` with the
+        negotiation of the transfer flow-control parameters.
+
+        The digest identifies the transfer: when it matches a transfer
+        already in progress on the node, the transfer is resumed and
+        ``response.offset`` holds the offset to resume writing from.
+
+        Program notifications must be enabled before issuing this command.
+
+        Args:
+            image:   Index of the firmware image to be uploaded.
+            size:    Size of the firmware image in bytes.
+            digest:  SHA-256 digest of the complete firmware image (32 bytes).
+            timeout: Request timeout; preparing erases the upgrade slot,
+                     which can take several seconds.
+
+        Raises:
+            AVSSOpCodeUnsupportedError: If the node firmware only supports
+                the legacy unsynchronized transfer.
+        """
+        arg = PrepareUpgradeV2Args(image=image, size=size, digest=digest)
+        resp_opcode, resp_payload = await self._request(
+            OpCode.PREPARE_UPGRADE_V2, arg, timeout=timeout
+        )
+        if resp_opcode != OpCode.PREPARE_UPGRADE_V2_RESPONSE:
+            raise AVSSProtocolError.unexpected_response(
+                OpCode.PREPARE_UPGRADE_V2,
+                resp_opcode,
+                expected=OpCode.PREPARE_UPGRADE_V2_RESPONSE,
+            )
+        return unmarshal(PrepareUpgradeV2Response, cbor2.loads(resp_payload))
+
     async def apply_upgrade(self):
         arg = ApplyUpgradeArgs()
         return await self._void_request(OpCode.APPLY_UPGRADE, arg)
@@ -519,60 +569,208 @@ class AVSSClient:
         return await self._void_request(OpCode.TRIGGER_CAPTURE, arg)
 
     def _on_program_notify(self, data):
-        (offset,) = struct.unpack("<L", data)
-        if self._program_nack_queue:
-            self._program_nack_queue.put_nowait(offset)
+        if self._program_notify_queue:
+            self._program_notify_queue.put_nowait(bytes(data))
 
     async def program_transfer(
         self,
         binary,
+        *,
+        image: int,
         att_mtu=243,
         progress: Callable[[int], None] | None = None,
+        prepare_timeout=30.0,
     ):
-        """Transfer a firmware binary to a node, optionally reporting progress.
+        """Prepare and transfer a firmware binary to a node.
+
+        Prepares the upgrade and runs a windowed transfer with flow control
+        in one flow (Prepare Upgrade V2), falling back to the legacy
+        Prepare Upgrade command and the unsynchronized transfer on node
+        firmware without windowed transfer support. A separate
+        ``prepare_upgrade`` call is not needed.
+
+        An interrupted windowed transfer of the same binary is resumed from
+        the first byte the node has not received, rather than restarted.
 
         Args:
-            binary:   Raw firmware binary (after ``prepare_upgrade`` was called).
+            binary:   Raw firmware binary.
+            image:    Index of the firmware image to be uploaded.
             att_mtu:  ATT MTU for the connection.
             progress: Optional callback invoked with the cumulative number of
-                      bytes written so far, after each chunk.
+                      bytes transferred so far. For a windowed transfer this
+                      is the number of bytes acknowledged by the node, which
+                      starts beyond zero when a transfer is resumed.
+            prepare_timeout: Timeout for the prepare step, which erases the
+                      upgrade slot and can take several seconds.
+
+        Raises:
+            AVSSProgramTransferError: If a windowed transfer is aborted by
+                the node or stalls without making progress.
         """
         # Write without response is limited to ATT MTU - 3 and
         # we use 4 bytes for offset.
         chunk_size = (att_mtu - 3) - 4
-        offset = 0
 
         async with self._program_lock:
-            self._program_nack_queue = asyncio.Queue()
-
-            while offset < len(binary):
+            self._program_notify_queue = asyncio.Queue()
+            try:
                 try:
-                    while True:
-                        # Wait a short while for a NACK message to indicate the
-                        # node is not in sync with our writes.
-                        offset = await asyncio.wait_for(
-                            self._program_nack_queue.get(), timeout=0.04
-                        )
-                        if offset == 0xFFFFFFFF:
-                            raise RuntimeError("Program transfer aborted")
-                        # We received a NACK so we wait a short while to see
-                        # if any more NACKs turn up before we continue writing.
-                        # This aids re-synchronization if multiple write requests
-                        # are queued .
-                        await asyncio.sleep(0.1)
-                except TimeoutError:
-                    # No NACK was received after 40 ms of waiting so we assume
-                    # the write operation is on track.
-                    pass
-                end = offset + chunk_size
-                req = bytearray(struct.pack("<L", offset))
-                if end < len(binary):
-                    req.extend(binary[offset:end])
-                else:
-                    req.extend(binary[offset:])
-                offset = end
-                await self._transport.program_write(bytes(req))
+                    resp = await self.prepare_upgrade_v2(
+                        image,
+                        len(binary),
+                        hashlib.sha256(binary).digest(),
+                        timeout=prepare_timeout,
+                    )
+                except AVSSOpCodeUnsupportedError:
+                    logger.info(
+                        "Windowed transfer not supported by node, "
+                        "using unsynchronized transfer"
+                    )
+                    await self.prepare_upgrade(
+                        image, len(binary), timeout=prepare_timeout
+                    )
+                    await self._program_transfer_unsynchronized(
+                        binary, chunk_size, progress
+                    )
+                    return
+
+                if resp.offset > len(binary):
+                    raise AVSSProtocolError(
+                        f"Resume offset {resp.offset} beyond image size"
+                    )
+                if resp.offset > 0:
+                    logger.info("Resuming transfer at offset %d", resp.offset)
+
+                await self._program_transfer_windowed(
+                    binary,
+                    min(chunk_size, resp.max_chunk_size),
+                    resp.window,
+                    resp.offset,
+                    progress,
+                )
+            finally:
+                self._program_notify_queue = None
+
+    async def _program_transfer_windowed(
+        self,
+        binary: bytes,
+        chunk_size: int,
+        window: int,
+        start: int,
+        progress: Callable[[int], None] | None,
+    ):
+        """Windowed transfer loop.
+
+        Writes chunks while no more than ``window`` of them are outstanding,
+        retiring outstanding chunks as Transfer Status notifications advance
+        the acked offset. A notification whose acked offset does not advance
+        requests a rewind. The node discards retransmitted chunks it has
+        already received, so rewinding to the acked offset is always safe.
+        """
+        total = len(binary)
+        acked = start
+        prev_acked: int | None = None
+        send_pos = start
+        # End offsets of writes not yet covered by the acked offset,
+        # in send order.
+        outstanding: deque[int] = deque()
+        stalls = 0
+
+        if progress is not None and acked > 0:
+            progress(acked)
+
+        while acked < total:
+            # Send chunks up to the outstanding-chunk allowance.
+            while send_pos < total and len(outstanding) < window:
+                end = min(send_pos + chunk_size, total)
+                req = struct.pack("<L", send_pos) + binary[send_pos:end]
+                await self._transport.program_write(req)
+                outstanding.append(end)
+                send_pos = end
+
+            assert self._program_notify_queue is not None
+            try:
+                data = await asyncio.wait_for(
+                    self._program_notify_queue.get(), timeout=PROGRAM_STALL_TIMEOUT
+                )
+            except TimeoutError:
+                if self._transport_closed.is_set():
+                    raise AVSSConnectionError(
+                        "Disconnected during program transfer"
+                    ) from None
+                stalls += 1
+                if stalls >= PROGRAM_STALL_LIMIT:
+                    raise AVSSProgramTransferError("Program transfer stalled") from None
+                # An ack may have been lost; rewind and retransmit. The node
+                # acknowledges duplicates, resynchronizing us forward.
+                send_pos = acked
+                outstanding.clear()
+                continue
+
+            if len(data) != 5:
+                raise AVSSProtocolError(
+                    f"Malformed transfer status notification of {len(data)} bytes"
+                )
+            new_acked, window = struct.unpack("<LB", data)
+
+            if new_acked == PROGRAM_OFFSET_ABORT:
+                raise AVSSProgramTransferError("Program transfer aborted by node")
+
+            if new_acked == prev_acked:
+                # No progress since the previous notification: the node
+                # requests a rewind to the acked offset.
+                send_pos = new_acked
+                outstanding.clear()
+            prev_acked = new_acked
+
+            if new_acked > acked:
+                acked = new_acked
+                while outstanding and outstanding[0] <= acked:
+                    outstanding.popleft()
+                send_pos = max(send_pos, acked)
+                stalls = 0
                 if progress is not None:
-                    # offset can overshoot on the final chunk since it is not
-                    # clamped above; report the true byte count.
-                    progress(min(offset, len(binary)))
+                    progress(acked)
+
+    async def _program_transfer_unsynchronized(
+        self,
+        binary: bytes,
+        chunk_size: int,
+        progress: Callable[[int], None] | None,
+    ):
+        """Legacy transfer loop for nodes without windowed transfer support."""
+        offset = 0
+
+        while offset < len(binary):
+            try:
+                while True:
+                    # Wait a short while for a NACK message to indicate the
+                    # node is not in sync with our writes.
+                    assert self._program_notify_queue is not None
+                    data = await asyncio.wait_for(
+                        self._program_notify_queue.get(), timeout=0.04
+                    )
+                    (offset,) = struct.unpack("<L", data)
+                    if offset == PROGRAM_OFFSET_ABORT:
+                        raise RuntimeError("Program transfer aborted")
+                    # We received a NACK so we wait a short while to see
+                    # if any more NACKs turn up before we continue writing.
+                    # This aids re-synchronization if multiple write requests
+                    # are queued .
+                    await asyncio.sleep(0.1)
+            except TimeoutError:
+                # No NACK was received after 40 ms of waiting so we assume
+                # the write operation is on track.
+                pass
+            end = offset + chunk_size
+            req = bytearray(struct.pack("<L", offset))
+            if end < len(binary):
+                req.extend(binary[offset:end])
+            else:
+                req.extend(binary[offset:])
+            offset = end
+            await self._transport.program_write(bytes(req))
+            if progress is not None:
+                # offset can overshoot on the final chunk since it is not
+                # clamped above; report the true byte count.
+                progress(min(offset, len(binary)))

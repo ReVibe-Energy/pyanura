@@ -9,6 +9,7 @@ from .exceptions import (
     AVSSControlPointError,
     AVSSError,
     AVSSOpCodeUnsupportedError,
+    AVSSProgramTransferError,
     AVSSProtocolError,
     AVSSTransportError,
 )
@@ -29,6 +30,7 @@ __all__ = [
     "AVSSControlPointError",
     "AVSSError",
     "AVSSOpCodeUnsupportedError",
+    "AVSSProgramTransferError",
     "AVSSProtocolError",
     "AVSSTransportError",
     "AggregatedValuesReport",

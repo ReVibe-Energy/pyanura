@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Support for the AVSS windowed DFU transfer (Prepare Upgrade V2), adding
+  flow control and resumption of interrupted transfers.
+  `AVSSClient.program_transfer` uses it when the node supports it and falls
+  back to the legacy transfer otherwise.
+- `AVSSClient.prepare_upgrade_v2`, the
+  `PrepareUpgradeV2Args`/`PrepareUpgradeV2Response` models, and
+  `AVSSProgramTransferError`.
+
+### Breaking
+- `AVSSClient.program_transfer` now prepares the upgrade itself and its
+  parameters are keyword-only, with a new required `image` parameter. Drop
+  any preceding `prepare_upgrade` call.
 - `SnippetReport` and `CaptureReport` now decode the timing fields added in firmware v26.4.0 (`duration`, `start_time_monotonic`, `duration_monotonic`, `transmission_offset`); all are optional, so reports from older firmware still decode.
 - Optional `progress` callback on `TransceiverClient.dfu_write_image` and `AVSSClient.program_transfer`, invoked with the cumulative byte count after each chunk so embedders can drive upload-progress UI without re-implementing the transfer loop.
 - `pyanura-cli` now shows a progress bar while uploading firmware images (`transceiver upgrade` and `avss upgrade`), driven by the new `progress` callbacks.
