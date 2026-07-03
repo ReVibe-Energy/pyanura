@@ -33,6 +33,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The internal `cbor_field` helper, superseded by `Annotated[..., CborKey(n)]` and `register_codec`.
 
 ### Fixed
+- The legacy AVSS firmware transfer no longer reports completion while the
+  node is still missing data, which made the subsequent Apply Upgrade fail.
+  The transfer now confirms completion by requiring NACK silence after the
+  final chunk and re-sending it as a probe, recovering both late NACKs and a
+  silently dropped final chunk.
 - `DfuWriteArgs.data` is now correctly typed as `bytes` (it was previously annotated `int`).
 - pyanura now type-checks cleanly under pyright; corrected latent `Optional`-narrowing and return-type annotations in the USB and TCP transports.
 

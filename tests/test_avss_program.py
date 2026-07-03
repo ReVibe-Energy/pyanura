@@ -381,7 +381,8 @@ def test_windowed_transfer_different_image_restarts():
     assert bytes(transport.received) == binary_b
 
 
-def test_legacy_fallback_transfer_completes():
+def test_legacy_fallback_transfer_completes(monkeypatch):
+    monkeypatch.setattr("anura.avss.client.PROGRAM_LEGACY_SETTLE_TIMEOUT", 0.05)
     binary = make_binary(5 * CHUNK + 3)
     transport = FakeSensorTransport(len(binary), windowed_supported=False)
     client = AVSSClient(transport)
@@ -393,3 +394,34 @@ def test_legacy_fallback_transfer_completes():
     assert not transport.windowed
     assert bytes(transport.received) == binary
     assert progress[-1] == len(binary)
+
+
+def test_legacy_transfer_recovers_from_late_nack(monkeypatch):
+    monkeypatch.setattr("anura.avss.client.PROGRAM_LEGACY_SETTLE_TIMEOUT", 0.05)
+    binary = make_binary(6 * CHUNK)
+    transport = FakeSensorTransport(len(binary), windowed_supported=False)
+    # Drop the second-to-last chunk: the NACK it provokes is only generated
+    # by the final write, after which the old client stopped listening and
+    # proceeded to apply an incomplete transfer.
+    transport.drop_chunks = {5}
+    client = AVSSClient(transport)
+
+    run(client.program_transfer(binary, image=0))
+
+    assert transport.ready
+    assert bytes(transport.received) == binary
+
+
+def test_legacy_transfer_recovers_from_dropped_final_chunk(monkeypatch):
+    monkeypatch.setattr("anura.avss.client.PROGRAM_LEGACY_SETTLE_TIMEOUT", 0.05)
+    binary = make_binary(6 * CHUNK)
+    transport = FakeSensorTransport(len(binary), windowed_supported=False)
+    # Drop the final chunk: no NACK is ever generated, so only the
+    # completion probe can heal the transfer.
+    transport.drop_chunks = {6}
+    client = AVSSClient(transport)
+
+    run(client.program_transfer(binary, image=0))
+
+    assert transport.ready
+    assert bytes(transport.received) == binary

@@ -83,6 +83,13 @@ PROGRAM_OFFSET_ABORT = 0xFFFFFFFF
 PROGRAM_STALL_TIMEOUT = 2.0
 # Consecutive stalls without progress before the transfer is failed.
 PROGRAM_STALL_LIMIT = 15
+# A legacy transfer requires this much NACK silence after the final chunk
+# before it is considered complete: a NACK can arrive well after the write
+# that triggered it.
+PROGRAM_LEGACY_SETTLE_TIMEOUT = 1.0
+# Number of times the final chunk is re-sent as a completion probe during
+# legacy transfer completion confirmation.
+PROGRAM_LEGACY_SETTLE_PROBES = 2
 
 
 @dataclass
@@ -741,36 +748,85 @@ class AVSSClient:
         """Legacy transfer loop for nodes without windowed transfer support."""
         offset = 0
 
-        while offset < len(binary):
+        while True:
+            while offset < len(binary):
+                try:
+                    while True:
+                        # Wait a short while for a NACK message to indicate the
+                        # node is not in sync with our writes.
+                        assert self._program_notify_queue is not None
+                        data = await asyncio.wait_for(
+                            self._program_notify_queue.get(), timeout=0.04
+                        )
+                        offset = self._parse_legacy_nack(data)
+                        # We received a NACK so we wait a short while to see
+                        # if any more NACKs turn up before we continue writing.
+                        # This aids re-synchronization if multiple write requests
+                        # are queued .
+                        await asyncio.sleep(0.1)
+                except TimeoutError:
+                    # No NACK was received after 40 ms of waiting so we assume
+                    # the write operation is on track.
+                    pass
+                end = offset + chunk_size
+                req = bytearray(struct.pack("<L", offset))
+                if end < len(binary):
+                    req.extend(binary[offset:end])
+                else:
+                    req.extend(binary[offset:])
+                offset = end
+                await self._transport.program_write(bytes(req))
+                if progress is not None:
+                    # offset can overshoot on the final chunk since it is not
+                    # clamped above; report the true byte count.
+                    progress(min(offset, len(binary)))
+
+            offset = await self._confirm_unsynchronized_complete(binary, chunk_size)
+            if offset >= len(binary):
+                return
+
+    @staticmethod
+    def _parse_legacy_nack(data: bytes) -> int:
+        (offset,) = struct.unpack("<L", data)
+        if offset == PROGRAM_OFFSET_ABORT:
+            raise RuntimeError("Program transfer aborted")
+        return offset
+
+    async def _confirm_unsynchronized_complete(
+        self, binary: bytes, chunk_size: int
+    ) -> int:
+        """Confirm that the node received the complete image.
+
+        The unsynchronized transfer has no positive acknowledgement, and a
+        NACK can arrive well after the chunk write that triggered it — or
+        never, if the node silently dropped the final chunk. Require a
+        period of NACK silence, then re-send the final chunk as a probe: a
+        node that has completed the transfer drops it silently, while a node
+        still waiting for data responds with a NACK holding the offset to
+        resume from.
+
+        Returns:
+            ``len(binary)`` when the transfer is confirmed complete, or the
+            offset to resume writing from.
+        """
+        total = len(binary)
+        probe_offset = max(0, total - chunk_size)
+        probes_left = PROGRAM_LEGACY_SETTLE_PROBES
+
+        while True:
+            assert self._program_notify_queue is not None
             try:
-                while True:
-                    # Wait a short while for a NACK message to indicate the
-                    # node is not in sync with our writes.
-                    assert self._program_notify_queue is not None
-                    data = await asyncio.wait_for(
-                        self._program_notify_queue.get(), timeout=0.04
-                    )
-                    (offset,) = struct.unpack("<L", data)
-                    if offset == PROGRAM_OFFSET_ABORT:
-                        raise RuntimeError("Program transfer aborted")
-                    # We received a NACK so we wait a short while to see
-                    # if any more NACKs turn up before we continue writing.
-                    # This aids re-synchronization if multiple write requests
-                    # are queued .
-                    await asyncio.sleep(0.1)
+                data = await asyncio.wait_for(
+                    self._program_notify_queue.get(),
+                    timeout=PROGRAM_LEGACY_SETTLE_TIMEOUT,
+                )
             except TimeoutError:
-                # No NACK was received after 40 ms of waiting so we assume
-                # the write operation is on track.
-                pass
-            end = offset + chunk_size
-            req = bytearray(struct.pack("<L", offset))
-            if end < len(binary):
-                req.extend(binary[offset:end])
-            else:
-                req.extend(binary[offset:])
-            offset = end
-            await self._transport.program_write(bytes(req))
-            if progress is not None:
-                # offset can overshoot on the final chunk since it is not
-                # clamped above; report the true byte count.
-                progress(min(offset, len(binary)))
+                if probes_left == 0:
+                    return total
+                probes_left -= 1
+                req = struct.pack("<L", probe_offset) + binary[probe_offset:]
+                await self._transport.program_write(req)
+                continue
+            offset = self._parse_legacy_nack(data)
+            if offset < total:
+                return offset
