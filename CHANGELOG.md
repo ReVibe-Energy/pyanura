@@ -19,17 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   which prepares and uploads an image using the windowed transfer and falls
   back to the legacy transfer on node firmware without support; `pyanura-cli`
   now uses it for `avss upgrade`.
-- `SnippetReport` and `CaptureReport` now decode the timing fields added in firmware v26.4.0 (`duration`, `start_time_monotonic`, `duration_monotonic`, `transmission_offset`); all are optional, so reports from older firmware still decode.
-- Optional `progress` callback on `TransceiverClient.dfu_write_image` and `AVSSClient.program_transfer`, invoked with the cumulative byte count after each chunk so embedders can drive upload-progress UI without re-implementing the transfer loop.
-- `pyanura-cli` now shows a progress bar while uploading firmware images (`transceiver upgrade` and `avss upgrade`), driven by the new `progress` callbacks.
-- CI: a pyright type-check job that runs both with and without the optional `ble`/`usb` extras, keeping the library type-clean in either configuration.
 
 ### Changed
 - The firmware-transfer loops (`dfu_write_image`, `program_transfer`) no longer emit per-chunk `INFO` log records. Callers wanting progress should pass the new `progress` callback instead.
-- Reworked CBOR (un)marshalling to carry wire keys via `typing.Annotated` (`CborKey`) plus a per-type codec registry, replacing the `cbor_field` helper. Protocol model dataclasses now keep their real field types, so constructing and consuming them is fully type-checked. The on-the-wire CBOR format is unchanged.
-
-### Removed
-- The internal `cbor_field` helper, superseded by `Annotated[..., CborKey(n)]` and `register_codec`.
 
 ### Fixed
 - `AVSSControlPointError.from_response` raised `TypeError` instead of the
@@ -40,6 +32,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The transfer now confirms completion by requiring NACK silence after the
   final chunk and re-sending it as a probe, recovering both late NACKs and a
   silently dropped final chunk.
+
+## [1.0.0] - 2026-07-04
+
+### Added
+- `SnippetReport` and `CaptureReport` now decode the timing fields added in firmware v26.4.0 (`duration`, `start_time_monotonic`, `duration_monotonic`, `transmission_offset`); all are optional, so reports from older firmware still decode.
+- Optional `progress` callback on `TransceiverClient.dfu_write_image` and `AVSSClient.program_transfer`, invoked with the cumulative byte count after each chunk so embedders can drive upload-progress UI without re-implementing the transfer loop.
+- `pyanura-cli` now shows a progress bar while uploading firmware images (`transceiver upgrade` and `avss upgrade`), driven by the new `progress` callbacks.
+- CI: a pyright type-check job that runs both with and without the optional `ble`/`usb` extras, keeping the library type-clean in either configuration.
+
+### Changed
+- Reworked CBOR (un)marshalling to carry wire keys via `typing.Annotated` (`CborKey`) plus a per-type codec registry, replacing the `cbor_field` helper. Protocol model dataclasses now keep their real field types, so constructing and consuming them is fully type-checked. The on-the-wire CBOR format is unchanged.
+
+### Removed
+- The internal `cbor_field` helper, superseded by `Annotated[..., CborKey(n)]` and `register_codec`.
+
+### Fixed
 - `DfuWriteArgs.data` is now correctly typed as `bytes` (it was previously annotated `int`).
 - pyanura now type-checks cleanly under pyright; corrected latent `Optional`-narrowing and return-type annotations in the USB and TCP transports.
 
