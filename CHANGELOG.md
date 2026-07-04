@@ -33,6 +33,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The internal `cbor_field` helper, superseded by `Annotated[..., CborKey(n)]` and `register_codec`.
 
 ### Fixed
+- `AVSSControlPointError.from_response` raised `TypeError` instead of the
+  proper AVSS exception for any device error response on Python 3.11, where
+  `int in IntEnum` membership tests are not supported.
 - The legacy AVSS firmware transfer no longer reports completion while the
   node is still missing data, which made the subsequent Apply Upgrade fail.
   The transfer now confirms completion by requiring NACK silence after the
