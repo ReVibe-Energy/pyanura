@@ -29,7 +29,9 @@ class SettingsMapper:
         "aggregates_param_enable_32_63": 23,
     }
 
-    reverse_map: ClassVar[dict[int, str]] = {key: name for name, key in forward_map.items()}
+    reverse_map: ClassVar[dict[int, str]] = {
+        key: name for name, key in forward_map.items()
+    }
 
     @staticmethod
     def from_readable(settings):

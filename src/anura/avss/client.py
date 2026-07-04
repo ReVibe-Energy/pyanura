@@ -1,5 +1,4 @@
 import asyncio
-import hashlib
 import logging
 import struct
 import time
@@ -23,7 +22,6 @@ from anura.marshalling import marshal, unmarshal
 from .exceptions import (
     AVSSConnectionError,
     AVSSControlPointError,
-    AVSSOpCodeUnsupportedError,
     AVSSProgramTransferError,
     AVSSProtocolError,
     AVSSTransportError,
@@ -582,37 +580,26 @@ class AVSSClient:
     async def program_transfer(
         self,
         binary,
-        *,
-        image: int,
         att_mtu=243,
         progress: Callable[[int], None] | None = None,
-        prepare_timeout=30.0,
     ):
-        """Prepare and transfer a firmware binary to a node.
+        """Transfer a firmware binary using the unsynchronized procedure.
 
-        Prepares the upgrade and runs a windowed transfer with flow control
-        in one flow (Prepare Upgrade V2), falling back to the legacy
-        Prepare Upgrade command and the unsynchronized transfer on node
-        firmware without windowed transfer support. A separate
-        ``prepare_upgrade`` call is not needed.
+        The upgrade must have been prepared with ``prepare_upgrade``. On
+        nodes that support it, prefer the windowed procedure
+        (``prepare_upgrade_v2`` + ``program_transfer_windowed``) or the
+        complete flow in :func:`anura.avss.procedures.upload_firmware`.
 
-        An interrupted windowed transfer of the same binary is resumed from
-        the first byte the node has not received, rather than restarted.
+        Completion is confirmed before returning: after the final chunk the
+        transfer waits out late NACKs and probes the node by re-sending the
+        final chunk, so a node still missing data is caught and served
+        rather than left waiting.
 
         Args:
-            binary:   Raw firmware binary.
-            image:    Index of the firmware image to be uploaded.
+            binary:   Raw firmware binary (after ``prepare_upgrade`` was called).
             att_mtu:  ATT MTU for the connection.
             progress: Optional callback invoked with the cumulative number of
-                      bytes transferred so far. For a windowed transfer this
-                      is the number of bytes acknowledged by the node, which
-                      starts beyond zero when a transfer is resumed.
-            prepare_timeout: Timeout for the prepare step, which erases the
-                      upgrade slot and can take several seconds.
-
-        Raises:
-            AVSSProgramTransferError: If a windowed transfer is aborted by
-                the node or stalls without making progress.
+                      bytes written so far, after each chunk.
         """
         # Write without response is limited to ATT MTU - 3 and
         # we use 4 bytes for offset.
@@ -621,44 +608,54 @@ class AVSSClient:
         async with self._program_lock:
             self._program_notify_queue = asyncio.Queue()
             try:
-                try:
-                    resp = await self.prepare_upgrade_v2(
-                        image,
-                        len(binary),
-                        hashlib.sha256(binary).digest(),
-                        timeout=prepare_timeout,
-                    )
-                except AVSSOpCodeUnsupportedError:
-                    logger.info(
-                        "Windowed transfer not supported by node, "
-                        "using unsynchronized transfer"
-                    )
-                    await self.prepare_upgrade(
-                        image, len(binary), timeout=prepare_timeout
-                    )
-                    await self._program_transfer_unsynchronized(
-                        binary, chunk_size, progress
-                    )
-                    return
+                await self._unsynchronized_transfer_loop(binary, chunk_size, progress)
+            finally:
+                self._program_notify_queue = None
 
-                if resp.offset > len(binary):
-                    raise AVSSProtocolError(
-                        f"Resume offset {resp.offset} beyond image size"
-                    )
-                if resp.offset > 0:
-                    logger.info("Resuming transfer at offset %d", resp.offset)
+    async def program_transfer_windowed(
+        self,
+        binary,
+        params: PrepareUpgradeV2Response,
+        att_mtu=243,
+        progress: Callable[[int], None] | None = None,
+    ):
+        """Transfer a firmware binary using the windowed procedure.
 
-                await self._program_transfer_windowed(
-                    binary,
-                    min(chunk_size, resp.max_chunk_size),
-                    resp.window,
-                    resp.offset,
-                    progress,
+        The transfer must have been negotiated with ``prepare_upgrade_v2``,
+        whose response carries the flow-control parameters and the offset to
+        start from — beyond zero when the node resumes an interrupted
+        transfer of the same image.
+
+        Args:
+            binary:   Raw firmware binary.
+            params:   The ``prepare_upgrade_v2`` response.
+            att_mtu:  ATT MTU for the connection.
+            progress: Optional callback invoked with the cumulative number
+                      of bytes acknowledged by the node.
+
+        Raises:
+            AVSSProgramTransferError: If the transfer is aborted by the node
+                or stalls without making progress.
+        """
+        # Write without response is limited to ATT MTU - 3 and
+        # we use 4 bytes for offset.
+        chunk_size = min((att_mtu - 3) - 4, params.max_chunk_size)
+
+        if params.offset > len(binary):
+            raise AVSSProtocolError(f"Resume offset {params.offset} beyond image size")
+        if params.offset > 0:
+            logger.info("Resuming transfer at offset %d", params.offset)
+
+        async with self._program_lock:
+            self._program_notify_queue = asyncio.Queue()
+            try:
+                await self._windowed_transfer_loop(
+                    binary, chunk_size, params.window, params.offset, progress
                 )
             finally:
                 self._program_notify_queue = None
 
-    async def _program_transfer_windowed(
+    async def _windowed_transfer_loop(
         self,
         binary: bytes,
         chunk_size: int,
@@ -739,7 +736,7 @@ class AVSSClient:
                 if progress is not None:
                     progress(acked)
 
-    async def _program_transfer_unsynchronized(
+    async def _unsynchronized_transfer_loop(
         self,
         binary: bytes,
         chunk_size: int,

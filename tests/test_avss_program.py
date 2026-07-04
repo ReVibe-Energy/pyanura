@@ -7,6 +7,7 @@ import struct
 import cbor2
 import pytest
 
+from anura.avss import procedures
 from anura.avss.client import PROGRAM_OFFSET_ABORT, AVSSClient
 from anura.avss.exceptions import AVSSProgramTransferError
 from anura.avss.protocol import OpCode, ResponseCode
@@ -226,7 +227,7 @@ def test_windowed_transfer_completes():
     client = AVSSClient(transport)
     progress = []
 
-    run(client.program_transfer(binary, image=0, progress=progress.append))
+    run(procedures.upload_firmware(client, binary, image=0, progress=progress.append))
 
     assert transport.ready
     assert bytes(transport.received) == binary
@@ -243,7 +244,7 @@ def test_windowed_transfer_respects_max_chunk():
     transport = FakeSensorTransport(len(binary), max_chunk=100)
     client = AVSSClient(transport)
 
-    run(client.program_transfer(binary, image=0))
+    run(procedures.upload_firmware(client, binary, image=0))
 
     assert transport.ready
     assert bytes(transport.received) == binary
@@ -255,7 +256,7 @@ def test_windowed_transfer_single_chunk():
     transport = FakeSensorTransport(len(binary))
     client = AVSSClient(transport)
 
-    run(client.program_transfer(binary, image=0))
+    run(procedures.upload_firmware(client, binary, image=0))
 
     assert transport.ready
     assert bytes(transport.received) == binary
@@ -267,7 +268,7 @@ def test_windowed_transfer_recovers_from_dropped_chunk():
     transport.drop_chunks = {5}
     client = AVSSClient(transport)
 
-    run(client.program_transfer(binary, image=0))
+    run(procedures.upload_firmware(client, binary, image=0))
 
     assert transport.ready
     assert bytes(transport.received) == binary
@@ -282,7 +283,7 @@ def test_windowed_transfer_recovers_from_lost_ack(monkeypatch):
     transport.drop_acks = {3}
     client = AVSSClient(transport)
 
-    run(client.program_transfer(binary, image=0))
+    run(procedures.upload_firmware(client, binary, image=0))
 
     assert transport.ready
     assert bytes(transport.received) == binary
@@ -297,7 +298,7 @@ def test_windowed_transfer_recovers_from_lost_final_ack(monkeypatch):
     transport.drop_acks = {5}
     client = AVSSClient(transport)
 
-    run(client.program_transfer(binary, image=0))
+    run(procedures.upload_firmware(client, binary, image=0))
 
     assert transport.ready
     assert bytes(transport.received) == binary
@@ -310,7 +311,7 @@ def test_windowed_transfer_aborted_by_node():
     client = AVSSClient(transport)
 
     with pytest.raises(AVSSProgramTransferError):
-        run(client.program_transfer(binary, image=0))
+        run(procedures.upload_firmware(client, binary, image=0))
 
 
 def test_windowed_transfer_fails_on_persistent_stall(monkeypatch):
@@ -322,7 +323,7 @@ def test_windowed_transfer_fails_on_persistent_stall(monkeypatch):
     client = AVSSClient(transport)
 
     with pytest.raises(AVSSProgramTransferError):
-        run(client.program_transfer(binary, image=0))
+        run(procedures.upload_firmware(client, binary, image=0))
 
 
 def test_windowed_transfer_resumes_after_interruption(monkeypatch):
@@ -334,14 +335,14 @@ def test_windowed_transfer_resumes_after_interruption(monkeypatch):
     # First attempt is starved of feedback and fails with partial progress.
     transport.drop_acks = set(range(2, 10_000))
     with pytest.raises(AVSSProgramTransferError):
-        run(client.program_transfer(binary, image=0))
+        run(procedures.upload_firmware(client, binary, image=0))
     committed = transport.expected
     assert 0 < committed < len(binary)
 
     # Second attempt resumes from the committed offset.
     transport.drop_acks = set()
     progress = []
-    run(client.program_transfer(binary, image=0, progress=progress.append))
+    run(procedures.upload_firmware(client, binary, image=0, progress=progress.append))
 
     assert transport.resumed_from == committed
     assert transport.ready
@@ -355,11 +356,11 @@ def test_windowed_transfer_resume_of_complete_transfer():
     transport = FakeSensorTransport(len(binary))
     client = AVSSClient(transport)
 
-    run(client.program_transfer(binary, image=0))
+    run(procedures.upload_firmware(client, binary, image=0))
     writes = transport.write_count
 
     progress = []
-    run(client.program_transfer(binary, image=0, progress=progress.append))
+    run(procedures.upload_firmware(client, binary, image=0, progress=progress.append))
 
     assert transport.resumed_from == len(binary)
     assert transport.write_count == writes  # nothing retransmitted
@@ -371,10 +372,10 @@ def test_windowed_transfer_different_image_restarts():
     transport = FakeSensorTransport(len(binary_a))
     client = AVSSClient(transport)
 
-    run(client.program_transfer(binary_a, image=0))
+    run(procedures.upload_firmware(client, binary_a, image=0))
 
     binary_b = bytes(reversed(binary_a))
-    run(client.program_transfer(binary_b, image=0))
+    run(procedures.upload_firmware(client, binary_b, image=0))
 
     assert transport.resumed_from is None  # fresh prepare, not a resume
     assert transport.ready
@@ -388,7 +389,7 @@ def test_legacy_fallback_transfer_completes(monkeypatch):
     client = AVSSClient(transport)
     progress = []
 
-    run(client.program_transfer(binary, image=0, progress=progress.append))
+    run(procedures.upload_firmware(client, binary, image=0, progress=progress.append))
 
     assert transport.ready
     assert not transport.windowed
@@ -406,7 +407,7 @@ def test_legacy_transfer_recovers_from_late_nack(monkeypatch):
     transport.drop_chunks = {5}
     client = AVSSClient(transport)
 
-    run(client.program_transfer(binary, image=0))
+    run(procedures.upload_firmware(client, binary, image=0))
 
     assert transport.ready
     assert bytes(transport.received) == binary
@@ -421,7 +422,28 @@ def test_legacy_transfer_recovers_from_dropped_final_chunk(monkeypatch):
     transport.drop_chunks = {6}
     client = AVSSClient(transport)
 
-    run(client.program_transfer(binary, image=0))
+    run(procedures.upload_firmware(client, binary, image=0))
 
     assert transport.ready
     assert bytes(transport.received) == binary
+
+
+def test_program_transfer_keeps_1_0_contract(monkeypatch):
+    # The 1.0 calling convention: prepare_upgrade followed by
+    # program_transfer with its original signature.
+    monkeypatch.setattr("anura.avss.client.PROGRAM_LEGACY_SETTLE_TIMEOUT", 0.05)
+    binary = make_binary(4 * CHUNK + 9)
+    transport = FakeSensorTransport(len(binary))
+    client = AVSSClient(transport)
+    progress = []
+
+    async def flow():
+        await client.prepare_upgrade(0, len(binary))
+        await client.program_transfer(binary, 243, progress.append)
+
+    run(flow())
+
+    assert transport.ready
+    assert not transport.windowed
+    assert bytes(transport.received) == binary
+    assert progress[-1] == len(binary)
