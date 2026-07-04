@@ -8,13 +8,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Support for the AVSS windowed DFU transfer (Prepare Upgrade V2), adding
+  flow control and resumption of interrupted transfers:
+  `AVSSClient.prepare_upgrade_v2` and `AVSSClient.program_transfer_windowed`,
+  plus the `PrepareUpgradeV2Args`/`PrepareUpgradeV2Response` models and
+  `AVSSProgramTransferError`. The existing `prepare_upgrade`/`program_transfer`
+  pair is unchanged.
+- `anura.avss.procedures`: high-level procedures composing the low-level
+  client methods into complete transactions. The first is `upload_firmware`,
+  which prepares and uploads an image using the windowed transfer and falls
+  back to the legacy transfer on node firmware without support; `pyanura-cli`
+  now uses it for `avss upgrade`.
+
+### Changed
+- The firmware-transfer loops (`dfu_write_image`, `program_transfer`) no longer emit per-chunk `INFO` log records. Callers wanting progress should pass the new `progress` callback instead.
+
+### Fixed
+- `AVSSControlPointError.from_response` raised `TypeError` instead of the
+  proper AVSS exception for any device error response on Python 3.11, where
+  `int in IntEnum` membership tests are not supported.
+- The legacy AVSS firmware transfer no longer reports completion while the
+  node is still missing data, which made the subsequent Apply Upgrade fail.
+  The transfer now confirms completion by requiring NACK silence after the
+  final chunk and re-sending it as a probe, recovering both late NACKs and a
+  silently dropped final chunk.
+
+## [1.0.0] - 2026-07-04
+
+### Added
 - `SnippetReport` and `CaptureReport` now decode the timing fields added in firmware v26.4.0 (`duration`, `start_time_monotonic`, `duration_monotonic`, `transmission_offset`); all are optional, so reports from older firmware still decode.
 - Optional `progress` callback on `TransceiverClient.dfu_write_image` and `AVSSClient.program_transfer`, invoked with the cumulative byte count after each chunk so embedders can drive upload-progress UI without re-implementing the transfer loop.
 - `pyanura-cli` now shows a progress bar while uploading firmware images (`transceiver upgrade` and `avss upgrade`), driven by the new `progress` callbacks.
 - CI: a pyright type-check job that runs both with and without the optional `ble`/`usb` extras, keeping the library type-clean in either configuration.
 
 ### Changed
-- The firmware-transfer loops (`dfu_write_image`, `program_transfer`) no longer emit per-chunk `INFO` log records. Callers wanting progress should pass the new `progress` callback instead.
 - Reworked CBOR (un)marshalling to carry wire keys via `typing.Annotated` (`CborKey`) plus a per-type codec registry, replacing the `cbor_field` helper. Protocol model dataclasses now keep their real field types, so constructing and consuming them is fully type-checked. The on-the-wire CBOR format is unchanged.
 
 ### Removed

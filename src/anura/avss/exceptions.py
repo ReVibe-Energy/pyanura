@@ -13,6 +13,10 @@ class AVSSTransportError(AVSSError):
     """Raised when there has been an error in the underlying transport."""
 
 
+class AVSSProgramTransferError(AVSSError):
+    """Raised when a firmware program transfer fails."""
+
+
 class AVSSProtocolError(AVSSError):
     """Raised when a protocol violation has occurred."""
 
@@ -82,11 +86,12 @@ class AVSSControlPointError(AVSSError):
         Raises:
             ValueError: If rc is ResponseCode.OK (not an error)
         """
-        # Handle raw integers (for newer/unknown codes)
+        # Handle raw integers (for newer/unknown codes). Note that
+        # `rc in ResponseCode` raises TypeError for ints before Python 3.12.
         if not isinstance(rc, ResponseCode):
-            if rc in ResponseCode:
+            try:
                 rc = ResponseCode(rc)
-            else:
+            except ValueError:
                 return AVSSControlPointError(
                     f"Device returned response code {rc} (firmware may be newer than client)",
                     response_code=rc,

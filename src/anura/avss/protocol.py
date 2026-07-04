@@ -44,6 +44,8 @@ class OpCode(IntEnum):
     APPLY_UPGRADE = 101
     CONFIRM_UPGRADE = 102
     REBOOT = 103
+    PREPARE_UPGRADE_V2 = 104
+    PREPARE_UPGRADE_V2_RESPONSE = 105
 
     @staticmethod
     def _safe_name(value: int) -> str:

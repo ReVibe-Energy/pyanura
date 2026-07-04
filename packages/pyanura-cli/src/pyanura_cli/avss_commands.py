@@ -12,6 +12,7 @@ from bleak import BleakScanner
 from bleak.exc import BleakError
 
 import anura.avss as avss
+from anura.avss import procedures
 from anura.avss.bleak_avss_client import BleakAVSSClient
 from anura.transceiver.client import TransceiverClient
 from anura.transceiver.models import BluetoothAddrLE
@@ -123,11 +124,12 @@ def upgrade(transceiver, transceiver_port, address, file, confirm_only):
 
             if not confirm_only:
                 async with BleakAVSSClient(device) as client:
-                    await client.prepare_upgrade(image_index, len(binary))
                     with upload_progress(
                         len(binary), "Uploading firmware"
                     ) as on_progress:
-                        await client.program_transfer(binary, progress=on_progress)
+                        await procedures.upload_firmware(
+                            client, binary, image=image_index, progress=on_progress
+                        )
                     await client.apply_upgrade()
 
                 click.echo("Waiting for node to reboot with new firmware image...")
@@ -159,12 +161,11 @@ def upgrade(transceiver, transceiver_port, address, file, confirm_only):
 
                 if not confirm_only:
                     async with ProxyAVSSClient(trx_client, address) as client:
-                        await client.prepare_upgrade(image_index, len(binary))
                         with upload_progress(
                             len(binary), "Uploading firmware"
                         ) as on_progress:
-                            await client.program_transfer(
-                                binary, progress=on_progress
+                            await procedures.upload_firmware(
+                                client, binary, image=image_index, progress=on_progress
                             )
                         await client.apply_upgrade()
 

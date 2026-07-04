@@ -1,5 +1,6 @@
 from . import exceptions as exceptions
 from . import models as models
+from . import procedures as procedures
 from . import transport as transport
 from . import uuids as uuids
 from .client import AVSSClient, Report
@@ -9,6 +10,7 @@ from .exceptions import (
     AVSSControlPointError,
     AVSSError,
     AVSSOpCodeUnsupportedError,
+    AVSSProgramTransferError,
     AVSSProtocolError,
     AVSSTransportError,
 )
@@ -29,6 +31,7 @@ __all__ = [
     "AVSSControlPointError",
     "AVSSError",
     "AVSSOpCodeUnsupportedError",
+    "AVSSProgramTransferError",
     "AVSSProtocolError",
     "AVSSTransportError",
     "AggregatedValuesReport",

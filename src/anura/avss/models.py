@@ -50,6 +50,20 @@ class ConfirmUpgradeArgs:
 
 
 @dataclass
+class PrepareUpgradeV2Args:
+    image: Annotated[int, CborKey(0)]
+    size: Annotated[int, CborKey(1)]
+    digest: Annotated[bytes, CborKey(2)]
+
+
+@dataclass
+class PrepareUpgradeV2Response:
+    max_chunk_size: Annotated[int, CborKey(0)]
+    window: Annotated[int, CborKey(1)]
+    offset: Annotated[int, CborKey(2)]
+
+
+@dataclass
 class TestThroughputArgs:
     duration: Annotated[int, CborKey(0)]
 
