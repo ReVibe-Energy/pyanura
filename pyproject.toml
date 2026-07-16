@@ -56,6 +56,9 @@ dev = [
 [tool.hatch.build.targets.wheel]
 packages = ["src/anura"]
 
+[tool.hatch.build.targets.sdist]
+only-include = ["src/anura", "tests", "README.md", "LICENSE", "CHANGELOG.md", "VERSION"]
+
 [tool.hatch.version]
 path = "VERSION"
 pattern = "(?P<version>.+)"
