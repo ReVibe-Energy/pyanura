@@ -43,6 +43,9 @@ Documentation = "https://docs.revibeenergy.com/"
 [project.scripts]
 anura = "pyanura_cli:cli"
 
+[tool.hatch.build.targets.sdist]
+only-include = ["src/pyanura_cli", "README.md"]
+
 [tool.hatch.version]
 path = "../../VERSION"
 pattern = "(?P<version>.+)"
