@@ -1,0 +1,18 @@
+Debian packaging
+================
+
+This is a packaging overlay: the source is not the git tree but the pyanura
+sdist from `uv build`, which becomes the `.orig.tar.gz` verbatim.
+`debian/build-deb.sh` overlays `debian/` onto it and builds in an sbuild chroot.
+
+`debian/changelog` is a placeholder, auto-stamped at build time; don't edit it.
+
+Building locally
+----------------
+
+    # once: create the sbuild chroot
+    mmdebstrap --variant=buildd trixie \
+        ~/.cache/sbuild/trixie-$(dpkg --print-architecture).tar.gz
+
+    uv build                 # produces dist/pyanura-<version>.tar.gz
+    debian/build-deb.sh      # -> ./dist/*.deb
