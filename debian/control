@@ -1,0 +1,28 @@
+Source: pyanura
+Section: python
+Priority: optional
+Maintainer: ReVibe Energy <info@revibeenergy.com>
+Build-Depends:
+ debhelper-compat (= 13),
+ dh-python,
+ python3-all,
+ python3-hatchling,
+ pybuild-plugin-pyproject,
+ python3-cbor2,
+ python3-pytest,
+ python3-packaging,
+Standards-Version: 4.7.0
+Rules-Requires-Root: no
+Homepage: https://github.com/ReVibe-Energy/pyanura
+Vcs-Git: https://github.com/ReVibe-Energy/pyanura.git
+Vcs-Browser: https://github.com/ReVibe-Energy/pyanura
+
+Package: python3-pyanura
+Architecture: all
+Depends:
+ ${python3:Depends},
+ ${misc:Depends},
+ python3-cbor2,
+Description: Python library for ReVibe Energy ANURA devices.
+ pyanura provides an asyncio-based client interface for communicating
+ with ReVibe Energy ANURA sensors and transceivers.
