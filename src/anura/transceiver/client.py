@@ -22,6 +22,11 @@ from .transport import Transport
 
 T = TypeVar("T")
 
+#: Enable the workaround for firmware issue #587; see
+#: ``TransceiverClient._issue_587_workaround_shrink_chunk``. Disable to
+#: exercise a device without the workaround (e.g. to verify fixed firmware).
+ISSUE_587_WORKAROUND_ENABLED = True
+
 
 class TransceiverClient:
     def __init__(self, target_spec: str, port: int = 7645) -> None:
@@ -281,6 +286,36 @@ class TransceiverClient:
         args = models.DfuWriteArgs(offset=offset, data=data)
         return await self.request("dfu_write", args)
 
+    def _dfu_next_chunk(self, image: bytes, offset: int, chunk_size: int) -> bytes:
+        """Return the next chunk of ``image`` to send with ``dfu_write``."""
+        end = min(offset + chunk_size, len(image))
+        if ISSUE_587_WORKAROUND_ENABLED:
+            end = self._issue_587_workaround_shrink_chunk(image, offset, end)
+        return image[offset:end]
+
+    def _issue_587_workaround_shrink_chunk(
+        self, image: bytes, offset: int, end: int
+    ) -> int:
+        """Shrink a chunk that fielded firmware would drop (firmware issue #587).
+
+        Works around a framing bug in fielded USB transceiver firmware: a
+        request whose total wire size is 1 or 2 modulo 64 is silently
+        dropped by the device, deadlocking the transfer. Shrink the chunk
+        until the encoded request lands on a safe size, with margin for the
+        request token growing a byte or two wider mid-transfer.
+        """
+        method = self._known_methods.get("dfu_write", "dfu_write")
+        while end - offset > 1:
+            args = marshal(models.DfuWriteArgs(offset=offset, data=image[offset:end]))
+            payload = cbor2.dumps(
+                [models.msg_type.Request, self._next_request_token, method, args]
+            )
+            size = 2 + len(payload)
+            if all((size + d) % 64 not in (1, 2) for d in (0, 1, 2)):
+                break
+            end -= 1
+        return end
+
     async def dfu_write_image(
         self,
         image: bytes,
@@ -298,9 +333,9 @@ class TransceiverClient:
         offset = 0
         total = len(image)
         while offset < total:
-            end = min(offset + chunk_size, total)
-            await self.dfu_write(offset, image[offset:end])
-            offset = end
+            chunk = self._dfu_next_chunk(image, offset, chunk_size)
+            await self.dfu_write(offset, chunk)
+            offset += len(chunk)
             if progress is not None:
                 progress(offset)
 
