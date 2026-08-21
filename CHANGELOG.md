@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- `anura.dfu`: support for Anura firmware bundles —
+  `parse_bundle` reads a bundle zip (a `meta.json` manifest plus one image per
+  firmware component) into `Bundle`/`Component`/`Dependency`, with `Version`
+  and `VersionSet` for the device version format and dependency constraints.
+- The CLI `avss upgrade` and `transceiver upgrade` commands accept a firmware
+  bundle as `--file` in addition to a raw image. Every component in the bundle
+  is applied in order: dependencies are checked against the installed
+  firmware, already-running components are skipped, and each upload is
+  applied, verified after the reboot and confirmed.
+
 ## [1.1.0]
 
 ### Added

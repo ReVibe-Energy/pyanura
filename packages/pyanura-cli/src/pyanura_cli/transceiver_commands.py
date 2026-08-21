@@ -1,18 +1,22 @@
 import asyncio
 import functools
+import io
 import logging
 import sys
 import time
+import zipfile
 from pathlib import Path
 
 import click
 import zeroconf
 
+from anura.dfu import parse_bundle
 from anura.transceiver.client import TransceiverClient
 from anura.transceiver.models import BluetoothAddrLE, ScanNodesReceivedEvent
 from anura.transceiver.proxy_avss_client import ProxyAVSSClient
 from anura.transceiver.transport import USBTransport
 
+from .bundle import TransceiverTarget, apply_bundle
 from .progress import upload_progress
 
 logger = logging.getLogger(__name__)
@@ -252,10 +256,17 @@ async def reset(client: TransceiverClient):
 @click.option(
     "--port", metavar="PORT", default=7645, show_default=True, help="TCP port number"
 )
-@click.option("--file", metavar="FILE", help="Path to firmware image.")
+@click.option(
+    "--file", metavar="FILE", help="Path to firmware image or firmware bundle (.zip)."
+)
 @click.option("--confirm-only", is_flag=True, help="Run only the confirm step.")
 def upgrade(host, port, file, confirm_only):
-    """Upgrade transceiver firmware"""
+    """Upgrade transceiver firmware.
+
+    FILE may be a raw firmware image or a firmware bundle (a .zip with a
+    meta.json manifest). With a bundle, every component in the bundle is
+    applied and confirmed in order.
+    """
 
     if not confirm_only and not file:
         click.echo(
@@ -266,6 +277,23 @@ def upgrade(host, port, file, confirm_only):
 
     if file:
         image = Path(file).read_bytes()
+
+        if not confirm_only and zipfile.is_zipfile(io.BytesIO(image)):
+            try:
+                bundle = parse_bundle(image)
+            except ValueError as ex:
+                click.echo(f"Error: {ex}", err=True)
+                sys.exit(1)
+
+            async def do_bundle():
+                try:
+                    await apply_bundle(TransceiverTarget(host, port), bundle)
+                except Exception as ex:
+                    click.echo(f"Error: {ex}", err=True)
+                    sys.exit(1)
+
+            asyncio.run(do_bundle())
+            return
 
     async def do():
         try:
