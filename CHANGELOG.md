@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- The USB transceiver transport opts out of keepalive probing entirely: a
+  detached device makes reads and writes fail immediately, so probing adds
+  nothing. Transports declare this via the new `Transport.requires_keepalive`
+  attribute.
+
 ## [1.1.0]
 
 ### Added
