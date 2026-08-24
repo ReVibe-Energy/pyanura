@@ -6,6 +6,12 @@ from typing import ClassVar
 class Transport(ABC):
     _registry: ClassVar[dict[str, Callable[..., "Transport"]]] = {}
 
+    # Whether the connection needs periodic keepalive probing to detect a
+    # dead peer. True for TCP, where a half-open connection can otherwise go
+    # undetected indefinitely; transports whose reads and writes fail fast on
+    # disconnect (e.g. USB) opt out.
+    requires_keepalive: ClassVar[bool] = True
+
     def __init_subclass__(cls, transport_type: str, **kwargs):
         super().__init_subclass__(**kwargs)
         cls._registry[transport_type] = cls

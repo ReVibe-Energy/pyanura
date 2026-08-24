@@ -24,6 +24,11 @@ T = TypeVar("T")
 
 
 class TransceiverClient:
+    # Interval between keepalive probes of the connection, and how long a
+    # probe may go unanswered before the connection is considered dead.
+    _keepalive_interval = 1.0
+    _keepalive_timeout = 1.0
+
     def __init__(self, target_spec: str, port: int = 7645) -> None:
         self._transport = Transport.create(target_spec, port)
         self._pending_responses = {}
@@ -67,17 +72,18 @@ class TransceiverClient:
 
         async def keep_alive():
             while True:
-                await asyncio.sleep(1.0)
+                await asyncio.sleep(self._keepalive_interval)
 
                 try:
-                    await asyncio.wait_for(self.ping(), 1.0)
+                    await asyncio.wait_for(self.ping(), self._keepalive_timeout)
                 except TimeoutError:
                     raise TransceiverError("Keepalive ping timed out") from None
 
         try:
             async with asyncio.TaskGroup() as tg:
                 tg.create_task(recv_task())
-                tg.create_task(keep_alive())
+                if self._transport.requires_keepalive:
+                    tg.create_task(keep_alive())
         except* TransceiverError as eg:
             if len(eg.exceptions) == 1:
                 raise eg.exceptions[0] from None
