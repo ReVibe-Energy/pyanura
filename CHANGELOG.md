@@ -8,10 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
-- The USB transceiver transport opts out of keepalive probing entirely: a
-  detached device makes reads and writes fail immediately, so probing adds
-  nothing. Transports declare this via the new `Transport.requires_keepalive`
-  attribute.
+- Most `TransceiverClient` methods now fail with a `TimeoutError` when the
+  device does not answer within 5 seconds, instead of waiting indefinitely.
+  `request()` takes a `timeout` argument for raising, lowering or disabling
+  (`None`) the limit per request. Methods that need longer get their own
+  budget: `avss_request` allows 35 seconds, covering the 30 s default the
+  transceiver applies to that operation, and `slow_ping` allows the 10
+  seconds it needs.
+- The USB transceiver transport opts out of keepalive entirely: the device
+  keeps the connection regardless of traffic, and a detached device makes
+  reads and writes fail immediately.
 
 ## [1.1.0]
 
