@@ -151,7 +151,7 @@ class TransceiverClient:
             )
             await self._transport.send(payload)
 
-            async with asyncio.Timeout(timeout):
+            async with asyncio.timeout(timeout):
                 async with asyncio.TaskGroup() as tg:
                     monitor_task = tg.create_task(self._connection_closed.wait())
                     done, _ = await asyncio.wait(
