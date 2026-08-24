@@ -11,6 +11,8 @@ class USBTransport(Transport, transport_type="usb"):
     module is missing.
     """
 
+    requires_keepalive = False
+
     def __init__(self, serial_number: str, _unused_port) -> None:
         raise RuntimeError(
             "USBTransport requires the 'pyusb' package. "

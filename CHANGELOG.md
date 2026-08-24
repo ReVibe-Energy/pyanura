@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Report `count` arguments accept `anura.avss.UNLIMITED` for no limit; the
   model fields are typed `int | Unlimited`. `AVSSClient.report_*` still
   accept `count=None`.
+- The USB transceiver transport no longer sends keepalive pings.
 
 ### Removed
 - The CLI `avss write-settings`, replaced by `avss update-settings` and
