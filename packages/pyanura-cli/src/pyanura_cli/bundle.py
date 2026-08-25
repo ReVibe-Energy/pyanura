@@ -10,7 +10,6 @@ import asyncio
 import time
 from collections.abc import AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager, AsyncExitStack, asynccontextmanager
-from dataclasses import dataclass
 from typing import Protocol
 
 import click
@@ -20,7 +19,15 @@ from anura.avss import procedures
 from anura.avss.bleak_avss_client import BleakAVSSClient
 from anura.avss.client import AVSSClient
 from anura.avss.exceptions import AVSSOpCodeUnsupportedError
-from anura.dfu import Bundle, Component, Dependency, Version, total_dependencies
+from anura.dfu import (
+    Bundle,
+    Component,
+    Dependency,
+    InstalledComponent,
+    Version,
+    total_dependencies,
+    unmet_dependencies,
+)
 from anura.transceiver.client import TransceiverClient
 from anura.transceiver.exceptions import TransceiverError
 from anura.transceiver.models import BluetoothAddrLE
@@ -29,12 +36,6 @@ from anura.transceiver.proxy_avss_client import ProxyAVSSClient
 from .progress import upload_progress
 
 RECONNECT_TIMEOUT = 60.0
-
-
-@dataclass
-class InstalledComponent:
-    version: Version | None
-    build: str | None
 
 
 class BundleSession(Protocol):
@@ -220,18 +221,8 @@ class TransceiverTarget:
 def _check_dependencies(
     dependencies: list[Dependency], installed: dict[str, InstalledComponent]
 ) -> None:
-    for dep in dependencies:
-        current = installed.get(dep.name)
-        if current is None or current.version is None:
-            raise RuntimeError(
-                f"Cannot verify dependency on '{dep.name}' version {dep.version}: "
-                f"installed '{dep.name}' version is unknown"
-            )
-        if current.version not in dep.version:
-            raise RuntimeError(
-                f"Dependency not met: requires '{dep.name}' version {dep.version}, "
-                f"device reports {current.version}"
-            )
+    if unmet := unmet_dependencies(dependencies, installed):
+        raise RuntimeError("Dependency not met: " + "; ".join(str(u) for u in unmet))
 
 
 async def apply_bundle(target: BundleTarget, bundle: Bundle) -> None:

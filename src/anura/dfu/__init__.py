@@ -10,8 +10,11 @@ from .bundle import (
     Bundle,
     Component,
     Dependency,
+    InstalledComponent,
+    UnmetDependency,
     parse_bundle,
     total_dependencies,
+    unmet_dependencies,
 )
 from .version import Version, VersionSet
 
@@ -19,8 +22,11 @@ __all__ = [
     "Bundle",
     "Component",
     "Dependency",
+    "InstalledComponent",
+    "UnmetDependency",
     "Version",
     "VersionSet",
     "parse_bundle",
     "total_dependencies",
+    "unmet_dependencies",
 ]
