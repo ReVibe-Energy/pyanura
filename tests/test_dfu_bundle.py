@@ -7,10 +7,12 @@ import pytest
 from anura.dfu import (
     Component,
     Dependency,
+    InstalledComponent,
     Version,
     VersionSet,
     parse_bundle,
     total_dependencies,
+    unmet_dependencies,
 )
 
 
@@ -279,3 +281,66 @@ def test_total_dependencies_conflicting():
                 ),
             ]
         )
+
+
+def _installed(**components: str | None) -> dict[str, InstalledComponent]:
+    return {
+        name: InstalledComponent(
+            version=Version.from_string(version) if version else None, build=None
+        )
+        for name, version in components.items()
+    }
+
+
+def test_unmet_dependencies_none_required():
+    assert unmet_dependencies([], _installed(app="2.0.0")) == []
+
+
+def test_unmet_dependencies_all_satisfied():
+    assert (
+        unmet_dependencies(
+            [_make_dependency("app", ">=1.0.0"), _make_dependency("net", ">=3.0.0")],
+            _installed(app="2.0.0", net="3.0.0"),
+        )
+        == []
+    )
+
+
+def test_unmet_dependencies_checks_every_dependency():
+    """A satisfied dependency does not vouch for the ones after it."""
+    unmet = unmet_dependencies(
+        [_make_dependency("app", ">=1.0.0"), _make_dependency("net", ">=4.0.0")],
+        _installed(app="2.0.0", net="3.0.0"),
+    )
+    assert [u.dependency.name for u in unmet] == ["net"]
+    assert unmet[0].installed == Version.from_string("3.0.0")
+    assert str(unmet[0]) == "requires 'net' >=4.0.0.0, device reports 3.0.0.0"
+
+
+def test_unmet_dependencies_reports_all_failures():
+    unmet = unmet_dependencies(
+        [_make_dependency("app", ">=3.0.0"), _make_dependency("net", ">=4.0.0")],
+        _installed(app="2.0.0", net="3.0.0"),
+    )
+    assert [u.dependency.name for u in unmet] == ["app", "net"]
+
+
+def test_unmet_dependencies_unknown_component():
+    """A dependency on a component the device never reported cannot be verified."""
+    unmet = unmet_dependencies(
+        [_make_dependency("bootloader", ">=1.0.0")], _installed(app="2.0.0")
+    )
+    assert [u.dependency.name for u in unmet] == ["bootloader"]
+    assert unmet[0].installed is None
+    assert str(unmet[0]) == (
+        "requires 'bootloader' >=1.0.0.0, installed 'bootloader' version is unknown"
+    )
+
+
+def test_unmet_dependencies_unreported_version():
+    """A component present but without a reported version is equally unverifiable."""
+    unmet = unmet_dependencies(
+        [_make_dependency("net", ">=1.0.0")], _installed(net=None)
+    )
+    assert [u.dependency.name for u in unmet] == ["net"]
+    assert unmet[0].installed is None

@@ -8,6 +8,7 @@ import io
 import json
 import zipfile
 from collections import defaultdict
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
 from .version import Version, VersionSet
@@ -16,8 +17,11 @@ __all__ = [
     "Bundle",
     "Component",
     "Dependency",
+    "InstalledComponent",
+    "UnmetDependency",
     "parse_bundle",
     "total_dependencies",
+    "unmet_dependencies",
 ]
 
 
@@ -88,6 +92,59 @@ def total_dependencies(components: list[Component]) -> list[Dependency]:
         installed_components[component.name] = component
 
     return [Dependency(name, version) for name, version in dependencies.items()]
+
+
+@dataclass
+class InstalledComponent:
+    """The firmware a device reports for one component.
+
+    `version` is None when the device is too old to report a version for the
+    component; a dependency on it can then not be verified.
+    """
+
+    version: Version | None
+    build: str | None
+
+
+@dataclass(frozen=True)
+class UnmetDependency:
+    """A dependency the installed firmware does not satisfy."""
+
+    dependency: Dependency
+    # The version the device reports, or None if it reports none.
+    installed: Version | None
+
+    def __str__(self) -> str:
+        if self.installed is None:
+            return (
+                f"requires '{self.dependency.name}' {self.dependency.version}, "
+                f"installed '{self.dependency.name}' version is unknown"
+            )
+        return (
+            f"requires '{self.dependency.name}' {self.dependency.version}, "
+            f"device reports {self.installed}"
+        )
+
+
+def unmet_dependencies(
+    dependencies: Iterable[Dependency],
+    installed: Mapping[str, InstalledComponent],
+) -> list[UnmetDependency]:
+    """Which of `dependencies` the installed firmware does not satisfy.
+
+    An empty list means every dependency is met. A dependency on a component
+    the device reports no version for is unmet: it cannot be verified.
+
+    Callers that want a yes/no answer can use the list's truthiness; callers
+    that report a failure can render each entry for a diagnostic.
+    """
+    unmet = []
+    for dep in dependencies:
+        current = installed.get(dep.name)
+        version = current.version if current is not None else None
+        if version is None or version not in dep.version:
+            unmet.append(UnmetDependency(dependency=dep, installed=version))
+    return unmet
 
 
 def _parse_bundle_v1(manifest: dict, bundle: zipfile.ZipFile) -> Bundle:

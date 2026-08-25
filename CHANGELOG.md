@@ -8,10 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- `anura.dfu`: support for Anura firmware bundles —
-  `parse_bundle` reads a bundle zip (a `meta.json` manifest plus one image per
-  firmware component) into `Bundle`/`Component`/`Dependency`, with `Version`
-  and `VersionSet` for the device version format and dependency constraints.
+- `anura.dfu`, a new module for ANURA firmware bundles. `parse_bundle` reads
+  a bundle zip (a `meta.json` manifest plus one image per firmware component)
+  into `Bundle`/`Component`/`Dependency`, with `Version` and `VersionSet` for
+  the device version format and dependency constraints. `unmet_dependencies`
+  checks a component's or a bundle's dependencies against the firmware a
+  device reports, described by `InstalledComponent`, returning an
+  `UnmetDependency` per unsatisfied dependency.
 - The CLI `avss upgrade` and `transceiver upgrade` commands accept a firmware
   bundle as `--file` in addition to a raw image. Every component in the bundle
   is applied in order: dependencies are checked against the installed
