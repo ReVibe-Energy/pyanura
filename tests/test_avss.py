@@ -1,8 +1,13 @@
 from anura.avss.models import (
+    UNLIMITED,
     HealthReport,
+    ReportAggregatesArgs,
+    ReportCaptureArgs,
+    ReportHealthArgs,
+    ReportSnippetArgs,
     SnippetReport,
 )
-from anura.marshalling import unmarshal
+from anura.marshalling import marshal, unmarshal
 
 
 def test_unmarshal_HealthReport_missing_fields():
@@ -57,38 +62,14 @@ def test_unmarshal_SnippetReport_with_timing():
     assert report.transmission_offset == 8
 
 
-def test_unlimited_report_count_encodes_as_null():
-    from anura.avss.models import (
-        UNLIMITED,
-        ReportAggregatesArgs,
-        ReportCaptureArgs,
-        ReportHealthArgs,
-        ReportSnippetArgs,
-    )
-    from anura.marshalling import marshal
-
+def test_report_count_args_encode_and_round_trip():
     # The node requires key 0 to be present; null means unlimited.
     for cls in (ReportSnippetArgs, ReportAggregatesArgs, ReportCaptureArgs):
-        assert marshal(cls(count=UNLIMITED, auto_resume=True)) == {0: None, 1: True}
-        assert marshal(cls(count=3, auto_resume=False)) == {0: 3, 1: False}
-    assert marshal(ReportHealthArgs(count=UNLIMITED)) == {0: None}
-    assert marshal(ReportHealthArgs(count=True)) == {0: True}
-
-
-def test_report_args_round_trip():
-    from anura.avss.models import (
-        UNLIMITED,
-        ReportAggregatesArgs,
-        ReportCaptureArgs,
-        ReportHealthArgs,
-        ReportSnippetArgs,
-    )
-    from anura.marshalling import marshal
-
-    for cls in (ReportSnippetArgs, ReportAggregatesArgs, ReportCaptureArgs):
-        for count in (UNLIMITED, 3):
+        for count, wire in ((UNLIMITED, None), (3, 3)):
             args = cls(count=count, auto_resume=True)
+            assert marshal(args) == {0: wire, 1: True}
             assert unmarshal(cls, marshal(args)) == args
-    for count in (UNLIMITED, True, 3):
+    for count, wire in ((UNLIMITED, None), (True, True), (3, 3)):
         args = ReportHealthArgs(count=count)
+        assert marshal(args) == {0: wire}
         assert unmarshal(ReportHealthArgs, marshal(args)) == args
