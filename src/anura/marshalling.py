@@ -79,16 +79,26 @@ def _field_keys(cls: type) -> dict[str, tuple[int, Any]]:
     return out
 
 
+def _is_optional(tp: Any) -> bool:
+    """True for ``X | None`` field types. Such fields are omitted from the
+    encoded map when unset, so that a peer whose schema predates the field
+    (or that expects a value rather than nil) still accepts the message."""
+    return isinstance(tp, types.UnionType) and types.NoneType in get_args(tp)
+
+
 def marshal(obj: Any) -> dict | list | Any:
     """Convert an object representation of a message or data type to a
     structure consisting of dicts, lists and primitive types."""
     if codec := _codecs.get(type(obj)):
         return codec.marshal(obj)
     elif is_dataclass(obj) and not isinstance(obj, type):
-        return {
-            key: marshal(getattr(obj, name))
-            for name, (key, _) in _field_keys(type(obj)).items()
-        }
+        out = {}
+        for name, (key, field_type) in _field_keys(type(obj)).items():
+            value = getattr(obj, name)
+            if value is None and _is_optional(field_type):
+                continue  # unset optional field: leave the key out
+            out[key] = marshal(value)
+        return out
     elif isinstance(obj, list):
         return [marshal(v) for v in obj]
     elif isinstance(obj, dict):
@@ -129,7 +139,10 @@ def unmarshal(cls: type[T], struct: Any) -> T:
             key_cls, val_cls = get_args(cls)
             return cast(
                 T,
-                {unmarshal(key_cls, k): unmarshal(val_cls, v) for k, v in struct.items()},
+                {
+                    unmarshal(key_cls, k): unmarshal(val_cls, v)
+                    for k, v in struct.items()
+                },
             )
         else:
             raise ValueError("Unsupported generic type.")

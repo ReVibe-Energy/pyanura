@@ -3,7 +3,7 @@ from typing import Annotated
 
 import pytest
 
-from anura.marshalling import CborKey, unmarshal
+from anura.marshalling import CborKey, marshal, unmarshal
 
 
 def test_unmarshal_dataclass_unknown_key():
@@ -94,3 +94,24 @@ def test_unmarshal_dataclass_recursive():
     outer = unmarshal(OuterClass, {0: {0: 1}})
 
     assert isinstance(outer.inner, InnerClass)
+
+
+def test_marshal_omits_unset_optional_fields():
+    @dataclass
+    class Args:
+        required: Annotated[int, CborKey(0)]
+        optional: Annotated[int | None, CborKey(1)] = None
+
+    assert marshal(Args(required=1)) == {0: 1}
+    assert marshal(Args(required=1, optional=2)) == {0: 1, 1: 2}
+
+
+def test_marshal_keeps_none_in_non_optional_fields():
+    """A field not typed as optional carries None through as CBOR null;
+    some peers require a nullable value to be present."""
+
+    @dataclass
+    class Args:
+        count: Annotated[int, CborKey(0)]
+
+    assert marshal(Args(count=None)) == {0: None}  # type: ignore[arg-type]
