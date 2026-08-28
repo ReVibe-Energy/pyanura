@@ -201,3 +201,32 @@ def test_request_timeout_can_be_raised_and_disabled_per_call():
             await client.disconnect()
 
     run(scenario())
+
+
+def test_request_survives_cancellation_of_its_caller():
+    """A caller giving up must not abort the exchange: the response is
+    still consumed when it arrives, and the request slot is freed by the
+    request itself, not by the cancellation."""
+
+    async def scenario():
+        transport = FakeTransport(slow_op_delay=0.2)
+        transport.requires_keepalive = False  # keep pings out of the count
+        client = make_client(transport)
+        await client.connect()
+        try:
+            caller = asyncio.create_task(client.request("slow_op", timeout=1.0))
+            await asyncio.sleep(0.05)
+            caller.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await caller
+
+            # The request is still pending in the client...
+            assert len(client._pending_responses) == 1
+            # ...and completes on its own when the response arrives.
+            await asyncio.sleep(0.3)
+            assert len(client._pending_responses) == 0
+            assert not client._connection_closed.is_set()
+        finally:
+            await client.disconnect()
+
+    run(scenario())
