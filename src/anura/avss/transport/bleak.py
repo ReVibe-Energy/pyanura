@@ -98,7 +98,9 @@ class BleakAVSSTransport(AVSSTransport):
 
         await self._closed_event.wait()
 
-    async def control_point_request(self, req: bytes) -> bytes:
+    async def control_point_request(
+        self, req: bytes, *, timeout: float | None = None
+    ) -> bytes:
         if self._client is None:
             raise RuntimeError("BleakAVSSTransport is not open")
 
@@ -115,7 +117,8 @@ class BleakAVSSTransport(AVSSTransport):
         except BleakError as e:
             raise AVSSConnectionError(str(e)) from e
 
-        response = await self._cp_response_q.get()
+        async with asyncio.timeout(timeout):
+            response = await self._cp_response_q.get()
         self._cp_response_q.task_done()
         return response
 

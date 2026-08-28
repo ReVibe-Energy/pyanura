@@ -4,7 +4,10 @@ import logging
 
 from anura.avss.exceptions import AVSSConnectionError
 from anura.transceiver.client import TransceiverClient
-from anura.transceiver.exceptions import TransceiverRequestError
+from anura.transceiver.exceptions import (
+    TransceiverConnectionError,
+    TransceiverRequestError,
+)
 from anura.transceiver.models import (
     APIErrorCode,
     AVSSProgramNotifiedEvent,
@@ -126,7 +129,9 @@ class ProxyAVSSTransport(AVSSTransport):
                     case NodeDisconnectedEvent(address=self._address):
                         break  # connection broken
 
-    async def control_point_request(self, req: bytes) -> bytes:
+    async def control_point_request(
+        self, req: bytes, *, timeout: float | None = None
+    ) -> bytes:
         if self._state is _State.CREATED:
             raise RuntimeError("Transport has not been opened")
 
@@ -134,14 +139,24 @@ class ProxyAVSSTransport(AVSSTransport):
             raise AVSSConnectionError("Connection has been closed")
 
         try:
-            result = await self._transceiver.avss_request(self._address, req)
+            result = await self._transceiver.avss_request(
+                self._address, req, timeout=timeout
+            )
             return result.response
         except TransceiverRequestError as e:
             if e.error.code == APIErrorCode.NODE_UNAVAILABLE:
                 raise AVSSConnectionError(
                     "Node not available via transceiver"
                 ) from None
+            if e.error.code == APIErrorCode.TIMEOUT:
+                # The transceiver gave up waiting for the node and has
+                # disconnected it; the transport loop will close shortly.
+                raise TimeoutError(
+                    "Node did not answer within the transceiver's time limit"
+                ) from None
             raise
+        except TransceiverConnectionError as e:
+            raise AVSSConnectionError(f"Transceiver connection broken: {e}") from e
 
     async def program_write(self, value: bytes) -> None:
         if self._state is _State.CREATED:

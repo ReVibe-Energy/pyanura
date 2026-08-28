@@ -113,7 +113,7 @@ class FakeSensorTransport(AVSSTransport):
         self.delivered_acked = 0
         self.pending_ends = []
 
-    async def control_point_request(self, req):
+    async def control_point_request(self, req, *, timeout=None):
         opcode = req[0]
         args = cbor2.loads(req[1:])
         if opcode == OpCode.PREPARE_UPGRADE_V2:

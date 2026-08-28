@@ -340,15 +340,20 @@ class AVSSClient:
             cbor2.dump(marshal(argument), fp)
             req_bytes = fp.getvalue()
 
-        # Send request and await response
-        async with asyncio.timeout(timeout):
-            try:
-                async with self._control_point_lock:
-                    resp_bytes = await self._transport.control_point_request(req_bytes)
-            except AVSSConnectionError:
-                raise
-            except Exception as e:
-                raise AVSSTransportError(f"Request failed: {e!s}") from e
+        # Send request and await response. The timeout is enforced by the
+        # transport rather than imposed from here, so that the transport is
+        # never cancelled mid-exchange and can pass the limit down to lower
+        # layers (a transceiver can then abandon the node in time, instead of
+        # staying busy with a request nobody is waiting for).
+        try:
+            async with self._control_point_lock:
+                resp_bytes = await self._transport.control_point_request(
+                    req_bytes, timeout=timeout
+                )
+        except (AVSSConnectionError, TimeoutError):
+            raise
+        except Exception as e:
+            raise AVSSTransportError(f"Request failed: {e!s}") from e
 
         # Get response opcode
         try:
