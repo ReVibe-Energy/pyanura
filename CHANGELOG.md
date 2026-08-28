@@ -8,15 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
-- `marshal()` leaves out dataclass fields typed `X | None` whose value is
-  None instead of encoding them as null. This lets optional arguments be
-  added to models without transmitting them to peers that do not know them.
-  Fields not typed as optional still encode None as null.
-- Report count fields (`ReportSnippetArgs`, `ReportAggregatesArgs`,
-  `ReportCaptureArgs`, `ReportHealthArgs`) are typed `int | Unlimited`; the
-  `anura.avss.UNLIMITED` sentinel encodes as the null the node expects for
-  an unbounded count. `AVSSClient.report_*` still accept `count=None` as a
-  synonym.
+- `marshal()` omits optional dataclass fields (`X | None`) whose value is
+  None instead of encoding them as null, and raises `TypeError` for None
+  anywhere else.
+- `unmarshal()` decodes unions of any member types, not only `X | None`.
+- Report `count` arguments accept `anura.avss.UNLIMITED` for no limit; the
+  model fields are typed `int | Unlimited`. `AVSSClient.report_*` still
+  accept `count=None`.
 
 ## [1.1.0]
 
