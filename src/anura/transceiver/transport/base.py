@@ -6,6 +6,13 @@ from typing import ClassVar
 class Transport(ABC):
     _registry: ClassVar[dict[str, Callable[..., "Transport"]]] = {}
 
+    # Whether the client must keep transmitting to keep the connection open.
+    # The transceiver's TCP server closes connections it has received nothing
+    # on for 5 seconds; transports without such idle eviction (e.g. USB) opt
+    # out. Enables the keepalive pings and, with them, the receive-silence
+    # liveness check, which relies on the ping responses for traffic.
+    requires_keepalive: ClassVar[bool] = True
+
     def __init_subclass__(cls, transport_type: str, **kwargs):
         super().__init_subclass__(**kwargs)
         cls._registry[transport_type] = cls
