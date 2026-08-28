@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- `marshal()` leaves out dataclass fields typed `X | None` whose value is
+  None instead of encoding them as null. This lets optional arguments be
+  added to models without transmitting them to peers that do not know them.
+  Fields not typed as optional still encode None as null.
+- Report count fields (`ReportSnippetArgs`, `ReportAggregatesArgs`,
+  `ReportCaptureArgs`, `ReportHealthArgs`) are typed `int | Unlimited`; the
+  `anura.avss.UNLIMITED` sentinel encodes as the null the node expects for
+  an unbounded count. `AVSSClient.report_*` still accept `count=None` as a
+  synonym.
+
 ## [1.1.0]
 
 ### Added

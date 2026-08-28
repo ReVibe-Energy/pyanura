@@ -55,3 +55,21 @@ def test_unmarshal_SnippetReport_with_timing():
     )
     assert report.duration == 5
     assert report.transmission_offset == 8
+
+
+def test_unlimited_report_count_encodes_as_null():
+    from anura.avss.models import (
+        UNLIMITED,
+        ReportAggregatesArgs,
+        ReportCaptureArgs,
+        ReportHealthArgs,
+        ReportSnippetArgs,
+    )
+    from anura.marshalling import marshal
+
+    # The node requires key 0 to be present; null means unlimited.
+    for cls in (ReportSnippetArgs, ReportAggregatesArgs, ReportCaptureArgs):
+        assert marshal(cls(count=UNLIMITED, auto_resume=True)) == {0: None, 1: True}
+        assert marshal(cls(count=3, auto_resume=False)) == {0: 3, 1: False}
+    assert marshal(ReportHealthArgs(count=UNLIMITED)) == {0: None}
+    assert marshal(ReportHealthArgs(count=True)) == {0: True}
