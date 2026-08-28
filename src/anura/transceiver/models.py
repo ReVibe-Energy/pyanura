@@ -45,6 +45,9 @@ class APIErrorCode(enum.IntEnum):
     RESPONSE_ENCODE = 8
     """Failed to encode the response."""
 
+    TIMEOUT = 9
+    """The operation did not complete within its time limit."""
+
 
 @dataclass
 class APIError:
@@ -176,6 +179,10 @@ class GetConnectedNodesResult:
 class AVSSRequestArgs:
     address: Annotated[BluetoothAddrLE, CborKey(0)]
     data: Annotated[bytes, CborKey(1)]
+    timeout_ms: Annotated[int | None, CborKey(2)] = None
+    """How long the transceiver waits for the node's response before failing
+    the request with `APIErrorCode.TIMEOUT` and disconnecting the node. Omitted
+    to use the transceiver's default. Not understood by older firmware."""
 
 
 @dataclass
