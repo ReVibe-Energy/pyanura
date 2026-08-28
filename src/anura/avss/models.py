@@ -17,7 +17,15 @@ UNLIMITED = Unlimited.UNLIMITED
 # the field ``int | None`` would not do: an unset optional field is left out
 # of the encoded map, and the node rejects a missing count. The sentinel keeps
 # "null on the wire" distinct from "absent".
-register_codec(Unlimited, marshal=lambda _: None, unmarshal=lambda _: UNLIMITED)
+
+
+def _unmarshal_unlimited(struct: Any) -> Unlimited:
+    if struct is not None:
+        raise TypeError(f"{struct!r} not decodable as Unlimited")
+    return UNLIMITED
+
+
+register_codec(Unlimited, marshal=lambda _: None, unmarshal=_unmarshal_unlimited)
 
 
 @dataclass

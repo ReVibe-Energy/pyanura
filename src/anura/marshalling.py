@@ -123,13 +123,7 @@ def unmarshal(cls: type[T], struct: Any) -> T:
         }
         return cast(T, cls(**attributes))
     elif isinstance(cls, types.UnionType):
-        match get_args(cls):
-            case inner_cls, types.NoneType:
-                return cast(T, unmarshal(inner_cls, struct))
-            case _:
-                # In principle this could be extended, but `SomeClass | None`
-                # is enough for our use case.
-                raise ValueError(f"Unsupported union type: {cls}")
+        return cast(T, _unmarshal_union(get_args(cls), struct))
     elif isinstance(cls, types.GenericAlias):
         origin = get_origin(cls)
         if origin is list:
@@ -150,6 +144,24 @@ def unmarshal(cls: type[T], struct: Any) -> T:
         if not isinstance(struct, cls):
             raise TypeError(f"{struct!r} not decodable as type {cls}")
         return struct
+
+
+def _unmarshal_union(members: tuple[type, ...], struct: Any) -> Any:
+    """Decode as the first member type that accepts the value.
+
+    Members are tried in declaration order, so put the more specific ones
+    first when they overlap. A ``None`` member only marks the field as
+    optional; a null on the wire is not accepted for it.
+    """
+    for member in members:
+        if member is types.NoneType:
+            continue
+        try:
+            return unmarshal(member, struct)
+        except (TypeError, ValueError):
+            continue
+    names = " | ".join(getattr(m, "__name__", repr(m)) for m in members)
+    raise TypeError(f"{struct!r} not decodable as type {names}")
 
 
 def _marshal_ipv4address(addr: ipaddress.IPv4Address) -> cbor2.CBORTag:

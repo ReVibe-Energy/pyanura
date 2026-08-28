@@ -73,3 +73,22 @@ def test_unlimited_report_count_encodes_as_null():
         assert marshal(cls(count=3, auto_resume=False)) == {0: 3, 1: False}
     assert marshal(ReportHealthArgs(count=UNLIMITED)) == {0: None}
     assert marshal(ReportHealthArgs(count=True)) == {0: True}
+
+
+def test_report_args_round_trip():
+    from anura.avss.models import (
+        UNLIMITED,
+        ReportAggregatesArgs,
+        ReportCaptureArgs,
+        ReportHealthArgs,
+        ReportSnippetArgs,
+    )
+    from anura.marshalling import marshal
+
+    for cls in (ReportSnippetArgs, ReportAggregatesArgs, ReportCaptureArgs):
+        for count in (UNLIMITED, 3):
+            args = cls(count=count, auto_resume=True)
+            assert unmarshal(cls, marshal(args)) == args
+    for count in (UNLIMITED, True, 3):
+        args = ReportHealthArgs(count=count)
+        assert unmarshal(ReportHealthArgs, marshal(args)) == args

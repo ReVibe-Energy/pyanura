@@ -115,3 +115,35 @@ def test_marshal_keeps_none_in_non_optional_fields():
         count: Annotated[int, CborKey(0)]
 
     assert marshal(Args(count=None)) == {0: None}  # type: ignore[arg-type]
+
+
+def test_unmarshal_union_picks_the_matching_member():
+    @dataclass
+    class Args:
+        value: Annotated[bool | int | None, CborKey(0)] = None
+
+    assert unmarshal(Args, {0: True}).value is True
+    assert unmarshal(Args, {0: 3}).value == 3
+    assert unmarshal(Args, {}).value is None
+    with pytest.raises(TypeError, match="not decodable"):
+        unmarshal(Args, {0: "three"})
+    # None marks the field optional; an explicit null is not a value for it.
+    with pytest.raises(TypeError, match="not decodable"):
+        unmarshal(Args, {0: None})
+
+
+def test_unmarshal_union_of_dataclasses():
+    @dataclass
+    class A:
+        a: Annotated[int, CborKey(0)]
+
+    @dataclass
+    class B:
+        b: Annotated[int, CborKey(1)]
+
+    @dataclass
+    class Holder:
+        inner: Annotated[A | B, CborKey(0)]
+
+    assert unmarshal(Holder, {0: {0: 1}}).inner == A(a=1)
+    assert unmarshal(Holder, {0: {1: 2}}).inner == B(b=2)
