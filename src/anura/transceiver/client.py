@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from collections.abc import AsyncIterator, Callable, Generator
 from contextlib import contextmanager
 from typing import (
@@ -27,12 +28,17 @@ T = TypeVar("T")
 #: exercise a device without the workaround (e.g. to verify fixed firmware).
 ISSUE_587_WORKAROUND_ENABLED = True
 
+logger = logging.getLogger(__name__)
+
 
 class TransceiverClient:
-    # Interval between keepalive probes of the connection, and how long a
-    # probe may go unanswered before the connection is considered dead.
+    # Interval between keepalive pings. The transceiver's TCP server closes
+    # connections it has received nothing on for 5 seconds.
     _keepalive_interval = 1.0
-    _keepalive_timeout = 1.0
+
+    # How long a request may go unanswered before the transceiver is
+    # considered broken and the connection is closed.
+    _request_timeout = 5.0
 
     def __init__(self, target_spec: str, port: int = 7645) -> None:
         self._transport = Transport.create(target_spec, port)
@@ -76,13 +82,12 @@ class TransceiverClient:
                         raise TransceiverError("Received an invalid CBOR-RPC message")
 
         async def keep_alive():
+            # Keeps traffic flowing so the transceiver does not evict us, and
+            # doubles as a liveness probe: an unanswered ping times out like
+            # any other request and fails the connection.
             while True:
                 await asyncio.sleep(self._keepalive_interval)
-
-                try:
-                    await asyncio.wait_for(self.ping(), self._keepalive_timeout)
-                except TimeoutError:
-                    raise TransceiverError("Keepalive ping timed out") from None
+                await self.ping()
 
         try:
             async with asyncio.TaskGroup() as tg:
@@ -117,10 +122,22 @@ class TransceiverClient:
     def _on_disconnected(self, task: asyncio.Task):
         assert task is self._connection_task
 
-        if not task.cancelled():
+        if not task.cancelled() and self._connection_exception is None:
             self._connection_exception = task.exception()
 
         self._connection_closed.set()
+
+    def _fail_connection(self, exception: TransceiverError) -> None:
+        """Tear down the connection because the transceiver misbehaved.
+
+        Pending requests fail with `TransceiverConnectionError` and
+        `wait_for_disconnection` returns, so the owner can reconnect.
+        """
+        if not self._connection_task or self._connection_task.done():
+            return
+        logger.error("Closing transceiver connection: %s", exception)
+        self._connection_exception = exception
+        self._connection_task.cancel()
 
     async def disconnect(self) -> None:
         if not self._connection_task:
@@ -162,49 +179,82 @@ class TransceiverClient:
             )
             await self._transport.send(payload)
 
-            async with asyncio.timeout(timeout):
-                async with asyncio.TaskGroup() as tg:
-                    monitor_task = tg.create_task(self._connection_closed.wait())
-                    done, _ = await asyncio.wait(
-                        [monitor_task, response_fut],
-                        return_when=asyncio.FIRST_COMPLETED,
-                    )
-                    monitor_task.cancel()
-                    response_fut.cancel()
+            try:
+                async with asyncio.timeout(timeout):
+                    async with asyncio.TaskGroup() as tg:
+                        monitor_task = tg.create_task(self._connection_closed.wait())
+                        done, _ = await asyncio.wait(
+                            [monitor_task, response_fut],
+                            return_when=asyncio.FIRST_COMPLETED,
+                        )
+                        monitor_task.cancel()
+                        response_fut.cancel()
+            except TimeoutError:
+                self._fail_connection(
+                    TransceiverError(f'"{method}" request unanswered for {timeout} s')
+                )
+                await self.wait_for_disconnection()
+                raise TransceiverConnectionError(
+                    f'Transceiver did not answer "{method}" request within '
+                    f"{timeout} s; connection closed"
+                ) from None
 
-                if response_fut in done:
-                    return response_fut.result()
-                else:
-                    if self._connection_exception:
-                        raise TransceiverConnectionError(
-                            f'Connection broken during "{method}" request: {self._connection_exception}'
-                        ) from self._connection_exception
-                    else:
-                        raise TransceiverConnectionError(
-                            f'Connection broken during "{method}" request'
-                        ) from None
+            if response_fut in done:
+                return response_fut.result()
+            elif self._connection_exception:
+                raise TransceiverConnectionError(
+                    f'Connection broken during "{method}" request: {self._connection_exception}'
+                ) from self._connection_exception
+            else:
+                raise TransceiverConnectionError(
+                    f'Connection broken during "{method}" request'
+                ) from None
 
         finally:
             del self._pending_responses[request_token]
 
     @overload
     async def request(
-        self, method: str, arg: Any = None, /, *, result_type: type[T]
+        self,
+        method: str,
+        arg: Any = None,
+        /,
+        *,
+        result_type: type[T],
+        timeout: float | bool | None = True,
     ) -> T: ...
 
     @overload
-    async def request(self, method: str, arg: Any = None, /) -> Any: ...
+    async def request(
+        self, method: str, arg: Any = None, /, *, timeout: float | bool | None = True
+    ) -> Any: ...
 
-    async def request(self, method, arg=None, result_type=None):
+    async def request(
+        self, method, arg=None, result_type=None, timeout: float | bool | None = True
+    ):
         """Send a request and receive the response.
 
         Args:
             arg: The request argument, or None for a method without one.
+            timeout: Seconds to wait for the response, True for the default
+                     timeout, None for no timeout.
+
+        Raises:
+            TransceiverConnectionError: If the connection broke for any
+                reason while waiting for the response. This includes the
+                device not answering within `timeout`, which itself closes
+                the connection, as an unanswered request means the
+                transceiver is broken.
         """
+        if timeout is True:
+            timeout = self._request_timeout
+        if timeout is False:
+            timeout = None
+
         # CBOR-RPC requires an argument element in every request; null is the
         # placeholder for methods that take none.
         param = None if arg is None else marshal(arg)
-        match await self._request_internal(method, param):
+        match await self._request_internal(method, param, timeout=timeout):
             case (None, result):
                 if result_type:
                     return unmarshal(result_type, result)
@@ -405,7 +455,8 @@ class TransceiverClient:
         return await self.request("ping", arg)
 
     async def slow_ping(self):
-        return await self.request("slow_ping")
+        # Deliberately slow diagnostic method, answered after 5 seconds.
+        return await self.request("slow_ping", timeout=10.0)
 
     async def scan_nodes_stop(self):
         return await self.request("scan_nodes_stop")
@@ -414,8 +465,10 @@ class TransceiverClient:
         self, addr: models.BluetoothAddrLE, data: bytes
     ) -> models.AVSSRequestResult:
         args = models.AVSSRequestArgs(address=addr, data=data)
+        # The transceiver bounds this operation at 30 s by default, timing the
+        # node out and disconnecting it, so allow for that plus a margin.
         return await self.request(
-            "avss_request", args, result_type=models.AVSSRequestResult
+            "avss_request", args, result_type=models.AVSSRequestResult, timeout=35.0
         )
 
     async def avss_program_write(self, addr: models.BluetoothAddrLE, data: bytes):

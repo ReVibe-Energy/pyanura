@@ -33,6 +33,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Report `count` arguments accept `anura.avss.UNLIMITED` for no limit; the
   model fields are typed `int | Unlimited`. `AVSSClient.report_*` still
   accept `count=None`.
+- `TransceiverClient` requests fail with `TransceiverConnectionError`, and
+  the connection is closed, if the transceiver does not answer within 5
+  seconds, instead of waiting indefinitely. `request()` takes a `timeout`
+  argument to adjust or disable (`None`) the limit per call.
 - The USB transceiver transport no longer sends keepalive pings.
 
 ### Removed
