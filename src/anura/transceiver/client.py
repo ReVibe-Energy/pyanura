@@ -248,7 +248,18 @@ class TransceiverClient:
         if timeout is False:
             timeout = None
 
-        match await self._request_internal(method, marshal(arg), timeout=timeout):
+        # The request runs in its own task so that a caller giving up on it
+        # (cancellation, or a timeout imposed by a higher layer such as
+        # AVSSClient) does not abort it. The exchange with the transceiver
+        # continues to completion or to this client's own timeout, so the
+        # response is consumed and the transceiver's health is still judged
+        # by the request's outcome rather than by the caller's patience.
+        task = asyncio.create_task(
+            self._request_internal(method, marshal(arg), timeout=timeout)
+        )
+        task.add_done_callback(_consume_abandoned_result)
+
+        match await asyncio.shield(task):
             case (None, result):
                 if result_type:
                     return unmarshal(result_type, result)
@@ -457,3 +468,12 @@ class TransceiverClient:
                     and msg.address == addr
                 ):
                     return addr
+
+
+def _consume_abandoned_result(task: asyncio.Task) -> None:
+    """Retrieve the outcome of a request task its caller stopped waiting for,
+    so the event loop does not log it as never retrieved."""
+    if task.cancelled():
+        return
+    if (exc := task.exception()) is not None:
+        logger.debug("Abandoned request finished with %r", exc)
