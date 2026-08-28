@@ -334,10 +334,10 @@ class AVSSClient:
         if not timeout:
             timeout = None
 
-        # Serialize request
+        # Serialize request. Opcodes without an argument get a null placeholder.
         with BytesIO() as fp:
             fp.write(bytes((opcode,)))
-            cbor2.dump(marshal(argument), fp)
+            cbor2.dump(None if argument is None else marshal(argument), fp)
             req_bytes = fp.getvalue()
 
         # Send request and await response

@@ -89,7 +89,12 @@ def _is_optional(tp: Any) -> bool:
 def marshal(obj: Any) -> dict | list | Any:
     """Convert an object representation of a message or data type to a
     structure consisting of dicts, lists and primitive types."""
-    if codec := _codecs.get(type(obj)):
+    if obj is None:
+        # None stands for the absence of a value, which is expressed by leaving
+        # an optional field out, never by encoding. A type that has a meaning
+        # for CBOR null on the wire gets its own sentinel with a codec.
+        raise TypeError("None cannot be marshalled")
+    elif codec := _codecs.get(type(obj)):
         return codec.marshal(obj)
     elif is_dataclass(obj) and not isinstance(obj, type):
         out = {}

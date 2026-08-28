@@ -106,15 +106,20 @@ def test_marshal_omits_unset_optional_fields():
     assert marshal(Args(required=1, optional=2)) == {0: 1, 1: 2}
 
 
-def test_marshal_keeps_none_in_non_optional_fields():
-    """A field not typed as optional carries None through as CBOR null;
-    some peers require a nullable value to be present."""
+def test_marshal_rejects_none():
+    """None means absence, which only an optional field can express by being
+    left out. A null with a meaning on the wire needs a sentinel type."""
 
     @dataclass
     class Args:
         count: Annotated[int, CborKey(0)]
 
-    assert marshal(Args(count=None)) == {0: None}  # type: ignore[arg-type]
+    with pytest.raises(TypeError):
+        marshal(None)
+    with pytest.raises(TypeError):
+        marshal(Args(count=None))  # type: ignore[arg-type]
+    with pytest.raises(TypeError):
+        marshal([1, None])
 
 
 def test_unmarshal_union_picks_the_matching_member():

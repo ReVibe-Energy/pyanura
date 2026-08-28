@@ -185,8 +185,15 @@ class TransceiverClient:
     async def request(self, method: str, arg: Any = None, /) -> Any: ...
 
     async def request(self, method, arg=None, result_type=None):
-        "Send a send a request and receive the response"
-        match await self._request_internal(method, marshal(arg)):
+        """Send a request and receive the response.
+
+        Args:
+            arg: The request argument, or None for a method without one.
+        """
+        # CBOR-RPC requires an argument element in every request; null is the
+        # placeholder for methods that take none.
+        param = None if arg is None else marshal(arg)
+        match await self._request_internal(method, param):
             case (None, result):
                 if result_type:
                     return unmarshal(result_type, result)
