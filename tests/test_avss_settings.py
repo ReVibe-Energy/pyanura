@@ -76,7 +76,7 @@ class FakeNodeTransport(AVSSTransport):
     async def program_write(self, value):
         raise AssertionError("Not a program transfer test")
 
-    async def control_point_request(self, req):
+    async def control_point_request(self, req, *, timeout=None):
         assert len(req) <= self.request_limit, (
             f"{len(req)} byte request exceeds the node's "
             f"{self.request_limit} byte buffer"

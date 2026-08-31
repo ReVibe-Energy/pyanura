@@ -41,6 +41,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `TransceiverClient.avss_request()` takes a `timeout` for the node's
   response and raises `TimeoutError` when it expires. Requires transceiver
   firmware support for proper operation.
+- `AVSSTransport.control_point_request()` takes a `timeout` and is
+  responsible for enforcing it. Control point timeouts surface as
+  `TimeoutError` from the transport. Over a transceiver without timeout
+  support the proxy transport merely stops waiting when it expires; the
+  request keeps occupying the node and the transceiver.
 - The USB transceiver transport no longer sends keepalive pings.
 
 ### Removed
