@@ -34,6 +34,10 @@ class FakeTransport(Transport, transport_type="fake-test"):
         self.slow_op_delay = slow_op_delay
         self.ping_count = 0
         self.never_op_count = 0
+        self.avss_requests: list[dict] = []
+        self.has_avss_request = True
+        self.avss_timeout_supported = True
+        self.avss_node_answers = True
 
     async def open_connection(self) -> None:
         pass
@@ -54,6 +58,29 @@ class FakeTransport(Transport, transport_type="fake-test"):
                 self._tasks.append(asyncio.create_task(self._respond_later(token)))
             case [models.msg_type.Request, _, "never_op", _]:
                 self.never_op_count += 1
+            case [models.msg_type.Request, token, "avss_request", _] if (
+                not self.has_avss_request
+            ):
+                self._respond(token, ".well-known/not-found", None)
+            case [models.msg_type.Request, token, "avss_request", arg]:
+                self.avss_requests.append(arg)
+                if 2 in arg and not self.avss_timeout_supported:
+                    # Old firmware: unknown map key fails argument decoding.
+                    self._respond(token, {0: models.APIErrorCode.ARGUMENT_DECODE}, None)
+                elif arg[0] == [0, bytes(6)]:
+                    # No node has the all-zero address the probe uses.
+                    self._respond(
+                        token, {0: models.APIErrorCode.NODE_UNAVAILABLE}, None
+                    )
+                elif self.avss_node_answers:
+                    self._respond(token, None, {0: b"\x05ok"})
+                elif 2 in arg:
+                    # Transceiver enforces the requested node timeout.
+                    delay = arg[2] / 1000
+                    self._tasks.append(
+                        asyncio.create_task(self._respond_timeout_later(token, delay))
+                    )
+                # Otherwise: node never answers and the transceiver waits.
             case message:
                 raise AssertionError(f"Unexpected message: {message}")
 
@@ -69,13 +96,22 @@ class FakeTransport(Transport, transport_type="fake-test"):
         await asyncio.sleep(self.slow_op_delay)
         self._respond(token, None, "done")
 
+    async def _respond_timeout_later(self, token, delay) -> None:
+        await asyncio.sleep(delay)
+        self._respond(token, {0: models.APIErrorCode.TIMEOUT}, None)
+
 
 def make_client(transport: FakeTransport) -> TransceiverClient:
     client = TransceiverClient("host-is-unused")
     client._transport = transport
     client._keepalive_interval = 0.05
     client._request_timeout = 0.1
+    client._avss_request_default_timeout = 0.2
+    client._avss_request_margin = 0.1
     return client
+
+
+NODE = models.BluetoothAddrLE.parse("C0:00:00:00:00:01")
 
 
 def test_keepalive_pings_flow_while_idle():
@@ -226,6 +262,181 @@ def test_request_survives_cancellation_of_its_caller():
             await asyncio.sleep(0.3)
             assert len(client._pending_responses) == 0
             assert not client._connection_closed.is_set()
+        finally:
+            await client.disconnect()
+
+    run(scenario())
+
+
+def test_avss_request_forwards_the_timeout_to_the_transceiver():
+    async def scenario():
+        transport = FakeTransport()
+        client = make_client(transport)
+        await client.connect()
+        try:
+            result = await client.avss_request(NODE, b"\x05", timeout=2.5)
+            assert result.response == b"\x05ok"
+            assert transport.avss_requests[-1][2] == 2500
+
+            # Without a timeout the argument is left out so the transceiver
+            # applies its default.
+            await client.avss_request(NODE, b"\x05")
+            assert 2 not in transport.avss_requests[-1]
+        finally:
+            await client.disconnect()
+
+    run(scenario())
+
+
+def test_avss_request_timeout_enforced_by_the_transceiver():
+    async def scenario():
+        transport = FakeTransport()
+        transport.avss_node_answers = False
+        client = make_client(transport)
+        await client.connect()
+        try:
+            # The transceiver's limit expiring surfaces like a local one.
+            with pytest.raises(TimeoutError):
+                await client.avss_request(NODE, b"\x05", timeout=0.1)
+            # The transceiver did its job; the connection is fine.
+            assert not client._connection_closed.is_set()
+        finally:
+            await client.disconnect()
+
+    run(scenario())
+
+
+def test_connect_probes_avss_request_timeout_support():
+    async def scenario():
+        transport = FakeTransport()
+        client = make_client(transport)
+        await client.connect()
+        try:
+            assert client._avss_request_timeout_supported is True
+            # The probe carried the argument and targeted the dummy address.
+            [probe] = transport.avss_requests
+            assert probe[0] == [0, bytes(6)]
+            assert 2 in probe
+        finally:
+            await client.disconnect()
+
+    run(scenario())
+
+
+def test_connect_survives_firmware_without_avss_request():
+    async def scenario():
+        transport = FakeTransport()
+        transport.has_avss_request = False
+        client = make_client(transport)
+        await client.connect()
+        try:
+            assert client._avss_request_timeout_supported is False
+        finally:
+            await client.disconnect()
+
+    run(scenario())
+
+
+def test_avss_request_timeout_refused_on_old_firmware():
+    """Firmware without timeout support waits for the node indefinitely, so
+    a timeout is a guarantee the client cannot provide: asking for one is
+    refused rather than emulated."""
+
+    async def scenario():
+        transport = FakeTransport()
+        transport.avss_timeout_supported = False
+        client = make_client(transport)
+        await client.connect()
+        try:
+            # The connect-time probe found the argument unsupported.
+            assert client.supports_avss_request_timeout is False
+
+            with pytest.raises(TransceiverError, match="firmware"):
+                await client.avss_request(NODE, b"\x05", timeout=0.1)
+
+            # Requests without a timeout still work; only the probe ever
+            # carried the argument (the refused call never hit the wire).
+            result = await client.avss_request(NODE, b"\x05")
+            assert result.response == b"\x05ok"
+            assert [2 in a for a in transport.avss_requests] == [True, False]
+        finally:
+            await client.disconnect()
+
+    run(scenario())
+
+
+def test_concurrent_avss_requests_on_old_firmware():
+    """The connect-time probe settles support before any user request runs,
+    so concurrent requests get a consistent answer instead of racing over
+    the detection."""
+
+    async def scenario():
+        transport = FakeTransport()
+        transport.avss_timeout_supported = False
+        client = make_client(transport)
+        await client.connect()
+        try:
+            results = await asyncio.gather(
+                client.avss_request(NODE, b"\x05", timeout=0.1),
+                client.avss_request(NODE, b"\x05", timeout=0.1),
+                return_exceptions=True,
+            )
+            assert all(isinstance(r, TransceiverError) for r in results)
+            # Neither refused call hit the wire; only the probe did.
+            assert len(transport.avss_requests) == 1
+        finally:
+            await client.disconnect()
+
+    run(scenario())
+
+
+def test_avss_request_unanswered_past_the_transceiver_bound_fails_connection():
+    """The transceiver bounds avss_request itself, so getting no answer at
+    all within that bound plus margin means the transceiver is broken."""
+
+    async def scenario():
+        transport = FakeTransport()
+        transport.avss_node_answers = False
+        client = make_client(transport)
+        await client.connect()
+        try:
+            with pytest.raises(TransceiverConnectionError, match="connection closed"):
+                await client.avss_request(NODE, b"\x05")
+            assert client._connection_closed.is_set()
+            assert '"avss_request" request unanswered' in str(
+                client._connection_exception
+            )
+        finally:
+            await client.disconnect()
+
+    run(scenario())
+
+
+def test_avss_request_bound_is_still_judged_when_the_caller_gave_up():
+    """Case from the PR discussion: an upper layer stops waiting early, as
+    the AVSS proxy transport does on firmware without timeout support. The
+    request must carry on so the transceiver's failure to answer within the
+    expected bound is still detected and the connection recycled."""
+
+    async def scenario():
+        transport = FakeTransport()
+        transport.avss_timeout_supported = False
+        transport.avss_node_answers = False
+        transport.requires_keepalive = False  # keep pings out of the count
+        client = make_client(transport)
+        await client.connect()
+        try:
+            with pytest.raises(TimeoutError):
+                async with asyncio.timeout(0.05):
+                    await client.avss_request(NODE, b"\x05")
+            assert not client._connection_closed.is_set()
+
+            # The request is still running against the transceiver.
+            assert len(client._pending_responses) == 1
+            await client.wait_for_disconnection()
+            assert '"avss_request" request unanswered' in str(
+                client._connection_exception
+            )
         finally:
             await client.disconnect()
 

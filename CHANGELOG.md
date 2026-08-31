@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with `--merge`.
 - The CLI `avss reset-settings` command, which resets a node's settings to
   their defaults.
+- `APIErrorCode.TIMEOUT` and `AVSSRequestArgs.timeout_ms`.
 
 ### Changed
 - `marshal()` omits optional dataclass fields (`X | None`) whose value is
@@ -37,6 +38,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the connection is closed, if the transceiver does not answer within 5
   seconds, instead of waiting indefinitely. `request()` takes a `timeout`
   argument to adjust or disable (`None`) the limit per call.
+- `TransceiverClient.avss_request()` takes a `timeout` for the node's
+  response and raises `TimeoutError` when it expires. Requires transceiver
+  firmware support for proper operation.
 - The USB transceiver transport no longer sends keepalive pings.
 
 ### Removed

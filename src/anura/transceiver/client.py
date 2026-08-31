@@ -19,6 +19,7 @@ from .exceptions import (
     TransceiverMethodNotFoundError,
     TransceiverRequestError,
 )
+from .models import APIErrorCode
 from .transport import Transport
 
 T = TypeVar("T")
@@ -40,6 +41,19 @@ class TransceiverClient:
     # considered broken and the connection is closed.
     _request_timeout = 5.0
 
+    # The node timeout that firmware with timeout support applies when the
+    # request carries none. Firmware without support waits for the node
+    # indefinitely.
+    _avss_request_default_timeout = 30.0
+
+    # Margin on top of the node timeout that the transceiver gets to deliver
+    # the avss_request response (or its timeout error).
+    _avss_request_margin = 5.0
+
+    # Address no node can have, used to probe firmware support for the
+    # avss_request timeout argument without touching a real node.
+    _avss_probe_address = models.BluetoothAddrLE(type=0, address=bytes(6))
+
     def __init__(self, target_spec: str, port: int = 7645) -> None:
         self._transport = Transport.create(target_spec, port)
         self._pending_responses = {}
@@ -49,6 +63,9 @@ class TransceiverClient:
         self._connection_exception: BaseException | None = None
         self._notification_callbacks: list[Callable[[models.Notification], None]] = []
         self._next_request_token: int = 0
+        # Whether the transceiver firmware accepts the avss_request timeout
+        # argument. Probed once during connect().
+        self._avss_request_timeout_supported = False
 
     async def __aenter__(self):
         await self.connect()
@@ -118,6 +135,8 @@ class TransceiverClient:
 
         # Discover methods automatically
         await self.discover_methods()
+
+        await self._probe_avss_request_timeout_support()
 
     def _on_disconnected(self, task: asyncio.Task):
         assert task is self._connection_task
@@ -473,15 +492,104 @@ class TransceiverClient:
     async def scan_nodes_stop(self):
         return await self.request("scan_nodes_stop")
 
-    async def avss_request(
-        self, addr: models.BluetoothAddrLE, data: bytes
-    ) -> models.AVSSRequestResult:
-        args = models.AVSSRequestArgs(address=addr, data=data)
-        # The transceiver bounds this operation at 30 s by default, timing the
-        # node out and disconnecting it, so allow for that plus a margin.
-        return await self.request(
-            "avss_request", args, result_type=models.AVSSRequestResult, timeout=35.0
+    async def _probe_avss_request_timeout_support(self) -> None:
+        """Find out whether the firmware accepts the avss_request timeout
+        argument, by sending one for an address no node can have. Firmware
+        without support rejects the argument itself (ARGUMENT_DECODE);
+        firmware with support gets past decoding and fails on the unknown
+        address instead."""
+        args = models.AVSSRequestArgs(
+            address=self._avss_probe_address, data=b"\x00", timeout_ms=1000
         )
+        try:
+            await self.request("avss_request", args)
+        except TransceiverRequestError as e:
+            supported = e.error.code != APIErrorCode.ARGUMENT_DECODE
+        except TransceiverMethodNotFoundError:
+            # No avss_request at all, so the flag will never matter.
+            supported = False
+        else:
+            supported = True
+        if not supported:
+            logger.warning(
+                "Transceiver firmware does not support avss_request "
+                "timeouts; node requests cannot be bounded until the "
+                "firmware is updated"
+            )
+        self._avss_request_timeout_supported = supported
+
+    @property
+    def supports_avss_request_timeout(self) -> bool:
+        """Whether the firmware accepts the avss_request timeout argument.
+
+        Probed during connect(). Firmware without support waits for the
+        node indefinitely and cannot bound a request at all; the only
+        remedy is a firmware update.
+        """
+        return self._avss_request_timeout_supported
+
+    async def avss_request(
+        self,
+        addr: models.BluetoothAddrLE,
+        data: bytes,
+        *,
+        timeout: float | None = None,
+    ) -> models.AVSSRequestResult:
+        """Send a control point request to a node via the transceiver.
+
+        Args:
+            timeout: Seconds the transceiver waits for the node's response
+                before failing the request and disconnecting the node.
+                Requires firmware support (`supports_avss_request_timeout`).
+                None leaves the firmware's own behavior in force: supporting
+                firmware applies its 30 s default, older firmware waits for
+                the node indefinitely.
+
+        Raises:
+            TimeoutError: If the node did not answer within the limit the
+                transceiver applied. The transceiver has disconnected the
+                node then.
+            TransceiverError: If `timeout` was given but the firmware does
+                not support it.
+            TransceiverConnectionError: If the connection broke for any
+                reason while waiting, including the transceiver itself not
+                delivering any answer within the expected bound plus a
+                margin (which closes the connection).
+        """
+        timeout_ms: int | None = None
+        node_timeout = self._avss_request_default_timeout
+
+        if timeout is not None:
+            if not self._avss_request_timeout_supported:
+                raise TransceiverError(
+                    "The transceiver firmware does not support avss_request "
+                    "timeouts; a firmware update is required"
+                )
+            timeout_ms = int(timeout * 1000)
+            node_timeout = timeout
+
+        # `rpc_timeout` is the time given to the transceiver to respond,
+        # assuming it waits up to `node_timeout` for the node. Firmware
+        # without timeout support waits indefinitely, so there a wedged node
+        # is indistinguishable from a broken transceiver; failing the
+        # connection at least surfaces the problem, though only a firmware
+        # update truly fixes it.
+        rpc_timeout = node_timeout + self._avss_request_margin
+
+        try:
+            return await self.request(
+                "avss_request",
+                models.AVSSRequestArgs(address=addr, data=data, timeout_ms=timeout_ms),
+                result_type=models.AVSSRequestResult,
+                timeout=rpc_timeout,
+            )
+        except TransceiverRequestError as e:
+            if e.error.code == APIErrorCode.TIMEOUT:
+                # The limit the transceiver applied expired.
+                raise TimeoutError(
+                    "Node did not answer within the transceiver's time limit"
+                ) from None
+            raise
 
     async def avss_program_write(self, addr: models.BluetoothAddrLE, data: bytes):
         args = models.AVSSProgramWriteArgs(address=addr, data=data)
