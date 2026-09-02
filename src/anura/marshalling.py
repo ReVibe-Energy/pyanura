@@ -8,10 +8,10 @@ from typing import (
     Annotated,
     Any,
     TypeVar,
-    cast,
     get_args,
     get_origin,
     get_type_hints,
+    overload,
 )
 
 import cbor2
@@ -112,10 +112,20 @@ def marshal(obj: Any) -> dict | list | Any:
         return obj
 
 
-def unmarshal(cls: type[T], struct: Any) -> T:
+@overload
+def unmarshal(cls: type[T], struct: Any) -> T: ...
+@overload
+def unmarshal(cls: types.UnionType | types.GenericAlias, struct: Any) -> Any: ...
+def unmarshal(cls: Any, struct: Any) -> Any:
+    """Decode ``struct`` as ``cls``.
+
+    ``cls`` is a class, a union such as ``int | Unlimited``, or a
+    parameterised ``list``/``dict``. Unions and generic aliases are not
+    ``type`` objects, so they get their own overload and return ``Any``.
+    """
     if codec := _codecs.get(cls):
         return codec.unmarshal(struct)
-    elif is_dataclass(cls):
+    elif isinstance(cls, type) and is_dataclass(cls):
         if not isinstance(struct, dict):
             raise ValueError(
                 f"Expected dict for dataclass {cls.__name__}, "
@@ -126,23 +136,19 @@ def unmarshal(cls: type[T], struct: Any) -> T:
             for name, (key, field_type) in _field_keys(cls).items()
             if key in struct
         }
-        return cast(T, cls(**attributes))
+        return cls(**attributes)
     elif isinstance(cls, types.UnionType):
-        return cast(T, _unmarshal_union(get_args(cls), struct))
+        return _unmarshal_union(get_args(cls), struct)
     elif isinstance(cls, types.GenericAlias):
         origin = get_origin(cls)
         if origin is list:
             item_cls = get_args(cls)[0]
-            return cast(T, [unmarshal(item_cls, v) for v in struct])
+            return [unmarshal(item_cls, v) for v in struct]
         elif origin is dict:
             key_cls, val_cls = get_args(cls)
-            return cast(
-                T,
-                {
-                    unmarshal(key_cls, k): unmarshal(val_cls, v)
-                    for k, v in struct.items()
-                },
-            )
+            return {
+                unmarshal(key_cls, k): unmarshal(val_cls, v) for k, v in struct.items()
+            }
         else:
             raise ValueError("Unsupported generic type.")
     else:

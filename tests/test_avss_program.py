@@ -3,6 +3,7 @@
 import asyncio
 import hashlib
 import struct
+from collections.abc import Callable
 
 import cbor2
 import pytest
@@ -75,7 +76,7 @@ class FakeSensorTransport(AVSSTransport):
         self.pending_ends: list[int] = []
         self.payload_sizes: list[int] = []
 
-        self._program_cb = None
+        self._program_cb: Callable[[bytes], None] | None = None
 
     async def open(self):
         pass
@@ -96,6 +97,7 @@ class FakeSensorTransport(AVSSTransport):
         self.ack_count += 1
         if self.ack_count not in self.drop_acks:
             self.delivered_acked = max(self.delivered_acked, acked)
+            assert self._program_cb is not None
             self._program_cb(struct.pack("<LB", acked, window))
 
     def _send_ack(self):
@@ -174,6 +176,7 @@ class FakeSensorTransport(AVSSTransport):
 
         if self.abort_at_write == self.write_count:
             self.aborted = True
+            assert self._program_cb is not None
             self._program_cb(struct.pack("<LB", PROGRAM_OFFSET_ABORT, 0))
             return
 
@@ -197,6 +200,7 @@ class FakeSensorTransport(AVSSTransport):
         if not self.windowed:
             # Legacy: NACK the expected offset on mismatch.
             if offset != self.expected:
+                assert self._program_cb is not None
                 self._program_cb(struct.pack("<L", self.expected))
                 return
         else:

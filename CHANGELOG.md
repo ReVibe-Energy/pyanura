@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   None instead of encoding them as null, and raises `TypeError` for None
   anywhere else.
 - `unmarshal()` decodes unions of any member types, not only `X | None`.
+- `unmarshal()` is overloaded so that passing a union or a parameterised
+  `list`/`dict` type-checks; the overload returns `Any`.
 - Report `count` arguments accept `anura.avss.UNLIMITED` for no limit; the
   model fields are typed `int | Unlimited`. `AVSSClient.report_*` still
   accept `count=None`.

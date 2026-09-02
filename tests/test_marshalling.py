@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Annotated
+from typing import Annotated, Any, assert_type
 
 import pytest
 
@@ -152,3 +152,23 @@ def test_unmarshal_union_of_dataclasses():
 
     assert unmarshal(Holder, {0: {0: 1}}).inner == A(a=1)
     assert unmarshal(Holder, {0: {1: 2}}).inner == B(b=2)
+
+
+def test_unmarshal_accepts_a_union_directly():
+    """Unions are not ``type`` objects, so ``unmarshal`` has a separate
+    overload for them. This file is type-checked, so a regression in that
+    overload fails ``pyright`` as well as ``pytest``."""
+    assert unmarshal(int | str, 3) == 3
+    assert unmarshal(int | str, "three") == "three"
+    with pytest.raises(TypeError, match="not decodable"):
+        unmarshal(int | str, None)
+
+
+def test_unmarshal_return_types():
+    @dataclass
+    class Args:
+        count: Annotated[int, CborKey(0)]
+
+    assert_type(unmarshal(Args, {0: 1}), Args)
+    assert_type(unmarshal(list[int], [1]), list[int])
+    assert_type(unmarshal(int | str, 1), Any)
