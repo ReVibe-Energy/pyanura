@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- `marshal()` omits optional dataclass fields (`X | None`) whose value is
+  None instead of encoding them as null, and raises `TypeError` for None
+  anywhere else.
+- `unmarshal()` decodes unions of any member types, not only `X | None`.
+- `unmarshal()` is overloaded so that passing a union or a parameterised
+  `list`/`dict` type-checks; the overload returns `Any`.
+- Report `count` arguments accept `anura.avss.UNLIMITED` for no limit; the
+  model fields are typed `int | Unlimited`. `AVSSClient.report_*` still
+  accept `count=None`.
+
 ## [1.1.0]
 
 ### Added

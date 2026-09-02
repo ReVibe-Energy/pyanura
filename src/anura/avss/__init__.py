@@ -15,16 +15,19 @@ from .exceptions import (
     AVSSTransportError,
 )
 from .models import (
+    UNLIMITED,
     AggregatedValuesReport,
     CaptureReport,
     HealthReport,
     SettingsReport,
     SnippetReport,
+    Unlimited,
 )
 from .protocol import OpCode, ReportType, ResponseCode
 from .settings import SettingsMapper
 
 __all__ = [
+    "UNLIMITED",
     "AVSSBadArgumentError",
     "AVSSClient",
     "AVSSConnectionError",
@@ -44,4 +47,5 @@ __all__ = [
     "SettingsMapper",
     "SettingsReport",
     "SnippetReport",
+    "Unlimited",
 ]

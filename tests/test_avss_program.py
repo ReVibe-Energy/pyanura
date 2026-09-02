@@ -3,6 +3,7 @@
 import asyncio
 import hashlib
 import struct
+from collections.abc import Callable
 
 import cbor2
 import pytest
@@ -10,8 +11,14 @@ import pytest
 from anura.avss import procedures
 from anura.avss.client import PROGRAM_OFFSET_ABORT, AVSSClient
 from anura.avss.exceptions import AVSSProgramTransferError
+from anura.avss.models import (
+    PrepareUpgradeArgs,
+    PrepareUpgradeV2Args,
+    PrepareUpgradeV2Response,
+)
 from anura.avss.protocol import OpCode, ResponseCode
 from anura.avss.transport.base import AVSSTransport
+from anura.marshalling import marshal, unmarshal
 
 
 class FakeSensorTransport(AVSSTransport):
@@ -69,7 +76,7 @@ class FakeSensorTransport(AVSSTransport):
         self.pending_ends: list[int] = []
         self.payload_sizes: list[int] = []
 
-        self._program_cb = None
+        self._program_cb: Callable[[bytes], None] | None = None
 
     async def open(self):
         pass
@@ -90,6 +97,7 @@ class FakeSensorTransport(AVSSTransport):
         self.ack_count += 1
         if self.ack_count not in self.drop_acks:
             self.delivered_acked = max(self.delivered_acked, acked)
+            assert self._program_cb is not None
             self._program_cb(struct.pack("<LB", acked, window))
 
     def _send_ack(self):
@@ -115,15 +123,16 @@ class FakeSensorTransport(AVSSTransport):
 
     async def control_point_request(self, req):
         opcode = req[0]
-        args = cbor2.loads(req[1:])
+        payload = cbor2.loads(req[1:])
         if opcode == OpCode.PREPARE_UPGRADE_V2:
             if not self.windowed_supported:
                 return bytes([OpCode.RESPONSE, opcode, ResponseCode.OPCODE_UNSUPPORTED])
-            assert args[1] == self.image_size
-            assert len(args[2]) == 32
+            args = unmarshal(PrepareUpgradeV2Args, payload)
+            assert args.size == self.image_size
+            assert len(args.digest) == 32
             resume = (
-                self.digest == args[2]
-                and self.prepared_image == args[0]
+                self.digest == args.digest
+                and self.prepared_image == args.image
                 and not self.aborted
             )
             if resume:
@@ -136,15 +145,21 @@ class FakeSensorTransport(AVSSTransport):
                 self.pending_ends = []
             else:
                 self.resumed_from = None
-                self._fresh_prepare(args[0], args[2])
+                self._fresh_prepare(args.image, args.digest)
             self.windowed = True
             self._send_ack()  # initial window grant
+            response = PrepareUpgradeV2Response(
+                max_chunk_size=self.max_chunk,
+                window=self.window_chunks,
+                offset=self.expected,
+            )
             return bytes([OpCode.PREPARE_UPGRADE_V2_RESPONSE]) + cbor2.dumps(
-                {0: self.max_chunk, 1: self.window_chunks, 2: self.expected}
+                marshal(response)
             )
         if opcode == OpCode.PREPARE_UPGRADE:
-            assert args[1] == self.image_size
-            self._fresh_prepare(args[0], None)
+            args = unmarshal(PrepareUpgradeArgs, payload)
+            assert args.size == self.image_size
+            self._fresh_prepare(args.image, None)
             self.windowed = False
             return bytes([OpCode.RESPONSE, opcode, ResponseCode.OK])
         raise AssertionError(f"unexpected opcode {opcode}")
@@ -161,6 +176,7 @@ class FakeSensorTransport(AVSSTransport):
 
         if self.abort_at_write == self.write_count:
             self.aborted = True
+            assert self._program_cb is not None
             self._program_cb(struct.pack("<LB", PROGRAM_OFFSET_ABORT, 0))
             return
 
@@ -184,6 +200,7 @@ class FakeSensorTransport(AVSSTransport):
         if not self.windowed:
             # Legacy: NACK the expected offset on mismatch.
             if offset != self.expected:
+                assert self._program_cb is not None
                 self._program_cb(struct.pack("<L", self.expected))
                 return
         else:

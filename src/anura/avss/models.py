@@ -1,30 +1,56 @@
+import enum
 from dataclasses import dataclass
 from typing import Annotated, Any
 
-from anura.marshalling import CborKey
+from anura.marshalling import CborKey, register_codec
+
+
+class Unlimited(enum.Enum):
+    """Sentinel for an unbounded report count, in place of a number."""
+
+    UNLIMITED = "unlimited"
+
+
+UNLIMITED = Unlimited.UNLIMITED
+
+# The node expects null for an unbounded count, with the key present. Typing
+# the field ``int | None`` would not do: an unset optional field is left out
+# of the encoded map, and the node rejects a missing count. The sentinel keeps
+# "null on the wire" distinct from "absent".
+
+
+def _unmarshal_unlimited(struct: Any) -> Unlimited:
+    if struct is not None:
+        raise TypeError(f"{struct!r} not decodable as Unlimited")
+    return UNLIMITED
+
+
+register_codec(Unlimited, marshal=lambda _: None, unmarshal=_unmarshal_unlimited)
 
 
 @dataclass
 class ReportSnippetArgs:
-    count: Annotated[int, CborKey(0)]
+    count: Annotated[int | Unlimited, CborKey(0)]
     auto_resume: Annotated[bool, CborKey(1)]
 
 
 @dataclass
 class ReportAggregatesArgs:
-    count: Annotated[int, CborKey(0)]
+    count: Annotated[int | Unlimited, CborKey(0)]
     auto_resume: Annotated[bool, CborKey(1)]
 
 
 @dataclass
 class ReportCaptureArgs:
-    count: Annotated[int, CborKey(0)]
+    count: Annotated[int | Unlimited, CborKey(0)]
     auto_resume: Annotated[bool, CborKey(1)]
 
 
 @dataclass
 class ReportHealthArgs:
-    count: Annotated[bool | int, CborKey(0)]
+    count: Annotated[bool | int | Unlimited, CborKey(0)]
+    """A count, or True for no limit. `UNLIMITED` also means no limit but
+    only True is understood by older firmware."""
 
 
 @dataclass

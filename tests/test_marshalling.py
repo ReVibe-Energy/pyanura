@@ -1,9 +1,9 @@
 from dataclasses import dataclass
-from typing import Annotated
+from typing import Annotated, Any, assert_type
 
 import pytest
 
-from anura.marshalling import CborKey, unmarshal
+from anura.marshalling import CborKey, marshal, unmarshal
 
 
 def test_unmarshal_dataclass_unknown_key():
@@ -94,3 +94,81 @@ def test_unmarshal_dataclass_recursive():
     outer = unmarshal(OuterClass, {0: {0: 1}})
 
     assert isinstance(outer.inner, InnerClass)
+
+
+def test_marshal_omits_unset_optional_fields():
+    @dataclass
+    class Args:
+        required: Annotated[int, CborKey(0)]
+        optional: Annotated[int | None, CborKey(1)] = None
+
+    assert marshal(Args(required=1)) == {0: 1}
+    assert marshal(Args(required=1, optional=2)) == {0: 1, 1: 2}
+
+
+def test_marshal_rejects_none():
+    """None means absence, which only an optional field can express by being
+    left out. A null with a meaning on the wire needs a sentinel type."""
+
+    @dataclass
+    class Args:
+        count: Annotated[int, CborKey(0)]
+
+    with pytest.raises(TypeError):
+        marshal(None)
+    with pytest.raises(TypeError):
+        marshal(Args(count=None))  # type: ignore[arg-type]
+    with pytest.raises(TypeError):
+        marshal([1, None])
+
+
+def test_unmarshal_union_picks_the_matching_member():
+    @dataclass
+    class Args:
+        value: Annotated[bool | int | None, CborKey(0)] = None
+
+    assert unmarshal(Args, {0: True}).value is True
+    assert unmarshal(Args, {0: 3}).value == 3
+    assert unmarshal(Args, {}).value is None
+    with pytest.raises(TypeError, match="not decodable"):
+        unmarshal(Args, {0: "three"})
+    # None marks the field optional; an explicit null is not a value for it.
+    with pytest.raises(TypeError, match="not decodable"):
+        unmarshal(Args, {0: None})
+
+
+def test_unmarshal_union_of_dataclasses():
+    @dataclass
+    class A:
+        a: Annotated[int, CborKey(0)]
+
+    @dataclass
+    class B:
+        b: Annotated[int, CborKey(1)]
+
+    @dataclass
+    class Holder:
+        inner: Annotated[A | B, CborKey(0)]
+
+    assert unmarshal(Holder, {0: {0: 1}}).inner == A(a=1)
+    assert unmarshal(Holder, {0: {1: 2}}).inner == B(b=2)
+
+
+def test_unmarshal_accepts_a_union_directly():
+    """Unions are not ``type`` objects, so ``unmarshal`` has a separate
+    overload for them. This file is type-checked, so a regression in that
+    overload fails ``pyright`` as well as ``pytest``."""
+    assert unmarshal(int | str, 3) == 3
+    assert unmarshal(int | str, "three") == "three"
+    with pytest.raises(TypeError, match="not decodable"):
+        unmarshal(int | str, None)
+
+
+def test_unmarshal_return_types():
+    @dataclass
+    class Args:
+        count: Annotated[int, CborKey(0)]
+
+    assert_type(unmarshal(Args, {0: 1}), Args)
+    assert_type(unmarshal(list[int], [1]), list[int])
+    assert_type(unmarshal(int | str, 1), Any)

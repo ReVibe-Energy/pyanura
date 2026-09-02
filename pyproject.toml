@@ -67,7 +67,7 @@ pattern = "(?P<version>.+)"
 members = ["packages/pyanura-cli"]
 
 [tool.pyright]
-include = ["src"]
+include = ["src", "tests"]
 # Check against the lowest supported runtime so we don't lean on newer syntax.
 pythonVersion = "3.11"
 typeCheckingMode = "standard"

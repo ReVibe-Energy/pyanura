@@ -8,10 +8,10 @@ from typing import (
     Annotated,
     Any,
     TypeVar,
-    cast,
     get_args,
     get_origin,
     get_type_hints,
+    overload,
 )
 
 import cbor2
@@ -79,16 +79,31 @@ def _field_keys(cls: type) -> dict[str, tuple[int, Any]]:
     return out
 
 
+def _is_optional(tp: Any) -> bool:
+    """True for ``X | None`` field types. Such fields are omitted from the
+    encoded map when unset, so that a peer whose schema predates the field
+    (or that expects a value rather than nil) still accepts the message."""
+    return isinstance(tp, types.UnionType) and types.NoneType in get_args(tp)
+
+
 def marshal(obj: Any) -> dict | list | Any:
     """Convert an object representation of a message or data type to a
     structure consisting of dicts, lists and primitive types."""
-    if codec := _codecs.get(type(obj)):
+    if obj is None:
+        # None stands for the absence of a value, which is expressed by leaving
+        # an optional field out, never by encoding. A type that has a meaning
+        # for CBOR null on the wire gets its own sentinel with a codec.
+        raise TypeError("None cannot be marshalled")
+    elif codec := _codecs.get(type(obj)):
         return codec.marshal(obj)
     elif is_dataclass(obj) and not isinstance(obj, type):
-        return {
-            key: marshal(getattr(obj, name))
-            for name, (key, _) in _field_keys(type(obj)).items()
-        }
+        out = {}
+        for name, (key, field_type) in _field_keys(type(obj)).items():
+            value = getattr(obj, name)
+            if value is None and _is_optional(field_type):
+                continue  # unset optional field: leave the key out
+            out[key] = marshal(value)
+        return out
     elif isinstance(obj, list):
         return [marshal(v) for v in obj]
     elif isinstance(obj, dict):
@@ -97,10 +112,20 @@ def marshal(obj: Any) -> dict | list | Any:
         return obj
 
 
-def unmarshal(cls: type[T], struct: Any) -> T:
+@overload
+def unmarshal(cls: type[T], struct: Any) -> T: ...
+@overload
+def unmarshal(cls: types.UnionType | types.GenericAlias, struct: Any) -> Any: ...
+def unmarshal(cls: Any, struct: Any) -> Any:
+    """Decode ``struct`` as ``cls``.
+
+    ``cls`` is a class, a union such as ``int | Unlimited``, or a
+    parameterised ``list``/``dict``. Unions and generic aliases are not
+    ``type`` objects, so they get their own overload and return ``Any``.
+    """
     if codec := _codecs.get(cls):
         return codec.unmarshal(struct)
-    elif is_dataclass(cls):
+    elif isinstance(cls, type) and is_dataclass(cls):
         if not isinstance(struct, dict):
             raise ValueError(
                 f"Expected dict for dataclass {cls.__name__}, "
@@ -111,32 +136,43 @@ def unmarshal(cls: type[T], struct: Any) -> T:
             for name, (key, field_type) in _field_keys(cls).items()
             if key in struct
         }
-        return cast(T, cls(**attributes))
+        return cls(**attributes)
     elif isinstance(cls, types.UnionType):
-        match get_args(cls):
-            case inner_cls, types.NoneType:
-                return cast(T, unmarshal(inner_cls, struct))
-            case _:
-                # In principle this could be extended, but `SomeClass | None`
-                # is enough for our use case.
-                raise ValueError(f"Unsupported union type: {cls}")
+        return _unmarshal_union(get_args(cls), struct)
     elif isinstance(cls, types.GenericAlias):
         origin = get_origin(cls)
         if origin is list:
             item_cls = get_args(cls)[0]
-            return cast(T, [unmarshal(item_cls, v) for v in struct])
+            return [unmarshal(item_cls, v) for v in struct]
         elif origin is dict:
             key_cls, val_cls = get_args(cls)
-            return cast(
-                T,
-                {unmarshal(key_cls, k): unmarshal(val_cls, v) for k, v in struct.items()},
-            )
+            return {
+                unmarshal(key_cls, k): unmarshal(val_cls, v) for k, v in struct.items()
+            }
         else:
             raise ValueError("Unsupported generic type.")
     else:
         if not isinstance(struct, cls):
             raise TypeError(f"{struct!r} not decodable as type {cls}")
         return struct
+
+
+def _unmarshal_union(members: tuple[type, ...], struct: Any) -> Any:
+    """Decode as the first member type that accepts the value.
+
+    Members are tried in declaration order, so put the more specific ones
+    first when they overlap. A ``None`` member only marks the field as
+    optional; a null on the wire is not accepted for it.
+    """
+    for member in members:
+        if member is types.NoneType:
+            continue
+        try:
+            return unmarshal(member, struct)
+        except (TypeError, ValueError):
+            continue
+    names = " | ".join(getattr(m, "__name__", repr(m)) for m in members)
+    raise TypeError(f"{struct!r} not decodable as type {names}")
 
 
 def _marshal_ipv4address(addr: ipaddress.IPv4Address) -> cbor2.CBORTag:

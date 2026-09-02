@@ -1,8 +1,13 @@
 from anura.avss.models import (
+    UNLIMITED,
     HealthReport,
+    ReportAggregatesArgs,
+    ReportCaptureArgs,
+    ReportHealthArgs,
+    ReportSnippetArgs,
     SnippetReport,
 )
-from anura.marshalling import unmarshal
+from anura.marshalling import marshal, unmarshal
 
 
 def test_unmarshal_HealthReport_missing_fields():
@@ -55,3 +60,16 @@ def test_unmarshal_SnippetReport_with_timing():
     )
     assert report.duration == 5
     assert report.transmission_offset == 8
+
+
+def test_report_count_args_encode_and_round_trip():
+    # The node requires key 0 to be present; null means unlimited.
+    for cls in (ReportSnippetArgs, ReportAggregatesArgs, ReportCaptureArgs):
+        for count, wire in ((UNLIMITED, None), (3, 3)):
+            args = cls(count=count, auto_resume=True)
+            assert marshal(args) == {0: wire, 1: True}
+            assert unmarshal(cls, marshal(args)) == args
+    for count, wire in ((UNLIMITED, None), (True, True), (3, 3)):
+        args = ReportHealthArgs(count=count)
+        assert marshal(args) == {0: wire}
+        assert unmarshal(ReportHealthArgs, marshal(args)) == args
