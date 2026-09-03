@@ -47,6 +47,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   support the proxy transport merely stops waiting when it expires; the
   request keeps occupying the node and the transceiver.
 - The USB transceiver transport no longer sends keepalive pings.
+- `AVSSClient` program transfers fail once `PROGRAM_PROGRESS_TIMEOUT` (60 s)
+  passes without progress, in place of the count of consecutive silent
+  windows (`PROGRAM_STALL_LIMIT`, removed). The legacy transfer, which had no
+  bound and could circle forever on a node that keeps rejecting writes, is
+  bounded the same way.
 
 ### Removed
 - The CLI `avss write-settings`, replaced by `avss update-settings` and

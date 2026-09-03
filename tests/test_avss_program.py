@@ -68,6 +68,9 @@ class FakeSensorTransport(AVSSTransport):
         self.drop_chunks: set[int] = set()  # write numbers to drop (overrun)
         self.drop_acks: set[int] = set()  # ack numbers to drop (lost notify)
         self.abort_at_write: int | None = None
+        # Legacy node that rejects every write with a NACK for its expected
+        # offset, never accepting data.
+        self.legacy_nack_all = False
 
         # Bookkeeping for assertions
         self.write_count = 0
@@ -199,7 +202,7 @@ class FakeSensorTransport(AVSSTransport):
 
         if not self.windowed:
             # Legacy: NACK the expected offset on mismatch.
-            if offset != self.expected:
+            if offset != self.expected or self.legacy_nack_all:
                 assert self._program_cb is not None
                 self._program_cb(struct.pack("<L", self.expected))
                 return
@@ -333,6 +336,7 @@ def test_windowed_transfer_aborted_by_node():
 
 def test_windowed_transfer_fails_on_persistent_stall(monkeypatch):
     monkeypatch.setattr("anura.avss.client.PROGRAM_STALL_TIMEOUT", 0.01)
+    monkeypatch.setattr("anura.avss.client.PROGRAM_PROGRESS_TIMEOUT", 0.1)
     binary = make_binary(10 * CHUNK)
     transport = FakeSensorTransport(len(binary), strict_window=False)
     # Drop every notification after the initial grant.
@@ -345,6 +349,7 @@ def test_windowed_transfer_fails_on_persistent_stall(monkeypatch):
 
 def test_windowed_transfer_resumes_after_interruption(monkeypatch):
     monkeypatch.setattr("anura.avss.client.PROGRAM_STALL_TIMEOUT", 0.01)
+    monkeypatch.setattr("anura.avss.client.PROGRAM_PROGRESS_TIMEOUT", 0.1)
     binary = make_binary(40 * CHUNK)
     transport = FakeSensorTransport(len(binary), strict_window=False)
     client = AVSSClient(transport)
@@ -443,6 +448,36 @@ def test_legacy_transfer_recovers_from_dropped_final_chunk(monkeypatch):
 
     assert transport.ready
     assert bytes(transport.received) == binary
+
+
+def test_windowed_transfer_stall_limit_is_wall_clock(monkeypatch):
+    """Rewinds keep coming as long as the deadline allows, however many; the
+    transfer is failed by elapsed time without progress, not by a count."""
+    monkeypatch.setattr("anura.avss.client.PROGRAM_STALL_TIMEOUT", 0.005)
+    monkeypatch.setattr("anura.avss.client.PROGRAM_PROGRESS_TIMEOUT", 0.3)
+    binary = make_binary(10 * CHUNK)
+    transport = FakeSensorTransport(len(binary), strict_window=False)
+    transport.drop_acks = set(range(2, 10_000))
+    client = AVSSClient(transport)
+
+    with pytest.raises(AVSSProgramTransferError, match="no progress for"):
+        run(procedures.upload_firmware(client, binary, image=0))
+
+    # Far more than the 15 rewinds the old count-based limit allowed.
+    assert transport.write_count > 20 * 10
+
+
+def test_legacy_transfer_fails_when_node_never_accepts_data(monkeypatch):
+    """A legacy node that NACKs every write back to the same offset used to
+    keep the transfer circling forever; it is now bounded by the deadline."""
+    monkeypatch.setattr("anura.avss.client.PROGRAM_PROGRESS_TIMEOUT", 0.2)
+    binary = make_binary(6 * CHUNK)
+    transport = FakeSensorTransport(len(binary), windowed_supported=False)
+    transport.legacy_nack_all = True
+    client = AVSSClient(transport)
+
+    with pytest.raises(AVSSProgramTransferError, match="no progress for"):
+        run(procedures.upload_firmware(client, binary, image=0))
 
 
 def test_program_transfer_keeps_1_0_contract(monkeypatch):
