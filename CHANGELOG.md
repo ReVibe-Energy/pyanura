@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `anura.dfu`: support for ANURA firmware bundles
 - The CLI `avss upgrade` and `transceiver upgrade` commands accept a firmware
   bundle as `--file` in addition to a raw image.
+- `anura.avss.procedures.update_settings`: writes settings to a node, split
+  over several Control Point requests if required. The node is left with
+  exactly the given settings, which it emulates by writing the defaults
+  explicitly on firmware without a built-in reset, or with `replace=False`
+  they are merged into the node's settings.
 
 ### Changed
 - `marshal()` omits optional dataclass fields (`X | None`) whose value is
