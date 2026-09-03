@@ -18,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   model fields are typed `int | Unlimited`. `AVSSClient.report_*` still
   accept `count=None`.
 
+### Fixed
+- `WriteSettingsV2Response.num_unhandled` is now optional: it is optional on
+  the wire and current node firmware omits it, which made
+  `AVSSClient.write_settings_v2` fail while unmarshalling the response.
+
 ## [1.1.0]
 
 ### Added
