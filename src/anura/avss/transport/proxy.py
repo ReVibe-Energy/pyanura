@@ -2,7 +2,7 @@ import asyncio
 import enum
 import logging
 
-from anura.avss.exceptions import AVSSConnectionError
+from anura.avss.exceptions import AVSSConnectionError, AVSSTransportError
 from anura.transceiver.client import TransceiverClient
 from anura.transceiver.exceptions import (
     TransceiverConnectionError,
@@ -180,7 +180,16 @@ class ProxyAVSSTransport(AVSSTransport):
         if self._state is _State.CLOSED:
             raise AVSSConnectionError("Connection has been closed")
 
-        await self._transceiver.avss_program_write(self._address, value)
+        try:
+            await self._transceiver.avss_program_write(self._address, value)
+        except TransceiverRequestError as e:
+            if e.error.code == APIErrorCode.NODE_UNAVAILABLE:
+                raise AVSSConnectionError(
+                    "Node not available via transceiver"
+                ) from None
+            raise AVSSTransportError(f"Program write failed: {e}") from e
+        except TransceiverConnectionError as e:
+            raise AVSSConnectionError(f"Transceiver connection broken: {e}") from e
 
     def set_report_callback(self, callback) -> None:
         self._report_callback = callback

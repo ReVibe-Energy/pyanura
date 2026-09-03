@@ -50,6 +50,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   support the proxy transport merely stops waiting when it expires; the
   request keeps occupying the node and the transceiver.
 - The USB transceiver transport no longer sends keepalive pings.
+- `ProxyAVSSTransport.program_write()` raises `AVSSConnectionError` when the
+  node is unavailable or the transceiver connection broke, and
+  `AVSSTransportError` for other request failures, as
+  `control_point_request()` does, instead of leaking transceiver exceptions.
 - `AVSSClient` program transfers fail once `PROGRAM_PROGRESS_TIMEOUT` (60 s)
   passes without progress, in place of the count of consecutive silent
   windows (`PROGRAM_STALL_LIMIT`, removed). The legacy transfer, which had no
