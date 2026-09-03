@@ -6,6 +6,7 @@ from anura.avss.models import (
     ReportHealthArgs,
     ReportSnippetArgs,
     SnippetReport,
+    WriteSettingsV2Response,
 )
 from anura.marshalling import marshal, unmarshal
 
@@ -73,3 +74,10 @@ def test_report_count_args_encode_and_round_trip():
         args = ReportHealthArgs(count=count)
         assert marshal(args) == {0: wire}
         assert unmarshal(ReportHealthArgs, marshal(args)) == args
+
+
+def test_unmarshal_write_settings_v2_response_without_num_unhandled():
+    # Current firmware omits num_unhandled (key 0) from the response.
+    response = unmarshal(WriteSettingsV2Response, {1: True})
+    assert response.will_reboot is True
+    assert response.num_unhandled is None
