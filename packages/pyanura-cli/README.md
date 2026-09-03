@@ -4,6 +4,6 @@ Command-line interface for the [`pyanura`](https://github.com/ReVibe-Energy/pyan
 
 The recommended install is via [`pipx`](https://pipx.pypa.io/):
 
-    pipx install --index-url https://dl.cloudsmith.io/public/revibe-energy/public/python/simple/ pyanura-cli
+    pipx install --pip-args="--extra-index-url https://dl.cloudsmith.io/public/revibe-energy/public/python/simple/" pyanura-cli
 
 For example usage, build instructions, and library documentation, see the [main `pyanura` repository](https://github.com/ReVibe-Energy/pyanura).
