@@ -10,7 +10,7 @@ Released versions of `pyanura` are published to ReVibe Energy's public
 Cloudsmith index. Set up and activate a suitable virtual environment for
 your project, then install `pyanura` from the index:
 
-    pip3 install pyanura --index-url https://dl.cloudsmith.io/public/revibe-energy/public/python/simple/
+    pip3 install pyanura --extra-index-url https://dl.cloudsmith.io/public/revibe-energy/public/python/simple/
 
 ## Installing command-line interface
 
@@ -19,7 +19,13 @@ package. The recommended way to install it is via
 [`pipx`](https://pipx.pypa.io/), which manages its own virtual environment
 and exposes the `anura` script on your `PATH`:
 
-    pipx install --index-url https://dl.cloudsmith.io/public/revibe-energy/public/python/simple/ pyanura-cli
+    pipx install --pip-args="--extra-index-url https://dl.cloudsmith.io/public/revibe-energy/public/python/simple/" pyanura-cli
+
+Note that the Cloudsmith index must be added *alongside* PyPI rather
+than replacing it: `pyanura` and `pyanura-cli` depend on packages such
+as `cbor2`, `click` and `bleak` that are only published on PyPI. Using
+`--index-url`, which substitutes the default index, makes those
+dependencies unresolvable.
 
 At this point, you should be able to run CLI commands from your terminal - for example:
 ```
