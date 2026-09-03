@@ -11,6 +11,7 @@ from anura.avss.models import (
     ReportHealthArgs,
     ReportSnippetArgs,
     SnippetReport,
+    WriteSettingsV2Response,
 )
 from anura.avss.protocol import ReportType
 from anura.marshalling import marshal, unmarshal
@@ -91,3 +92,10 @@ def test_report_parse_rejects_a_malformed_payload():
         Report.from_record(record + b"\x00").parse()
     with pytest.raises(AVSSProtocolError):
         Report.from_record(record[:-1]).parse()
+
+
+def test_unmarshal_write_settings_v2_response_without_num_unhandled():
+    # Current firmware omits num_unhandled (key 0) from the response.
+    response = unmarshal(WriteSettingsV2Response, {1: True})
+    assert response.will_reboot is True
+    assert response.num_unhandled is None
