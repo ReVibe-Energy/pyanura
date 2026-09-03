@@ -101,6 +101,12 @@ class FakeTransport(Transport, transport_type="fake-test"):
         self._respond(token, {0: models.APIErrorCode.TIMEOUT}, None)
 
 
+class NoKeepaliveFakeTransport(FakeTransport, transport_type="fake-test-nokeepalive"):
+    """FakeTransport that opts out of keepalive pings, like USB."""
+
+    requires_keepalive = False
+
+
 def make_client(transport: FakeTransport) -> TransceiverClient:
     client = TransceiverClient("host-is-unused")
     client._transport = transport
@@ -181,8 +187,7 @@ def test_dead_connection_fails_an_unbounded_request():
 
 def test_no_keepalive_when_transport_opts_out():
     async def scenario():
-        transport = FakeTransport(answer_pings=False)
-        transport.requires_keepalive = False
+        transport = NoKeepaliveFakeTransport(answer_pings=False)
         client = make_client(transport)
         await client.connect()
         try:
@@ -245,8 +250,8 @@ def test_request_survives_cancellation_of_its_caller():
     request itself, not by the cancellation."""
 
     async def scenario():
-        transport = FakeTransport(slow_op_delay=0.2)
-        transport.requires_keepalive = False  # keep pings out of the count
+        # No keepalive, to keep pings out of the count.
+        transport = NoKeepaliveFakeTransport(slow_op_delay=0.2)
         client = make_client(transport)
         await client.connect()
         try:
@@ -419,10 +424,9 @@ def test_avss_request_bound_is_still_judged_when_the_caller_gave_up():
     expected bound is still detected and the connection recycled."""
 
     async def scenario():
-        transport = FakeTransport()
+        transport = NoKeepaliveFakeTransport()  # keep pings out of the count
         transport.avss_timeout_supported = False
         transport.avss_node_answers = False
-        transport.requires_keepalive = False  # keep pings out of the count
         client = make_client(transport)
         await client.connect()
         try:
