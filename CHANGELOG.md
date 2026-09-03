@@ -41,6 +41,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `TransceiverClient.avss_request()` takes a `timeout` for the node's
   response and raises `TimeoutError` when it expires. Requires transceiver
   firmware support for proper operation.
+- `TransceiverClient.avss_program_write()` raises `TimeoutError` when the
+  transceiver reports that the write timed out before it was sent. The node
+  is still connected and the write may be retried.
 - `AVSSTransport.control_point_request()` takes a `timeout` and is
   responsible for enforcing it. Control point timeouts surface as
   `TimeoutError` from the transport. Over a transceiver without timeout

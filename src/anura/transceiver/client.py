@@ -592,8 +592,30 @@ class TransceiverClient:
             raise
 
     async def avss_program_write(self, addr: models.BluetoothAddrLE, data: bytes):
+        """Write to a node's Program characteristic via the transceiver.
+
+        The transceiver answers once the write is in its Bluetooth TX path,
+        which paces bulk uploads to what the radio transmits. A write it
+        cannot get there in time is failed and never sent.
+
+        Raises:
+            TimeoutError: If the transceiver gave up on the write before it
+                was sent. The node is still connected and the write may be
+                retried.
+            TransceiverConnectionError: If the connection broke while
+                waiting, including the transceiver not answering at all.
+        """
         args = models.AVSSProgramWriteArgs(address=addr, data=data)
-        return await self.request("avss_program_write", args)
+        try:
+            # Deliberately generous: the transceiver is expected to finish the
+            # write, or abort it with TIMEOUT, much sooner than this.
+            return await self.request("avss_program_write", args, timeout=30.0)
+        except TransceiverRequestError as e:
+            if e.error.code == APIErrorCode.TIMEOUT:
+                raise TimeoutError(
+                    "Transceiver could not send the program write in time"
+                ) from None
+            raise
 
     async def find_avss_node_by_address(self, addr: models.BluetoothAddrLE):
         with self.notifications() as notifications:
