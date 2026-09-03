@@ -63,6 +63,9 @@ class AVSSTransport(ABC):
             value: The data bytes to write
 
         Raises:
+            TimeoutError: If the transport could not send the write within
+                its own limit. The write was not performed and the
+                connection is intact, so the caller may retry it.
             AVSSConnectionError: If transport is not open or connection lost
         """
 

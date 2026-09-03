@@ -54,6 +54,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   node is unavailable or the transceiver connection broke, and
   `AVSSTransportError` for other request failures, as
   `control_point_request()` does, instead of leaking transceiver exceptions.
+- `AVSSTransport.program_write()` may raise `TimeoutError` when the write
+  could not be sent within the transport's own limit; the write was not
+  performed and the connection is intact. `AVSSClient` transfers retry such
+  writes, bounded by the progress deadline below. `ProxyAVSSTransport`
+  raises it when the transceiver reports a program write timed out.
 - `AVSSClient` program transfers fail once `PROGRAM_PROGRESS_TIMEOUT` (60 s)
   passes without progress, in place of the count of consecutive silent
   windows (`PROGRAM_STALL_LIMIT`, removed). The legacy transfer, which had no

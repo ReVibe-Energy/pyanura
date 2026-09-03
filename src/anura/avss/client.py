@@ -742,6 +742,10 @@ class AVSSClient:
         requests a rewind. The node discards retransmitted chunks it has
         already received, so rewinding to the acked offset is always safe.
 
+        A write the transport could not send in time (``TimeoutError``) was
+        never performed, so it is left for the next pass to send again,
+        after any acknowledgements that arrived meanwhile were taken in.
+
         ``deadline`` is pushed forward whenever the acked offset advances.
         """
         total = len(binary)
@@ -760,7 +764,14 @@ class AVSSClient:
             while send_pos < total and len(outstanding) < window:
                 end = min(send_pos + chunk_size, total)
                 req = struct.pack("<L", send_pos) + binary[send_pos:end]
-                await self._transport.program_write(req)
+                try:
+                    await self._transport.program_write(req)
+                except TimeoutError:
+                    self._raise_if_disconnected()
+                    logger.warning(
+                        "Program write at offset %d timed out; retrying", send_pos
+                    )
+                    break
                 outstanding.append(end)
                 send_pos = end
 
@@ -845,8 +856,15 @@ class AVSSClient:
                     req.extend(binary[offset:end])
                 else:
                     req.extend(binary[offset:])
+                try:
+                    await self._transport.program_write(bytes(req))
+                except TimeoutError:
+                    self._raise_if_disconnected()
+                    logger.warning(
+                        "Program write at offset %d timed out; retrying", offset
+                    )
+                    continue
                 offset = end
-                await self._transport.program_write(bytes(req))
                 if offset > high_water:
                     high_water = offset
                     _push_deadline(deadline)
@@ -899,12 +917,22 @@ class AVSSClient:
                     timeout=PROGRAM_LEGACY_SETTLE_TIMEOUT,
                 )
             except TimeoutError:
+                # Silence: the settle period passed with no NACK.
+                data = None
+
+            if data is None:
                 if probes_left == 0:
                     return total
-                probes_left -= 1
                 req = struct.pack("<L", probe_offset) + binary[probe_offset:]
-                await self._transport.program_write(req)
+                try:
+                    await self._transport.program_write(req)
+                except TimeoutError:
+                    self._raise_if_disconnected()
+                    logger.warning("Completion probe write timed out; retrying")
+                    continue
+                probes_left -= 1
                 continue
+
             offset = self._parse_legacy_nack(data)
             if offset < total:
                 return offset
