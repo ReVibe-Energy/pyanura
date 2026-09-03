@@ -1,18 +1,11 @@
-"""High-level AVSS procedures.
-
-The :class:`~anura.avss.client.AVSSClient` methods map one-to-one onto the
-protocol: one command, characteristic write sequence or transfer loop each.
-This module composes them into complete transactions — multi-step flows with
-negotiation and fallback — and is the home for future ones, e.g. a full
-settings replacement.
-"""
+"""Firmware upload procedure."""
 
 import hashlib
 import logging
 from collections.abc import Callable
 
-from .client import AVSSClient
-from .exceptions import AVSSOpCodeUnsupportedError
+from ..client import AVSSClient
+from ..exceptions import AVSSOpCodeUnsupportedError
 
 logger = logging.getLogger(__name__)
 
