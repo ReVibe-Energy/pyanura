@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `anura.avss.procedures.replace_settings`: replaces the node's settings with
+  exactly the given set, resetting everything not passed to its default. Works
+  on any node firmware, including releases without a built-in settings reset.
+
 ### Changed
 - `marshal()` omits optional dataclass fields (`X | None`) whose value is
   None instead of encoding them as null, and raises `TypeError` for None

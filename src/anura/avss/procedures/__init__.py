@@ -7,8 +7,10 @@ negotiation and fallback. Each procedure lives in its own module; only the
 procedures themselves are part of the public interface.
 """
 
+from ._replace_settings import replace_settings
 from ._upload_firmware import upload_firmware
 
 __all__ = [
+    "replace_settings",
     "upload_firmware",
 ]
