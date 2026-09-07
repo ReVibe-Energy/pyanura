@@ -1,10 +1,12 @@
 import asyncio
 import functools
+import io
 import json
 import logging
 import math
 import sys
 import time
+import zipfile
 from pathlib import Path
 
 import click
@@ -14,10 +16,12 @@ from bleak.exc import BleakError
 import anura.avss as avss
 from anura.avss import procedures
 from anura.avss.bleak_avss_client import BleakAVSSClient
+from anura.dfu import parse_bundle
 from anura.transceiver.client import TransceiverClient
 from anura.transceiver.models import BluetoothAddrLE
 from anura.transceiver.proxy_avss_client import ProxyAVSSClient
 
+from .bundle import BleakAVSSTarget, ProxyAVSSTarget, apply_bundle
 from .progress import upload_progress
 from .session import SessionFile
 
@@ -96,10 +100,17 @@ def scan():
     "--transceiver-port", default=7645, show_default=True, help="TCP port number"
 )
 @click.option("--address", help="Bluetooth address of AVSS node.", required=True)
-@click.option("--file", metavar="FILE", help="Path to firmware image.")
+@click.option(
+    "--file", metavar="FILE", help="Path to firmware image or firmware bundle (.zip)."
+)
 @click.option("--confirm-only", is_flag=True, help="Run only the confirm step.")
 def upgrade(transceiver, transceiver_port, address, file, confirm_only):
-    """Upgrade node firmware."""
+    """Upgrade node firmware.
+
+    FILE may be a raw firmware image or a firmware bundle (a .zip with a
+    meta.json manifest). With a bundle, every component in the bundle is
+    applied and confirmed in order.
+    """
 
     if not confirm_only and not file:
         click.echo(
@@ -108,6 +119,7 @@ def upgrade(transceiver, transceiver_port, address, file, confirm_only):
         )
         sys.exit(1)
 
+    bundle = None
     if not confirm_only:
         try:
             binary = Path(file).read_bytes()
@@ -115,7 +127,43 @@ def upgrade(transceiver, transceiver_port, address, file, confirm_only):
             click.echo(f"Error: {ex}", err=True)
             sys.exit(1)
 
+        if zipfile.is_zipfile(io.BytesIO(binary)):
+            try:
+                bundle = parse_bundle(binary)
+            except ValueError as ex:
+                click.echo(f"Error: {ex}", err=True)
+                sys.exit(1)
+
     address = BluetoothAddrLE.parse(address)
+
+    async def do_bundle_async():
+        try:
+            await apply_bundle(BleakAVSSTarget(address.address_str()), bundle)
+        except Exception as ex:
+            click.echo(f"Error: {ex}", err=True)
+            sys.exit(1)
+
+    async def do_bundle_proxy_async():
+        try:
+            logger.info(f"Connect to transceiver {transceiver}")
+            async with TransceiverClient(transceiver, transceiver_port) as trx_client:
+                # Check if the transceiver is assigned to the given node
+                resp = await trx_client.get_assigned_nodes()
+                if not any(node.address == address for node in resp.nodes):
+                    click.echo(f"Error: Transceiver not assigned to node {address}")
+                    sys.exit(1)
+
+                await apply_bundle(ProxyAVSSTarget(trx_client, address), bundle)
+        except Exception as ex:
+            click.echo(f"Error: {ex}", err=True)
+            sys.exit(1)
+
+    if bundle is not None:
+        if transceiver:
+            asyncio.run(do_bundle_proxy_async())
+        else:
+            asyncio.run(do_bundle_async())
+        return
 
     async def do_async():
         try:
