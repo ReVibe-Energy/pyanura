@@ -53,7 +53,7 @@ async def upload_firmware(
             timeout=prepare_timeout,
         )
     except AVSSOpCodeUnsupportedError:
-        logger.info(
+        logger.debug(
             "Windowed transfer not supported by node, using unsynchronized transfer"
         )
         await client.prepare_upgrade(image, len(binary), timeout=prepare_timeout)
