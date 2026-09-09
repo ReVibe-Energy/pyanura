@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `anura.dfu`: support for ANURA firmware bundles
+- The CLI `avss upgrade` and `transceiver upgrade` commands accept a firmware
+  bundle as `--file` in addition to a raw image.
+
 ### Changed
 - `marshal()` omits optional dataclass fields (`X | None`) whose value is
   None instead of encoding them as null, and raises `TypeError` for None
@@ -17,11 +22,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Report `count` arguments accept `anura.avss.UNLIMITED` for no limit; the
   model fields are typed `int | Unlimited`. `AVSSClient.report_*` still
   accept `count=None`.
-
-### Added
-- `anura.dfu`: support for ANURA firmware bundles
-- The CLI `avss upgrade` and `transceiver upgrade` commands accept a firmware
-  bundle as `--file` in addition to a raw image.
 
 ### Fixed
 - A CBOR payload from a node or a transceiver that carries trailing bytes is
