@@ -92,6 +92,14 @@ PROGRAM_LEGACY_SETTLE_TIMEOUT = 1.0
 PROGRAM_LEGACY_SETTLE_PROBES = 2
 
 
+def _loads_payload(data: bytes) -> Any:
+    """Decode a CBOR payload received from a node."""
+    try:
+        return loads_exact(data)
+    except cbor2.CBORDecodeError as e:
+        raise AVSSProtocolError(f"Malformed CBOR payload: {e}") from e
+
+
 @dataclass
 class ReportTransferInfo:
     start_time: float
@@ -132,7 +140,7 @@ class Report:
             int(ReportType.CAPTURE): CaptureReport,
         }
         if report_class := report_classes.get(self.report_type):
-            return unmarshal(report_class, loads_exact(self.payload_cbor))
+            return unmarshal(report_class, _loads_payload(self.payload_cbor))
         else:
             return None
 
@@ -456,7 +464,7 @@ class AVSSClient:
                 return None
             case OpCode.APPLY_SETTINGS_RESPONSE:
                 # Newer firmware (v24.6.0+) - detailed response
-                return unmarshal(ApplySettingsResponse, loads_exact(resp_payload))
+                return unmarshal(ApplySettingsResponse, _loads_payload(resp_payload))
             case _:
                 raise AVSSProtocolError.unexpected_response(
                     OpCode.APPLY_SETTINGS,
@@ -503,7 +511,7 @@ class AVSSClient:
                 resp_opcode,
                 expected=OpCode.PREPARE_UPGRADE_V2_RESPONSE,
             )
-        return unmarshal(PrepareUpgradeV2Response, loads_exact(resp_payload))
+        return unmarshal(PrepareUpgradeV2Response, _loads_payload(resp_payload))
 
     async def apply_upgrade(self):
         arg = ApplyUpgradeArgs()
@@ -522,7 +530,7 @@ class AVSSClient:
             raise AVSSProtocolError.unexpected_response(
                 OpCode.GET_VERSION, resp_opcode, expected=OpCode.GET_VERSION_RESPONSE
             )
-        return unmarshal(GetVersionResponse, loads_exact(resp_payload))
+        return unmarshal(GetVersionResponse, _loads_payload(resp_payload))
 
     async def write_settings(self, settings: dict) -> WriteSettingsResponse | None:
         """Write settings to node.
@@ -538,7 +546,7 @@ class AVSSClient:
                 return None
             case OpCode.WRITE_SETTINGS_RESPONSE:
                 # Newer firmware (v24.4.1+) - detailed response
-                return unmarshal(WriteSettingsResponse, loads_exact(resp_param))
+                return unmarshal(WriteSettingsResponse, _loads_payload(resp_param))
             case _:
                 raise AVSSProtocolError.unexpected_response(
                     OpCode.WRITE_SETTINGS,
@@ -565,7 +573,7 @@ class AVSSClient:
                 resp_opcode,
                 expected=OpCode.GET_FIRMWARE_INFO_RESPONSE,
             )
-        return unmarshal(GetFirmwareInfoResponse, loads_exact(resp_payload))
+        return unmarshal(GetFirmwareInfoResponse, _loads_payload(resp_payload))
 
     async def reset_report(self):
         return await self._void_request(OpCode.RESET_REPORT, None)
@@ -585,7 +593,7 @@ class AVSSClient:
                 resp_opcode,
                 expected=OpCode.WRITE_SETTINGS_V2_RESPONSE,
             )
-        return unmarshal(WriteSettingsV2Response, loads_exact(resp_payload))
+        return unmarshal(WriteSettingsV2Response, _loads_payload(resp_payload))
 
     async def trigger_measurement(self, duration_ms: int):
         arg = TriggerMeasurementArgs(duration_ms=duration_ms)

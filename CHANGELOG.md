@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - A CBOR payload from a node or a transceiver that carries trailing bytes is
   rejected instead of being decoded from its leading bytes.
+- `AVSSClient` raises `AVSSProtocolError` for a payload it cannot decode
+  instead of letting a `cbor2` exception escape.
 
 ## [1.1.0]
 

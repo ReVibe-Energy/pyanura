@@ -1,3 +1,8 @@
+import cbor2
+import pytest
+
+from anura.avss.client import Report
+from anura.avss.exceptions import AVSSProtocolError
 from anura.avss.models import (
     UNLIMITED,
     HealthReport,
@@ -7,6 +12,7 @@ from anura.avss.models import (
     ReportSnippetArgs,
     SnippetReport,
 )
+from anura.avss.protocol import ReportType
 from anura.marshalling import marshal, unmarshal
 
 
@@ -73,3 +79,15 @@ def test_report_count_args_encode_and_round_trip():
         args = ReportHealthArgs(count=count)
         assert marshal(args) == {0: wire}
         assert unmarshal(ReportHealthArgs, marshal(args)) == args
+
+
+def test_report_parse_rejects_a_malformed_payload():
+    # A record that decodes but does not end where the CBOR item does means
+    # the framing is wrong, so the item that did decode is not trusted.
+    payload = cbor2.dumps({0: 0, 1: 0, 2: 0, 3: 0.0, 4: 0, 5: 0, 6: 0})
+    record = bytes((ReportType.HEALTH,)) + payload
+    Report.from_record(record).parse()
+    with pytest.raises(AVSSProtocolError, match="trailing byte"):
+        Report.from_record(record + b"\x00").parse()
+    with pytest.raises(AVSSProtocolError):
+        Report.from_record(record[:-1]).parse()
