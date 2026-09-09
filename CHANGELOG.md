@@ -23,6 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The CLI `avss upgrade` and `transceiver upgrade` commands accept a firmware
   bundle as `--file` in addition to a raw image.
 
+### Fixed
+- A CBOR payload from a node or a transceiver that carries trailing bytes is
+  rejected instead of being decoded from its leading bytes.
+
 ## [1.1.0]
 
 ### Added

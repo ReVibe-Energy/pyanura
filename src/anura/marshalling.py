@@ -4,6 +4,7 @@ import ipaddress
 import types
 from collections.abc import Callable
 from dataclasses import is_dataclass
+from io import BytesIO
 from typing import (
     Annotated,
     Any,
@@ -110,6 +111,24 @@ def marshal(obj: Any) -> dict | list | Any:
         return {marshal(k): marshal(v) for k, v in obj.items()}
     else:
         return obj
+
+
+def loads_exact(data: bytes) -> Any:
+    """Decode the one CBOR item that ``data`` holds.
+
+    Unlike ``cbor2.loads``, which decodes the first item and ignores whatever
+    follows, this requires the item to consume all of ``data``.
+
+    Raises:
+        cbor2.CBORDecodeError: if ``data`` is not exactly one CBOR item.
+    """
+    with BytesIO(data) as fp:
+        value = cbor2.load(fp)
+        if remaining := len(data) - fp.tell():
+            raise cbor2.CBORDecodeValueError(
+                f"{remaining} trailing byte(s) after CBOR item"
+            )
+    return value
 
 
 @overload
