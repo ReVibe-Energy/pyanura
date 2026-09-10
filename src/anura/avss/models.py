@@ -133,8 +133,9 @@ class WriteSettingsV2Args:
 
 @dataclass
 class WriteSettingsV2Response:
-    num_unhandled: Annotated[int, CborKey(0)]
     will_reboot: Annotated[bool, CborKey(1)]
+    # Optional on the wire; current firmware omits it.
+    num_unhandled: Annotated[int | None, CborKey(0)] = None
 
 
 @dataclass

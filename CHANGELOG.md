@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `anura.dfu`: support for ANURA firmware bundles
+- The CLI `avss upgrade` and `transceiver upgrade` commands accept a firmware
+  bundle as `--file` in addition to a raw image.
+- `anura.avss.procedures.update_settings`: writes settings to a node, split
+  over several Control Point requests if required. The node is left with
+  exactly the given settings, which it emulates by writing the defaults
+  explicitly on firmware without a built-in reset, or with `replace=False`
+  they are merged into the node's settings.
+- The CLI `avss update-settings` command, which updates a node's settings
+  from a settings file of any size, on any firmware version. Settings the
+  file does not name are reset to the sensor's defaults, or left as they are
+  with `--merge`.
+- The CLI `avss reset-settings` command, which resets a node's settings to
+  their defaults.
+
 ### Changed
 - `marshal()` omits optional dataclass fields (`X | None`) whose value is
   None instead of encoding them as null, and raises `TypeError` for None
@@ -18,16 +34,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   model fields are typed `int | Unlimited`. `AVSSClient.report_*` still
   accept `count=None`.
 
-### Added
-- `anura.dfu`: support for ANURA firmware bundles
-- The CLI `avss upgrade` and `transceiver upgrade` commands accept a firmware
-  bundle as `--file` in addition to a raw image.
+### Removed
+- The CLI `avss write-settings`, replaced by `avss update-settings` and
+  `avss reset-settings`.
 
 ### Fixed
 - A CBOR payload from a node or a transceiver that carries trailing bytes is
   rejected instead of being decoded from its leading bytes.
 - `AVSSClient` raises `AVSSProtocolError` for a payload it cannot decode
   instead of letting a `cbor2` exception escape.
+- `WriteSettingsV2Response.num_unhandled` is now optional: it is optional on
+  the wire and current node firmware omits it, which made
+  `AVSSClient.write_settings_v2` fail while unmarshalling the response.
 
 ## [1.1.0]
 
