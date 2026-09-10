@@ -9,7 +9,7 @@ from typing import (
 
 import cbor2
 
-from anura.marshalling import marshal, unmarshal
+from anura.marshalling import loads_exact, marshal, unmarshal
 
 from . import models
 from .exceptions import (
@@ -55,7 +55,7 @@ class TransceiverClient:
                     raise TransceiverError("Transport read failed") from e
 
                 try:
-                    message = cbor2.loads(message_bytes)
+                    message = loads_exact(message_bytes)
                 except cbor2.CBORDecodeError as e:
                     raise TransceiverError("Received an invalid CBOR payload") from e
 

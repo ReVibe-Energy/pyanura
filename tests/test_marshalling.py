@@ -1,9 +1,10 @@
 from dataclasses import dataclass
 from typing import Annotated, Any, assert_type
 
+import cbor2
 import pytest
 
-from anura.marshalling import CborKey, marshal, unmarshal
+from anura.marshalling import CborKey, loads_exact, marshal, unmarshal
 
 
 def test_unmarshal_dataclass_unknown_key():
@@ -172,3 +173,18 @@ def test_unmarshal_return_types():
     assert_type(unmarshal(Args, {0: 1}), Args)
     assert_type(unmarshal(list[int], [1]), list[int])
     assert_type(unmarshal(int | str, 1), Any)
+
+
+def test_loads_exact_decodes_a_whole_payload():
+    assert loads_exact(cbor2.dumps({0: 1, 1: "two"})) == {0: 1, 1: "two"}
+
+
+def test_loads_exact_rejects_trailing_bytes():
+    payload = cbor2.dumps({0: 1}) + cbor2.dumps(2)
+    with pytest.raises(cbor2.CBORDecodeError, match="1 trailing byte"):
+        loads_exact(payload)
+
+
+def test_loads_exact_rejects_a_truncated_payload():
+    with pytest.raises(cbor2.CBORDecodeError):
+        loads_exact(cbor2.dumps({0: 1})[:-1])
