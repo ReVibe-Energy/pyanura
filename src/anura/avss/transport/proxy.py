@@ -2,9 +2,12 @@ import asyncio
 import enum
 import logging
 
-from anura.avss.exceptions import AVSSConnectionError
+from anura.avss.exceptions import AVSSConnectionError, AVSSTransportError
 from anura.transceiver.client import TransceiverClient
-from anura.transceiver.exceptions import TransceiverRequestError
+from anura.transceiver.exceptions import (
+    TransceiverConnectionError,
+    TransceiverRequestError,
+)
 from anura.transceiver.models import (
     APIErrorCode,
     AVSSProgramNotifiedEvent,
@@ -84,6 +87,15 @@ class ProxyAVSSTransport(AVSSTransport):
                         raise AVSSConnectionError(
                             f"Transceiver report an error when polling for node: {e.error}"
                         ) from e
+            except TimeoutError as e:
+                logger.warning(
+                    f"Node {self._address} did not answer while waiting for it to become available"
+                )
+                other_error_count += 1
+                if other_error_count >= 3:
+                    raise AVSSConnectionError(
+                        f"Node {self._address} kept timing out when polled"
+                    ) from e
             await asyncio.sleep(1.0)
 
     def _on_closed(self, task: asyncio.Task):
@@ -126,7 +138,9 @@ class ProxyAVSSTransport(AVSSTransport):
                     case NodeDisconnectedEvent(address=self._address):
                         break  # connection broken
 
-    async def control_point_request(self, req: bytes) -> bytes:
+    async def control_point_request(
+        self, req: bytes, *, timeout: float | None = None
+    ) -> bytes:
         if self._state is _State.CREATED:
             raise RuntimeError("Transport has not been opened")
 
@@ -134,7 +148,21 @@ class ProxyAVSSTransport(AVSSTransport):
             raise AVSSConnectionError("Connection has been closed")
 
         try:
-            result = await self._transceiver.avss_request(self._address, req)
+            timeout_supported = self._transceiver.supports_avss_request_timeout
+            if timeout is not None and not timeout_supported:
+                # Firmware without timeout support waits for the node
+                # indefinitely. This only abandons the wait to honour the
+                # transport contract; the node and the transceiver's request
+                # slot are not freed. The true fix is a firmware update.
+                async with asyncio.timeout(timeout):
+                    result = await self._transceiver.avss_request(self._address, req)
+            else:
+                # A node timeout surfaces as TimeoutError from avss_request;
+                # the transceiver has disconnected the node then, so the
+                # transport loop will close shortly.
+                result = await self._transceiver.avss_request(
+                    self._address, req, timeout=timeout
+                )
             return result.response
         except TransceiverRequestError as e:
             if e.error.code == APIErrorCode.NODE_UNAVAILABLE:
@@ -142,6 +170,8 @@ class ProxyAVSSTransport(AVSSTransport):
                     "Node not available via transceiver"
                 ) from None
             raise
+        except TransceiverConnectionError as e:
+            raise AVSSConnectionError(f"Transceiver connection broken: {e}") from e
 
     async def program_write(self, value: bytes) -> None:
         if self._state is _State.CREATED:
@@ -150,7 +180,20 @@ class ProxyAVSSTransport(AVSSTransport):
         if self._state is _State.CLOSED:
             raise AVSSConnectionError("Connection has been closed")
 
-        await self._transceiver.avss_program_write(self._address, value)
+        try:
+            # A TimeoutError from the transceiver means it gave up on getting
+            # the write into its TX path in time; the write was never sent
+            # and the node is still connected, so it passes through for the
+            # caller to retry.
+            await self._transceiver.avss_program_write(self._address, value)
+        except TransceiverRequestError as e:
+            if e.error.code == APIErrorCode.NODE_UNAVAILABLE:
+                raise AVSSConnectionError(
+                    "Node not available via transceiver"
+                ) from None
+            raise AVSSTransportError(f"Program write failed: {e}") from e
+        except TransceiverConnectionError as e:
+            raise AVSSConnectionError(f"Transceiver connection broken: {e}") from e
 
     def set_report_callback(self, callback) -> None:
         self._report_callback = callback

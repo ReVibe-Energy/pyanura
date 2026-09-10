@@ -27,6 +27,10 @@ class USBTransport(Transport, transport_type="usb"):
     Connects to a USB transceiver identified by its serial number.
     """
 
+    # A detached or dead USB device makes reads and writes fail immediately,
+    # so there is no need to probe the connection.
+    requires_keepalive = False
+
     def __init__(self, serial_number: str, _unused_port) -> None:
         self.serial_number = serial_number
         self.vendor_id = VENDOR_ID

@@ -10,7 +10,7 @@ import pytest
 
 from anura.avss import procedures
 from anura.avss.client import PROGRAM_OFFSET_ABORT, AVSSClient
-from anura.avss.exceptions import AVSSProgramTransferError
+from anura.avss.exceptions import AVSSConnectionError, AVSSProgramTransferError
 from anura.avss.models import (
     PrepareUpgradeArgs,
     PrepareUpgradeV2Args,
@@ -67,7 +67,13 @@ class FakeSensorTransport(AVSSTransport):
         # Fault injection
         self.drop_chunks: set[int] = set()  # write numbers to drop (overrun)
         self.drop_acks: set[int] = set()  # ack numbers to drop (lost notify)
+        # Write numbers the transport fails with TimeoutError instead of
+        # delivering, like a transceiver that could not send them in time.
+        self.timeout_writes: set[int] = set()
         self.abort_at_write: int | None = None
+        # Legacy node that rejects every write with a NACK for its expected
+        # offset, never accepting data.
+        self.legacy_nack_all = False
 
         # Bookkeeping for assertions
         self.write_count = 0
@@ -77,6 +83,7 @@ class FakeSensorTransport(AVSSTransport):
         self.payload_sizes: list[int] = []
 
         self._program_cb: Callable[[bytes], None] | None = None
+        self._closed_cb: Callable[[], None] | None = None
 
     async def open(self):
         pass
@@ -91,7 +98,11 @@ class FakeSensorTransport(AVSSTransport):
         self._program_cb = callback
 
     def set_closed_callback(self, callback):
-        pass
+        self._closed_cb = callback
+
+    def disconnect(self):
+        assert self._closed_cb is not None
+        self._closed_cb()
 
     def _notify(self, acked, window):
         self.ack_count += 1
@@ -121,7 +132,7 @@ class FakeSensorTransport(AVSSTransport):
         self.delivered_acked = 0
         self.pending_ends = []
 
-    async def control_point_request(self, req):
+    async def control_point_request(self, req, *, timeout=None):
         opcode = req[0]
         payload = cbor2.loads(req[1:])
         if opcode == OpCode.PREPARE_UPGRADE_V2:
@@ -166,6 +177,8 @@ class FakeSensorTransport(AVSSTransport):
 
     async def program_write(self, value):
         self.write_count += 1
+        if self.write_count in self.timeout_writes:
+            raise TimeoutError("transport could not send the write in time")
         (offset,) = struct.unpack("<L", value[:4])
         payload = value[4:]
         self.payload_sizes.append(len(payload))
@@ -199,7 +212,7 @@ class FakeSensorTransport(AVSSTransport):
 
         if not self.windowed:
             # Legacy: NACK the expected offset on mismatch.
-            if offset != self.expected:
+            if offset != self.expected or self.legacy_nack_all:
                 assert self._program_cb is not None
                 self._program_cb(struct.pack("<L", self.expected))
                 return
@@ -333,6 +346,7 @@ def test_windowed_transfer_aborted_by_node():
 
 def test_windowed_transfer_fails_on_persistent_stall(monkeypatch):
     monkeypatch.setattr("anura.avss.client.PROGRAM_STALL_TIMEOUT", 0.01)
+    monkeypatch.setattr("anura.avss.client.PROGRAM_PROGRESS_TIMEOUT", 0.1)
     binary = make_binary(10 * CHUNK)
     transport = FakeSensorTransport(len(binary), strict_window=False)
     # Drop every notification after the initial grant.
@@ -345,6 +359,7 @@ def test_windowed_transfer_fails_on_persistent_stall(monkeypatch):
 
 def test_windowed_transfer_resumes_after_interruption(monkeypatch):
     monkeypatch.setattr("anura.avss.client.PROGRAM_STALL_TIMEOUT", 0.01)
+    monkeypatch.setattr("anura.avss.client.PROGRAM_PROGRESS_TIMEOUT", 0.1)
     binary = make_binary(40 * CHUNK)
     transport = FakeSensorTransport(len(binary), strict_window=False)
     client = AVSSClient(transport)
@@ -443,6 +458,119 @@ def test_legacy_transfer_recovers_from_dropped_final_chunk(monkeypatch):
 
     assert transport.ready
     assert bytes(transport.received) == binary
+
+
+def test_windowed_transfer_stall_limit_is_wall_clock(monkeypatch):
+    """Rewinds keep coming as long as the deadline allows, however many; the
+    transfer is failed by elapsed time without progress, not by a count."""
+    monkeypatch.setattr("anura.avss.client.PROGRAM_STALL_TIMEOUT", 0.005)
+    monkeypatch.setattr("anura.avss.client.PROGRAM_PROGRESS_TIMEOUT", 0.3)
+    binary = make_binary(10 * CHUNK)
+    transport = FakeSensorTransport(len(binary), strict_window=False)
+    transport.drop_acks = set(range(2, 10_000))
+    client = AVSSClient(transport)
+
+    with pytest.raises(AVSSProgramTransferError, match="no progress for"):
+        run(procedures.upload_firmware(client, binary, image=0))
+
+    # Far more than the 15 rewinds the old count-based limit allowed.
+    assert transport.write_count > 20 * 10
+
+
+def test_legacy_transfer_fails_when_node_never_accepts_data(monkeypatch):
+    """A legacy node that NACKs every write back to the same offset used to
+    keep the transfer circling forever; it is now bounded by the deadline."""
+    monkeypatch.setattr("anura.avss.client.PROGRAM_PROGRESS_TIMEOUT", 0.2)
+    binary = make_binary(6 * CHUNK)
+    transport = FakeSensorTransport(len(binary), windowed_supported=False)
+    transport.legacy_nack_all = True
+    client = AVSSClient(transport)
+
+    with pytest.raises(AVSSProgramTransferError, match="no progress for"):
+        run(procedures.upload_firmware(client, binary, image=0))
+
+
+def test_windowed_transfer_retries_write_timed_out_by_transport():
+    binary = make_binary(10 * CHUNK)
+    transport = FakeSensorTransport(len(binary))
+    transport.timeout_writes = {4}
+    client = AVSSClient(transport)
+    progress = []
+
+    run(procedures.upload_firmware(client, binary, image=0, progress=progress.append))
+
+    assert transport.ready
+    assert bytes(transport.received) == binary
+    assert progress[-1] == len(binary)
+    # The timed-out write was never sent, so exactly one extra attempt; the
+    # ack for chunk 3 was in the queue, so no rewind was needed either.
+    assert transport.write_count == 11
+
+
+def test_windowed_transfer_fails_when_writes_keep_timing_out(monkeypatch):
+    monkeypatch.setattr("anura.avss.client.PROGRAM_STALL_TIMEOUT", 0.01)
+    monkeypatch.setattr("anura.avss.client.PROGRAM_PROGRESS_TIMEOUT", 0.1)
+    binary = make_binary(10 * CHUNK)
+    transport = FakeSensorTransport(len(binary), strict_window=False)
+    transport.timeout_writes = set(range(2, 10_000))
+    client = AVSSClient(transport)
+
+    # Whether the deadline trips on the write timeout itself or on the
+    # silence check that follows it is a matter of timing.
+    with pytest.raises(AVSSProgramTransferError, match="Program transfer stalled"):
+        run(procedures.upload_firmware(client, binary, image=0))
+
+    assert transport.write_count > 2  # it did retry
+
+
+def test_windowed_transfer_write_timeout_after_disconnect():
+    """A timed-out write on a transport that has since closed is reported
+    as the disconnection it is, not retried against a dead connection."""
+    binary = make_binary(10 * CHUNK)
+    transport = FakeSensorTransport(len(binary))
+    transport.timeout_writes = {4}
+    client = AVSSClient(transport)
+
+    original = transport.program_write
+
+    async def program_write(value):
+        if transport.write_count + 1 == 4:
+            transport.disconnect()
+        await original(value)
+
+    transport.program_write = program_write  # type: ignore[method-assign]
+
+    with pytest.raises(AVSSConnectionError):
+        run(procedures.upload_firmware(client, binary, image=0))
+
+
+def test_legacy_transfer_retries_write_timed_out_by_transport(monkeypatch):
+    monkeypatch.setattr("anura.avss.client.PROGRAM_LEGACY_SETTLE_TIMEOUT", 0.05)
+    binary = make_binary(6 * CHUNK)
+    transport = FakeSensorTransport(len(binary), windowed_supported=False)
+    # A data chunk and the first completion probe both time out.
+    transport.timeout_writes = {3, 7}
+    client = AVSSClient(transport)
+    progress = []
+
+    run(procedures.upload_firmware(client, binary, image=0, progress=progress.append))
+
+    assert transport.ready
+    assert bytes(transport.received) == binary
+    assert progress[-1] == len(binary)
+    # 6 chunks + 1 retry, 2 probes + 1 retry.
+    assert transport.write_count == 10
+
+
+def test_legacy_transfer_fails_when_writes_keep_timing_out(monkeypatch):
+    monkeypatch.setattr("anura.avss.client.PROGRAM_PROGRESS_TIMEOUT", 0.1)
+    binary = make_binary(6 * CHUNK)
+    transport = FakeSensorTransport(len(binary), windowed_supported=False)
+    transport.timeout_writes = set(range(2, 10_000))
+    client = AVSSClient(transport)
+
+    with pytest.raises(AVSSProgramTransferError, match="Program transfer stalled"):
+        run(procedures.upload_firmware(client, binary, image=0))
 
 
 def test_program_transfer_keeps_1_0_contract(monkeypatch):

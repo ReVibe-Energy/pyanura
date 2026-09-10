@@ -34,16 +34,24 @@ class AVSSTransport(ABC):
         """
 
     @abstractmethod
-    async def control_point_request(self, req: bytes) -> bytes:
+    async def control_point_request(
+        self, req: bytes, *, timeout: float | None = None
+    ) -> bytes:
         """Send a control point request and return the response.
+
+        The transport enforces the timeout itself rather than leaving it to
+        the caller, so that it can do so in whichever way suits its lower
+        layers, e.g. by passing the limit on to a transceiver.
 
         Args:
             req: The request bytes to send
+            timeout: Seconds to wait for the response, or None for no limit
 
         Returns:
             Response bytes from the control point
 
         Raises:
+            TimeoutError: If no response arrived within the timeout
             AVSSConnectionError: If transport is not open or connection lost
         """
 
@@ -55,6 +63,9 @@ class AVSSTransport(ABC):
             value: The data bytes to write
 
         Raises:
+            TimeoutError: If the transport could not send the write within
+                its own limit. The write was not performed and the
+                connection is intact, so the caller may retry it.
             AVSSConnectionError: If transport is not open or connection lost
         """
 
