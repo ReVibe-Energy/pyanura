@@ -8,6 +8,7 @@ import sys
 import time
 import zipfile
 from pathlib import Path
+from typing import TextIO
 
 import click
 from bleak import BleakScanner
@@ -309,32 +310,69 @@ async def read_settings(client: avss.AVSSClient):
                 break
 
 
-@avss_group.command()
-@click.option("--file", metavar="FILE", help="Path to settings file.")
-@click.option("--reset-defaults", is_flag=True, help="Reset default values")
-@with_avss_client
-async def write_settings(client: avss.AVSSClient, file: str, reset_defaults: bool):
-    """Write settings."""
-    if file:
-        try:
-            settings = json.loads(Path(file).read_text())
-        except FileNotFoundError as e:
-            click.echo(f"Error: {e}", err=True)
-            sys.exit(1)
-    else:
-        settings = {}
+async def _update_settings(
+    client: avss.AVSSClient, settings: dict, *, replace: bool, apply: bool
+):
+    result = await procedures.update_settings(
+        client, settings, replace=replace, apply=apply
+    )
+    if not result.applied:
+        click.echo("Settings written. They take effect once applied.")
+        return
+    click.echo("Settings written and applied.")
+    if result.will_reboot:
+        click.echo("The node will reboot to take them into use.")
+    elif result.will_reboot is None:
+        click.echo("The node may reboot to take them into use.")
 
-    try:
-        resp = await client.write_settings_v2(
-            settings, reset_defaults=reset_defaults, apply=True
-        )
-        click.echo(resp)
-    except avss.AVSSOpCodeUnsupportedError:
-        logger.info("Write Settings v2 opcode not supported, using fallback...")
-        resp = await client.write_settings(settings)
-        click.echo(resp)
-        resp = await client.apply_settings(persist=True)
-        click.echo(resp)
+
+@avss_group.command()
+@click.option(
+    "--file",
+    metavar="FILE",
+    type=click.File("r"),
+    required=True,
+    help="Settings file to read, or - to read standard input.",
+)
+@click.option(
+    "--replace/--merge",
+    default=True,
+    show_default=True,
+    help="Replace the node's settings with FILE, resetting every setting FILE "
+    "does not name to its default, or merge FILE into the node's current "
+    "settings.",
+)
+@click.option(
+    "--apply/--no-apply",
+    default=True,
+    show_default=True,
+    help="Apply and persist the settings, instead of leaving them staged on the node.",
+)
+@with_avss_client
+async def update_settings(
+    client: avss.AVSSClient, file: TextIO, replace: bool, apply: bool
+):
+    """Update settings from a settings file.
+
+    The node is left with exactly the settings in FILE, every setting FILE
+    does not name reset to its default; with --merge the settings in FILE are
+    merged into the node's current settings instead, leaving the rest as they
+    were. Use reset-settings to reset every setting.
+    """
+    await _update_settings(client, json.load(file), replace=replace, apply=apply)
+
+
+@avss_group.command()
+@click.option(
+    "--apply/--no-apply",
+    default=True,
+    show_default=True,
+    help="Apply and persist the settings, instead of leaving them staged on the node.",
+)
+@with_avss_client
+async def reset_settings(client: avss.AVSSClient, apply: bool):
+    """Reset every setting to its default value."""
+    await _update_settings(client, {}, replace=True, apply=apply)
 
 
 @avss_group.command()
