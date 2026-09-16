@@ -219,7 +219,6 @@ class AVSSClient:
     def _callback_and_generator(
         self,
     ) -> tuple[Callable[[Report], None], AsyncIterator[Report]]:
-
         queue: asyncio.Queue[Report] = asyncio.Queue()
 
         def _callback(report: Report) -> None:
@@ -656,9 +655,9 @@ class AVSSClient:
         # we use 4 bytes for offset.
         chunk_size = (att_mtu - 3) - 4
 
-        deadline = asyncio.timeout(PROGRAM_PROGRESS_TIMEOUT)
         async with self._program_lock:
             self._program_notify_queue = asyncio.Queue()
+            deadline = asyncio.timeout(PROGRAM_PROGRESS_TIMEOUT)
             try:
                 async with deadline:
                     await self._unsynchronized_transfer_loop(
@@ -705,9 +704,9 @@ class AVSSClient:
         if params.offset > 0:
             logger.info("Resuming transfer at offset %d", params.offset)
 
-        deadline = asyncio.timeout(PROGRAM_PROGRESS_TIMEOUT)
         async with self._program_lock:
             self._program_notify_queue = asyncio.Queue()
+            deadline = asyncio.timeout(PROGRAM_PROGRESS_TIMEOUT)
             try:
                 async with deadline:
                     await self._windowed_transfer_loop(

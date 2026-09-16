@@ -176,6 +176,8 @@ class FakeSensorTransport(AVSSTransport):
         raise AssertionError(f"unexpected opcode {opcode}")
 
     async def program_write(self, value):
+        # A real transport awaits its I/O here, which yields to the loop.
+        await asyncio.sleep(0)
         self.write_count += 1
         if self.write_count in self.timeout_writes:
             raise TimeoutError("transport could not send the write in time")
@@ -592,3 +594,29 @@ def test_program_transfer_keeps_1_0_contract(monkeypatch):
     assert not transport.windowed
     assert bytes(transport.received) == binary
     assert progress[-1] == len(binary)
+
+
+def test_transfer_deadline_does_not_start_before_the_program_lock(monkeypatch):
+    """asyncio.timeout fixes its deadline when constructed, not when entered.
+    Built before the program lock was held, a transfer queued behind another
+    would have spent part of its own first window waiting for it, and a long
+    enough wait failed it before it had written anything."""
+    monkeypatch.setattr("anura.avss.client.PROGRAM_PROGRESS_TIMEOUT", 0.1)
+    binary = make_binary(4 * CHUNK)
+    transport = FakeSensorTransport(len(binary))
+    client = AVSSClient(transport)
+
+    async def scenario():
+        await client._program_lock.acquire()
+
+        async def release_after_a_whole_window():
+            await asyncio.sleep(0.3)
+            client._program_lock.release()
+
+        releasing = asyncio.create_task(release_after_a_whole_window())
+        await procedures.upload_firmware(client, binary, image=0)
+        await releasing
+
+    run(scenario())
+
+    assert bytes(transport.received) == binary
