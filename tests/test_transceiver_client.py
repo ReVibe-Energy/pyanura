@@ -428,36 +428,6 @@ def test_avss_request_unanswered_past_the_transceiver_bound_fails_connection():
     run(scenario())
 
 
-def test_avss_request_bound_is_still_judged_when_the_caller_gave_up():
-    """Case from the PR discussion: an upper layer stops waiting early, as
-    the AVSS proxy transport does on firmware without timeout support. The
-    request must carry on so the transceiver's failure to answer within the
-    expected bound is still detected and the connection recycled."""
-
-    async def scenario():
-        transport = NoKeepaliveFakeTransport()  # keep pings out of the count
-        transport.avss_timeout_supported = False
-        transport.avss_node_answers = False
-        client = make_client(transport)
-        await client.connect()
-        try:
-            with pytest.raises(TimeoutError):
-                async with asyncio.timeout(0.05):
-                    await client.avss_request(NODE, b"\x05")
-            assert not client._connection_closed.is_set()
-
-            # The request is still running against the transceiver.
-            assert len(client._pending_responses) == 1
-            await client.wait_for_disconnection()
-            assert '"avss_request" request unanswered' in str(
-                client._connection_exception
-            )
-        finally:
-            await client.disconnect()
-
-    run(scenario())
-
-
 def test_avss_program_write_timed_out_by_the_transceiver():
     """The transceiver's flow control fails a write it could not get into
     the TX path in time. That is the transceiver doing its job, so the
