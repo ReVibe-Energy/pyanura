@@ -30,6 +30,7 @@ _POLL_TIMEOUT = 5.0
 
 class _State(enum.Enum):
     CREATED = "created"
+    CONNECTING = "connecting"
     OPENED = "opened"
     CLOSED = "closed"
 
@@ -50,6 +51,7 @@ class ProxyAVSSTransport(AVSSTransport):
             address: BluetoothAddrLE of the target device
         """
         self._state = _State.CREATED
+        self._connected = asyncio.Event()
 
         self._transceiver = transceiver
         self._address = address
@@ -62,11 +64,28 @@ class ProxyAVSSTransport(AVSSTransport):
         if self._state is not _State.CREATED:
             raise RuntimeError("Transport has already been opened")
 
-        self._state = _State.OPENED
-        self._loop_task = asyncio.create_task(self._transport_loop())
-        self._loop_task.add_done_callback(self._on_closed)
+        self._state = _State.CONNECTING
+        loop_task = asyncio.create_task(self._transport_loop())
+        self._loop_task = loop_task
+        loop_task.add_done_callback(self._on_closed)
 
-        await self._wait_available()
+        connected = asyncio.create_task(self._connected.wait())
+        try:
+            await asyncio.wait(
+                [connected, loop_task], return_when=asyncio.FIRST_COMPLETED
+            )
+        finally:
+            connected.cancel()
+            await asyncio.wait([connected])
+
+        if self._connected.is_set():
+            return
+
+        # The loop ended before the node became available. Whatever ended it
+        # is why open() failed.
+        if not loop_task.cancelled() and (exc := loop_task.exception()):
+            raise exc
+        raise AVSSConnectionError(f"Transport for {self._address} closed while opening")
 
     async def _wait_available(self):
         # TODO: This will wait indefinitely if transceiver is not assigned to
@@ -106,11 +125,13 @@ class ProxyAVSSTransport(AVSSTransport):
                 raise AVSSConnectionError(
                     f"Node {self._address} did not answer when polled"
                 ) from e
+            except TransceiverConnectionError as e:
+                raise AVSSConnectionError(f"Transceiver connection broken: {e}") from e
 
             await asyncio.sleep(_POLL_INTERVAL)
 
     def _on_closed(self, task: asyncio.Task):
-        assert self._state is _State.OPENED
+        assert self._state in (_State.CONNECTING, _State.OPENED)
         assert self._loop_task is task
 
         if not task.cancelled():
@@ -138,6 +159,13 @@ class ProxyAVSSTransport(AVSSTransport):
 
     async def _transport_loop(self):
         with self._transceiver.notifications() as notifications:
+            # Subscribed before waiting, so nothing the node sends
+            # between becoming available and the loop reading can be missed.
+            await self._wait_available()
+
+            self._state = _State.OPENED
+            self._connected.set()
+
             async for notification in notifications:
                 match notification:
                     case AVSSReportNotifiedEvent(address=self._address):
@@ -174,7 +202,7 @@ class ProxyAVSSTransport(AVSSTransport):
     async def control_point_request(
         self, req: bytes, *, timeout: float | None = None
     ) -> bytes:
-        if self._state is _State.CREATED:
+        if self._state in (_State.CREATED, _State.CONNECTING):
             raise RuntimeError("Transport has not been opened")
 
         if self._state is _State.CLOSED:
@@ -200,7 +228,7 @@ class ProxyAVSSTransport(AVSSTransport):
             raise AVSSConnectionError(f"Transceiver connection broken: {e}") from e
 
     async def program_write(self, value: bytes) -> None:
-        if self._state is _State.CREATED:
+        if self._state in (_State.CREATED, _State.CONNECTING):
             raise RuntimeError("Transport has not been opened")
 
         if self._state is _State.CLOSED:
