@@ -175,6 +175,14 @@ class ProxyAVSSTransport(AVSSTransport):
 
         try:
             return await self._node_request(req, timeout)
+        except TimeoutError:
+            # The node took the request and did not answer it. Responses are
+            # matched by order, so an unanswered request leaves the protocol
+            # in a broken state. The transceiver will have either closed the
+            # connection, or is waiting indefinitely for the node to answer;
+            # in either case this transport is defunct.
+            await self.close()
+            raise
         except TransceiverRequestError as e:
             if e.error.code == APIErrorCode.NODE_UNAVAILABLE:
                 raise AVSSConnectionError(

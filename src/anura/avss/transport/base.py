@@ -50,8 +50,14 @@ class AVSSTransport(ABC):
         Returns:
             Response bytes from the control point
 
+        A device that took the request and did not answer it leaves nothing
+        to build on, since responses are matched by order and a late one
+        would be taken for the answer to the next request. The transport
+        closes itself in that case.
+
         Raises:
-            TimeoutError: If no response arrived within the timeout
+            TimeoutError: If no response arrived within the timeout. The
+                transport has closed itself.
             AVSSConnectionError: If transport is not open or connection lost
         """
 

@@ -69,6 +69,16 @@ def open_transport(transceiver) -> ProxyAVSSTransport:
     return transport
 
 
+def attach_loop_task(transport: ProxyAVSSTransport) -> None:
+    """Give the transport a stand-in for the loop task it would own.
+
+    An opened transport always has one, and closing cancels it. Call this
+    from inside a running loop for tests that let the transport close itself.
+    """
+    transport._loop_task = asyncio.create_task(asyncio.Event().wait())
+    transport._loop_task.add_done_callback(transport._on_closed)
+
+
 def request_error(code: models.APIErrorCode) -> TransceiverRequestError:
     return TransceiverRequestError("avss_program_write", models.APIError(code=code))
 
@@ -181,6 +191,46 @@ def test_request_timeout_is_not_passed_to_firmware_that_cannot_take_one():
     asyncio.run(transport.control_point_request(b"\x05", timeout=5.0))
 
     assert transceiver.timeouts == [None]
+
+
+def test_request_the_node_did_not_answer_closes_the_transport():
+    # The transceiver applied the limit and gave up on the node.
+    transceiver = FakeTransceiver(polls=[TimeoutError()])
+
+    async def scenario():
+        transport = open_transport(transceiver)
+        attach_loop_task(transport)
+
+        with pytest.raises(TimeoutError):
+            await transport.control_point_request(b"\x05", timeout=5.0)
+
+        assert transport._state is _State.CLOSED
+        # And the next attempt finds it unusable.
+        with pytest.raises(AVSSConnectionError, match="has been closed"):
+            await transport.control_point_request(b"\x05", timeout=5.0)
+
+    asyncio.run(scenario())
+
+
+def test_request_the_transport_had_to_bound_itself_is_the_same():
+    # Nothing on the transceiver side bounds this one, so the transport's own
+    # limit is what expires. The node is just as finished either way, and
+    # here nothing below will close the transport on our behalf.
+    async def never_answers():
+        await asyncio.sleep(3600)
+
+    transceiver = FakeTransceiver(polls=[never_answers], supports_timeout=False)
+
+    async def scenario():
+        transport = open_transport(transceiver)
+        attach_loop_task(transport)
+
+        with pytest.raises(TimeoutError):
+            await transport.control_point_request(b"\x05", timeout=0.01)
+
+        assert transport._state is _State.CLOSED
+
+    asyncio.run(scenario())
 
 
 def test_open_bounds_its_poll_even_without_firmware_support(fast_polling, monkeypatch):
