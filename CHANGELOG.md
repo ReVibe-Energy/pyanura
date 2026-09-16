@@ -48,6 +48,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   responsible for enforcing it. A request the device did not answer raises
   `TimeoutError` and closes the transport, since a late response would be
   taken for the answer to the next request.
+- `AVSSClient` control point requests raise `AVSSConnectionError`, not
+  `TimeoutError`, when the device did not answer: the transport has closed
+  itself by then, so the connection is gone.
 - The USB transceiver transport no longer sends keepalive pings.
 - `ProxyAVSSTransport.program_write()` raises `AVSSConnectionError` when the
   node is unavailable or the transceiver connection broke, and

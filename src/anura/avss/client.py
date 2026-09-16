@@ -343,7 +343,7 @@ class AVSSClient:
             - response_payload: Raw bytes after the opcode byte (ready for unmarshaling)
 
         Raises:
-            TimeoutError: If the request times out
+            AVSSConnectionError: If the connection was lost.
             AVSSControlPointError: If response code is not OK
             AVSSProtocolError: If response is malformed or opcode mismatch occurs
         """
@@ -369,7 +369,14 @@ class AVSSClient:
                 resp_bytes = await self._transport.control_point_request(
                     req_bytes, timeout=timeout
                 )
-        except (AVSSConnectionError, TimeoutError):
+        except TimeoutError as e:
+            # The transport closes itself over this: the device took the
+            # request and never answered it, so what is left is a lost
+            # connection.
+            raise AVSSConnectionError(
+                f"Device did not answer the {opcode.name} request"
+            ) from e
+        except AVSSConnectionError:
             raise
         except Exception as e:
             raise AVSSTransportError(f"Request failed: {e!s}") from e
