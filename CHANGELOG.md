@@ -45,10 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   transceiver reports that the write timed out before it was sent. The node
   is still connected and the write may be retried.
 - `AVSSTransport.control_point_request()` takes a `timeout` and is
-  responsible for enforcing it. Control point timeouts surface as
-  `TimeoutError` from the transport. Over a transceiver without timeout
-  support the proxy transport merely stops waiting when it expires; the
-  request keeps occupying the node and the transceiver.
+  responsible for enforcing it.
 - The USB transceiver transport no longer sends keepalive pings.
 - `ProxyAVSSTransport.program_write()` raises `AVSSConnectionError` when the
   node is unavailable or the transceiver connection broke, and

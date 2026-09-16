@@ -1,6 +1,7 @@
 """Tests for the error mapping and node polling of ProxyAVSSTransport."""
 
 import asyncio
+import inspect
 
 import pytest
 
@@ -19,28 +20,40 @@ NODE = models.BluetoothAddrLE.parse("C0:00:00:00:00:01")
 class FakeTransceiver:
     """Stands in for TransceiverClient.
 
-    Program writes raise ``outcome``. GET_VERSION polls take their result
-    from ``polls`` in turn: an exception is raised, a callable is called,
-    anything else is returned. Once ``polls`` is exhausted they succeed.
+    Program writes raise ``outcome``. Requests take their result from
+    ``polls`` in turn: an exception is raised, a callable is called and its
+    result awaited if need be, anything else is returned. Once ``polls`` is
+    exhausted they succeed with an empty response. ``timeouts`` records the
+    timeout each request was given, which is None where the firmware cannot
+    take one.
     """
 
-    def __init__(self, outcome: BaseException | None = None, polls=()):
+    def __init__(
+        self,
+        outcome: BaseException | None = None,
+        polls=(),
+        supports_timeout: bool = True,
+    ):
         self.outcome = outcome
         self.polls = list(polls)
         self.poll_count = 0
         self.writes: list[bytes] = []
+        self.timeouts: list[float | None] = []
+        self.supports_avss_request_timeout = supports_timeout
 
     async def avss_request(self, addr, req, *, timeout=None):
         assert addr == NODE
-        assert req == b"\x05"  # GET_VERSION
         self.poll_count += 1
+        self.timeouts.append(timeout)
         if not self.polls:
-            return None
+            return models.AVSSRequestResult(response=b"")
         result = self.polls.pop(0)
         if isinstance(result, BaseException):
             raise result
         if callable(result):
-            return result()
+            result = result()
+            if inspect.isawaitable(result):
+                result = await result
         return result
 
     async def avss_program_write(self, addr, data):
@@ -150,3 +163,37 @@ def test_open_fails_when_the_node_takes_a_poll_but_does_not_answer(fast_polling)
         asyncio.run(transport._wait_available())
 
     assert transceiver.poll_count == 2
+
+
+def test_request_timeout_is_left_to_the_transceiver_where_it_takes_one():
+    transceiver = FakeTransceiver()
+    transport = open_transport(transceiver)
+
+    asyncio.run(transport.control_point_request(b"\x05", timeout=5.0))
+
+    assert transceiver.timeouts == [5.0]
+
+
+def test_request_timeout_is_not_passed_to_firmware_that_cannot_take_one():
+    transceiver = FakeTransceiver(supports_timeout=False)
+    transport = open_transport(transceiver)
+
+    asyncio.run(transport.control_point_request(b"\x05", timeout=5.0))
+
+    assert transceiver.timeouts == [None]
+
+
+def test_open_bounds_its_poll_even_without_firmware_support(fast_polling, monkeypatch):
+    # Without a bound here the poll would wait on a mute node forever.
+    monkeypatch.setattr(proxy, "_POLL_TIMEOUT", 0.01)
+
+    async def never_answers():
+        await asyncio.sleep(3600)
+
+    transceiver = FakeTransceiver(polls=[never_answers], supports_timeout=False)
+    transport = open_transport(transceiver)
+
+    with pytest.raises(AVSSConnectionError, match="did not answer when polled"):
+        asyncio.run(transport._wait_available())
+
+    assert transceiver.timeouts == [None]

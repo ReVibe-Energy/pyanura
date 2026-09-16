@@ -23,6 +23,10 @@ logger = logging.getLogger(__name__)
 # Seconds between polls of a node that is not yet available.
 _POLL_INTERVAL = 1.0
 
+# Bound on a readiness poll. A node that is connected and ready answers a
+# GET_VERSION well inside this; one that does not is not about to.
+_POLL_TIMEOUT = 5.0
+
 
 class _State(enum.Enum):
     CREATED = "created"
@@ -77,7 +81,7 @@ class ProxyAVSSTransport(AVSSTransport):
         while True:
             try:
                 get_version_request = b"\x05"  # GET_VERSION opcode
-                await self._transceiver.avss_request(self._address, get_version_request)
+                await self._node_request(get_version_request, _POLL_TIMEOUT)
                 return
             except TransceiverRequestError as e:
                 if e.error.code == APIErrorCode.NODE_UNAVAILABLE:
@@ -138,6 +142,28 @@ class ProxyAVSSTransport(AVSSTransport):
                     case NodeDisconnectedEvent(address=self._address):
                         break  # connection broken
 
+    async def _node_request(self, req: bytes, timeout: float | None) -> bytes:
+        """Send a request to the node, bounded by ``timeout``.
+
+        Raises:
+            TimeoutError: If the node did not answer within ``timeout``.
+        """
+        if self._transceiver.supports_avss_request_timeout:
+            # Pass timeout to let the transceiver enforce it.
+            result = await self._transceiver.avss_request(
+                self._address, req, timeout=timeout
+            )
+        else:
+            # Fallback to a local timeout. This will leave the transceiver's
+            # connection to this node in a broken state, surfaced as all
+            # subsequent avss_request attempts failing until the BLE
+            # connection is re-established.
+            async with asyncio.timeout(timeout):
+                result = await self._transceiver.avss_request(
+                    self._address, req, timeout=None
+                )
+        return result.response
+
     async def control_point_request(
         self, req: bytes, *, timeout: float | None = None
     ) -> bytes:
@@ -148,22 +174,7 @@ class ProxyAVSSTransport(AVSSTransport):
             raise AVSSConnectionError("Connection has been closed")
 
         try:
-            timeout_supported = self._transceiver.supports_avss_request_timeout
-            if timeout is not None and not timeout_supported:
-                # Firmware without timeout support waits for the node
-                # indefinitely. This only abandons the wait to honour the
-                # transport contract; the node and the transceiver's request
-                # slot are not freed. The true fix is a firmware update.
-                async with asyncio.timeout(timeout):
-                    result = await self._transceiver.avss_request(self._address, req)
-            else:
-                # A node timeout surfaces as TimeoutError from avss_request;
-                # the transceiver has disconnected the node then, so the
-                # transport loop will close shortly.
-                result = await self._transceiver.avss_request(
-                    self._address, req, timeout=timeout
-                )
-            return result.response
+            return await self._node_request(req, timeout)
         except TransceiverRequestError as e:
             if e.error.code == APIErrorCode.NODE_UNAVAILABLE:
                 raise AVSSConnectionError(
