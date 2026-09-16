@@ -74,8 +74,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `avss reset-settings`.
 
 ### Fixed
+- `ProxyAVSSTransport.open()` aborts if the transport closes while it is
+  waiting, and no longer leaves its notification subscription and transport
+  loop running behind it when it fails.
 - `ProxyAVSSTransport.open()` gives up on a node that is connected but does
   not respond, instead of waiting for it indefinitely.
+- `ProxyAVSSTransport.open()` raises `AVSSConnectionError` when the
+  transceiver connection breaks instead of leaking `TransceiverConnectionError`.
 - `BleakAVSSTransport` holds the control point request slot busy until answered.
   This prevents the response to a request that was abandoned by the caller from
   being matched to the following request.
