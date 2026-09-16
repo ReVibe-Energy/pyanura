@@ -552,9 +552,7 @@ class TransceiverClient:
             TransceiverError: If `timeout` was given but the firmware does
                 not support it.
             TransceiverConnectionError: If the connection broke for any
-                reason while waiting, including the transceiver itself not
-                delivering any answer within the expected bound plus a
-                margin (which closes the connection).
+                reason while waiting.
         """
         timeout_ms: int | None = None
         node_timeout = self._avss_request_default_timeout
@@ -568,13 +566,9 @@ class TransceiverClient:
             timeout_ms = int(timeout * 1000)
             node_timeout = timeout
 
-        # `rpc_timeout` is the time given to the transceiver to respond,
-        # assuming it waits up to `node_timeout` for the node. Firmware
-        # without timeout support waits indefinitely, so there a wedged node
-        # is indistinguishable from a broken transceiver; failing the
-        # connection at least surfaces the problem, though only a firmware
-        # update truly fixes it.
-        rpc_timeout = node_timeout + self._avss_request_margin
+        rpc_timeout = None
+        if self._avss_request_timeout_supported:
+            rpc_timeout = node_timeout + self._avss_request_margin
 
         try:
             return await self.request(
