@@ -70,6 +70,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `avss reset-settings`.
 
 ### Fixed
+- `ProxyAVSSTransport.open()` gives up on a node that is connected but does
+  not respond, instead of waiting for it indefinitely.
 - A CBOR payload from a node or a transceiver that carries trailing bytes is
   rejected instead of being decoded from its leading bytes.
 - `AVSSClient` raises `AVSSProtocolError` for a payload it cannot decode

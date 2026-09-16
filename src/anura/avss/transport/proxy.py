@@ -20,6 +20,9 @@ from .base import AVSSTransport
 
 logger = logging.getLogger(__name__)
 
+# Seconds between polls of a node that is not yet available.
+_POLL_INTERVAL = 1.0
+
 
 class _State(enum.Enum):
     CREATED = "created"
@@ -65,8 +68,9 @@ class ProxyAVSSTransport(AVSSTransport):
         # TODO: This will wait indefinitely if transceiver is not assigned to
         # the node; a sanity check would be good.
 
-        # We expect NODE_UNAVAILABLE errors while waiting for the node but tolerate
-        # a limited count of other errors.
+        # NODE_UNAVAILABLE is expected while the transceiver is still
+        # connecting to the node, but we tolerate a limited count of other
+        # errors.
 
         other_error_count = 0
 
@@ -74,7 +78,7 @@ class ProxyAVSSTransport(AVSSTransport):
             try:
                 get_version_request = b"\x05"  # GET_VERSION opcode
                 await self._transceiver.avss_request(self._address, get_version_request)
-                break
+                return
             except TransceiverRequestError as e:
                 if e.error.code == APIErrorCode.NODE_UNAVAILABLE:
                     other_error_count = 0
@@ -88,15 +92,11 @@ class ProxyAVSSTransport(AVSSTransport):
                             f"Transceiver report an error when polling for node: {e.error}"
                         ) from e
             except TimeoutError as e:
-                logger.warning(
-                    f"Node {self._address} did not answer while waiting for it to become available"
-                )
-                other_error_count += 1
-                if other_error_count >= 3:
-                    raise AVSSConnectionError(
-                        f"Node {self._address} kept timing out when polled"
-                    ) from e
-            await asyncio.sleep(1.0)
+                raise AVSSConnectionError(
+                    f"Node {self._address} did not answer when polled"
+                ) from e
+
+            await asyncio.sleep(_POLL_INTERVAL)
 
     def _on_closed(self, task: asyncio.Task):
         assert self._state is _State.OPENED
