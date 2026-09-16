@@ -777,9 +777,8 @@ class AVSSClient:
 
             assert self._program_notify_queue is not None
             try:
-                data = await asyncio.wait_for(
-                    self._program_notify_queue.get(), timeout=PROGRAM_STALL_TIMEOUT
-                )
+                async with asyncio.timeout(PROGRAM_STALL_TIMEOUT):
+                    data = await self._program_notify_queue.get()
             except TimeoutError:
                 self._raise_if_disconnected()
                 # An ack may have been lost; rewind and retransmit. The node
@@ -837,9 +836,8 @@ class AVSSClient:
                         # Wait a short while for a NACK message to indicate the
                         # node is not in sync with our writes.
                         assert self._program_notify_queue is not None
-                        data = await asyncio.wait_for(
-                            self._program_notify_queue.get(), timeout=0.04
-                        )
+                        async with asyncio.timeout(0.04):
+                            data = await self._program_notify_queue.get()
                         offset = self._parse_legacy_nack(data)
                         # We received a NACK so we wait a short while to see
                         # if any more NACKs turn up before we continue writing.
@@ -912,10 +910,8 @@ class AVSSClient:
         while True:
             assert self._program_notify_queue is not None
             try:
-                data = await asyncio.wait_for(
-                    self._program_notify_queue.get(),
-                    timeout=PROGRAM_LEGACY_SETTLE_TIMEOUT,
-                )
+                async with asyncio.timeout(PROGRAM_LEGACY_SETTLE_TIMEOUT):
+                    data = await self._program_notify_queue.get()
             except TimeoutError:
                 # Silence: the settle period passed with no NACK.
                 data = None
