@@ -216,7 +216,7 @@ class ProxyAVSSTransport(AVSSTransport):
                 raise AVSSConnectionError(
                     "Node not available via transceiver"
                 ) from None
-            raise
+            raise AVSSTransportError(f"Control point request failed: {e}") from e
         except TransceiverConnectionError as e:
             raise AVSSConnectionError(f"Transceiver connection broken: {e}") from e
 

@@ -159,6 +159,16 @@ def test_program_write_other_request_errors_are_transport_errors():
         asyncio.run(transport.program_write(b"chunk"))
 
 
+def test_request_other_request_errors_are_transport_errors():
+    transceiver = FakeTransceiver(
+        polls=[request_error(models.APIErrorCode.OPERATION_FAILED)]
+    )
+    transport = open_transport(transceiver)
+
+    with pytest.raises(AVSSTransportError, match="Control point request failed"):
+        asyncio.run(transport.control_point_request(b"\x05", timeout=5.0))
+
+
 def test_open_polls_until_the_node_answers(fast_polling):
     transceiver = FakeTransceiver(polls=[node_unavailable()] * 4)
 
