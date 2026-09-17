@@ -376,7 +376,7 @@ class AVSSClient:
             raise AVSSConnectionError(
                 f"Device did not answer the {opcode.name} request"
             ) from e
-        except AVSSConnectionError:
+        except (AVSSConnectionError, AVSSTransportError):
             raise
         except Exception as e:
             raise AVSSTransportError(f"Request failed: {e!s}") from e
