@@ -136,7 +136,14 @@ class BleakAVSSTransport(AVSSTransport):
                     await self._client.write_gatt_char(
                         avss.uuids.ControlPointCharacteristicUuid, req
                     )
-                except BleakError as e:
+                except Exception as e:
+                    # Broader than BleakError: the backend leaks EOFError and
+                    # OSError of its own, which close() already guards against
+                    # from disconnect(). Escaping here would leave the slot
+                    # claimed on an open transport, and nothing but a response,
+                    # a disconnection or a close ever frees it. Cancellation is
+                    # a BaseException, so the caller's own timeout still
+                    # reaches the handler below untouched.
                     self._discard(response)
 
                     # The write may have gone out so the safe option is to close.
@@ -148,7 +155,7 @@ class BleakAVSSTransport(AVSSTransport):
                         )
 
                     raise AVSSConnectionError(
-                        f"Control Point write failed: {e!s}"
+                        f"Control point write failed: {e!s}"
                     ) from e
 
                 return await response
