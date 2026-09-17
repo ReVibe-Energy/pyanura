@@ -79,6 +79,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   not respond, instead of waiting for it indefinitely.
 - `ProxyAVSSTransport.open()` raises `AVSSConnectionError` when the
   transceiver connection breaks instead of leaking `TransceiverConnectionError`.
+- `BleakAVSSTransport.control_point_request()` handles any failure of the
+  control point write, not only `BleakError`. A backend exception of another
+  kind escaped the transport and left its request slot claimed, after which
+  every later request on it failed.
 - `BleakAVSSTransport` holds the control point request slot busy until answered.
   This prevents the response to a request that was abandoned by the caller from
   being matched to the following request.
