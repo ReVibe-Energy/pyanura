@@ -136,7 +136,7 @@ class BleakAVSSTransport(AVSSTransport):
                     await self._client.write_gatt_char(
                         avss.uuids.ControlPointCharacteristicUuid, req
                     )
-                except BleakError as e:
+                except Exception as e:
                     self._discard(response)
 
                     # The write may have gone out so the safe option is to close.
