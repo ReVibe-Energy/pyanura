@@ -48,6 +48,13 @@ def test_program_write_passes_data_through():
     assert transceiver.writes == [b"chunk"]
 
 
+def test_program_write_timeout_is_left_for_the_caller_to_retry():
+    transport = open_transport(FakeTransceiver(TimeoutError("held too long")))
+
+    with pytest.raises(TimeoutError):
+        asyncio.run(transport.program_write(b"chunk"))
+
+
 @pytest.mark.parametrize(
     "outcome",
     [

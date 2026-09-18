@@ -181,6 +181,10 @@ class ProxyAVSSTransport(AVSSTransport):
             raise AVSSConnectionError("Connection has been closed")
 
         try:
+            # A TimeoutError from the transceiver means it gave up on getting
+            # the write into its TX path in time; the write was never sent
+            # and the node is still connected, so it passes through for the
+            # caller to retry.
             await self._transceiver.avss_program_write(self._address, value)
         except TransceiverRequestError as e:
             if e.error.code == APIErrorCode.NODE_UNAVAILABLE:
