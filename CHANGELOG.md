@@ -23,6 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The CLI `avss reset-settings` command, which resets a node's settings to
   their defaults.
 - `APIErrorCode.TIMEOUT` and `AVSSRequestArgs.timeout_ms`.
+- `APIErrorCode.RESOURCE_EXHAUSTED` and `APIErrorCode.BUSY`, which firmware
+  that has them uses to separate a resource that frees itself from one held
+  by an operation in progress.
 
 ### Changed
 - `marshal()` omits optional dataclass fields (`X | None`) whose value is

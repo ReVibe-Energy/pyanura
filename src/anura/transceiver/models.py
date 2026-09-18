@@ -48,6 +48,21 @@ class APIErrorCode(enum.IntEnum):
     TIMEOUT = 9
     """The operation did not complete within its time limit."""
 
+    RESOURCE_EXHAUSTED = 10
+    """A resource was momentarily exhausted; it frees itself, so retry.
+
+    Firmware older than this code reports the same conditions as `TIMEOUT`
+    or `OPERATION_FAILED`.
+    """
+
+    BUSY = 11
+    """The resource is held by an operation already in progress.
+
+    Unlike `RESOURCE_EXHAUSTED` this does not clear on its own: it lasts as
+    long as the operation holding it. Firmware older than this code reports
+    it as `OPERATION_FAILED`.
+    """
+
 
 @dataclass
 class APIError:
