@@ -25,6 +25,9 @@ class FakeTransport(Transport, transport_type="fake-test"):
     Answers method discovery immediately. Pings are counted and answered
     only when ``answer_pings`` is set. The "slow_op" method is answered
     after ``slow_op_delay`` seconds, and "never_op" is never answered.
+    Program writes are acknowledged at once, or refused with
+    RESOURCE_EXHAUSTED when ``program_write_refused`` is set, like a write
+    the firmware had no room for.
     """
 
     def __init__(self, *, answer_pings: bool = True, slow_op_delay: float = 0.0):
@@ -38,6 +41,8 @@ class FakeTransport(Transport, transport_type="fake-test"):
         self.has_avss_request = True
         self.avss_timeout_supported = True
         self.avss_node_answers = True
+        self.program_writes: list[dict] = []
+        self.program_write_refused = False
 
     async def open_connection(self) -> None:
         pass
@@ -81,6 +86,14 @@ class FakeTransport(Transport, transport_type="fake-test"):
                         asyncio.create_task(self._respond_timeout_later(token, delay))
                     )
                 # Otherwise: node never answers and the transceiver waits.
+            case [models.msg_type.Request, token, "avss_program_write", arg]:
+                self.program_writes.append(arg)
+                if self.program_write_refused:
+                    self._respond(
+                        token, {0: models.APIErrorCode.RESOURCE_EXHAUSTED}, None
+                    )
+                else:
+                    self._respond(token, None, None)
             case message:
                 raise AssertionError(f"Unexpected message: {message}")
 
@@ -441,6 +454,30 @@ def test_avss_request_bound_is_still_judged_when_the_caller_gave_up():
             assert '"avss_request" request unanswered' in str(
                 client._connection_exception
             )
+        finally:
+            await client.disconnect()
+
+    run(scenario())
+
+
+def test_avss_program_write_refused_by_the_transceiver():
+    """The transceiver's flow control refuses a write it had no room for.
+    That is the transceiver doing its job, so the caller sees a retryable
+    TimeoutError and the connection stays up."""
+
+    async def scenario():
+        transport = FakeTransport()
+        transport.program_write_refused = True
+        client = make_client(transport)
+        await client.connect()
+        try:
+            with pytest.raises(TimeoutError):
+                await client.avss_program_write(NODE, b"chunk")
+            assert len(transport.program_writes) == 1
+            assert not client._connection_closed.is_set()
+
+            transport.program_write_refused = False
+            await client.avss_program_write(NODE, b"chunk")
         finally:
             await client.disconnect()
 
