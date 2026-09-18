@@ -45,8 +45,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   response and raises `TimeoutError` when it expires. Requires transceiver
   firmware support for proper operation.
 - `TransceiverClient.avss_program_write()` raises `TimeoutError` when the
-  transceiver reports that the write timed out before it was sent. The node
-  is still connected and the write may be retried.
+  transceiver reports it had no room to send the write. The node is still
+  connected and the write may be retried.
 - `AVSSTransport.control_point_request()` takes a `timeout` and is
   responsible for enforcing it. A request the device did not answer raises
   `TimeoutError` and closes the transport, since a late response would be
@@ -63,7 +63,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   could not be sent within the transport's own limit; the write was not
   performed and the connection is intact. `AVSSClient` transfers retry such
   writes, bounded by the progress deadline below. `ProxyAVSSTransport`
-  raises it when the transceiver reports a program write timed out.
+  raises it when the transceiver reports it had no room to send the write.
 - `AVSSClient` program transfers fail once `PROGRAM_PROGRESS_TIMEOUT` (60 s)
   passes without progress, in place of the count of consecutive silent
   windows (`PROGRAM_STALL_LIMIT`, removed). The legacy transfer, which had no
