@@ -593,19 +593,20 @@ class TransceiverClient:
         cannot get there in time is failed and never sent.
 
         Raises:
-            TimeoutError: If the transceiver gave up on the write before it
-                was sent. The node is still connected and the write may be
-                retried.
+            TimeoutError: If the transceiver had no room for the write,
+                which was therefore never sent. The node is still connected
+                and the write may be retried.
             TransceiverConnectionError: If the connection broke while
                 waiting, including the transceiver not answering at all.
         """
         args = models.AVSSProgramWriteArgs(address=addr, data=data)
         try:
-            # Deliberately generous: the transceiver is expected to finish the
-            # write, or abort it with TIMEOUT, much sooner than this.
+            # Deliberately generous: the transceiver is expected to finish
+            # the write, or refuse it, much sooner than this.
             return await self.request("avss_program_write", args, timeout=30.0)
         except TransceiverRequestError as e:
-            if e.error.code == APIErrorCode.TIMEOUT:
+            # The transceiver had no room for the write and never sent it.
+            if e.error.code == APIErrorCode.RESOURCE_EXHAUSTED:
                 raise TimeoutError(
                     "Transceiver could not send the program write in time"
                 ) from None

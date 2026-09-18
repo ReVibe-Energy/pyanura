@@ -48,6 +48,12 @@ class APIErrorCode(enum.IntEnum):
     TIMEOUT = 9
     """The operation did not complete within its time limit."""
 
+    RESOURCE_EXHAUSTED = 10
+    """A resource was momentarily exhausted. The operation may be retried."""
+
+    BUSY = 11
+    """The resource is held by an operation already in progress."""
+
 
 @dataclass
 class APIError:

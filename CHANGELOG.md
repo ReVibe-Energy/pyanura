@@ -23,6 +23,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The CLI `avss reset-settings` command, which resets a node's settings to
   their defaults.
 - `APIErrorCode.TIMEOUT` and `AVSSRequestArgs.timeout_ms`.
+- `APIErrorCode.RESOURCE_EXHAUSTED` and `APIErrorCode.BUSY`, which firmware
+  that has them uses to separate a resource that frees itself from one held
+  by an operation in progress. `ProxyAVSSTransport.open()` fails at once on
+  `BUSY` rather than inferring a held request slot from repeated failures,
+  and `TransceiverClient.avss_program_write()` reads `RESOURCE_EXHAUSTED` as
+  the write not having been sent. Firmware without the codes is unaffected,
+  except that a program write it refuses with `TIMEOUT` is no longer retried;
+  no released firmware does that.
 
 ### Changed
 - `marshal()` omits optional dataclass fields (`X | None`) whose value is
@@ -42,8 +50,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   response and raises `TimeoutError` when it expires. Requires transceiver
   firmware support for proper operation.
 - `TransceiverClient.avss_program_write()` raises `TimeoutError` when the
-  transceiver reports that the write timed out before it was sent. The node
-  is still connected and the write may be retried.
+  transceiver reports it had no room to send the write. The node is still
+  connected and the write may be retried.
 - `AVSSTransport.control_point_request()` takes a `timeout` and is
   responsible for enforcing it. A request the device did not answer raises
   `TimeoutError` and closes the transport, since a late response would be

@@ -105,6 +105,16 @@ class ProxyAVSSTransport(AVSSTransport):
             except TransceiverRequestError as e:
                 if e.error.code == APIErrorCode.NODE_UNAVAILABLE:
                     other_error_count = 0
+                elif e.error.code == APIErrorCode.BUSY:
+                    # Another request to this node is still outstanding and
+                    # holds the slot until it completes, which for a node
+                    # that has gone quiet is never. Older firmware reports
+                    # this as OPERATION_FAILED and relies on the error count
+                    # below instead.
+                    raise AVSSConnectionError(
+                        f"Node {self._address} already has a request outstanding "
+                        f"in the transceiver"
+                    ) from e
                 else:
                     logger.warning(
                         f"Unexpected error while waiting for {self._address} to become available: {e.error}"

@@ -169,6 +169,16 @@ def test_request_other_request_errors_are_transport_errors():
         asyncio.run(transport.control_point_request(b"\x05", timeout=5.0))
 
 
+def test_open_fails_at_once_on_a_held_request_slot(fast_polling):
+    transceiver = FakeTransceiver(polls=[request_error(models.APIErrorCode.BUSY)])
+    transport = open_transport(transceiver)
+
+    with pytest.raises(AVSSConnectionError, match="already has a request outstanding"):
+        asyncio.run(transport._wait_available())
+
+    assert transceiver.poll_count == 1
+
+
 def test_open_polls_until_the_node_answers(fast_polling):
     transceiver = FakeTransceiver(polls=[node_unavailable()] * 4)
 
