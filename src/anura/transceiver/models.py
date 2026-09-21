@@ -48,6 +48,9 @@ class APIErrorCode(enum.IntEnum):
     TIMEOUT = 9
     """The operation did not complete within its time limit."""
 
+    BUSY = 10
+    """The target is busy with another operation."""
+
 
 @dataclass
 class APIError:

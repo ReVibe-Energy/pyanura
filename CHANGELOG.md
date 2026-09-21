@@ -22,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with `--merge`.
 - The CLI `avss reset-settings` command, which resets a node's settings to
   their defaults.
-- `APIErrorCode.TIMEOUT` and `AVSSRequestArgs.timeout_ms`.
+- `APIErrorCode.TIMEOUT`, `APIErrorCode.BUSY` and `AVSSRequestArgs.timeout_ms`.
 
 ### Changed
 - `marshal()` omits optional dataclass fields (`X | None`) whose value is
