@@ -43,6 +43,10 @@ class AVSSTransport(ABC):
         the caller, so that it can do so in whichever way suits its lower
         layers, e.g. by passing the limit on to a transceiver.
 
+        None asks for no limit, which a transport may not be able to honour:
+        the proxy transport passes it on to the transceiver, whose firmware
+        applies a default of its own. Give every request a real limit.
+
         Args:
             req: The request bytes to send
             timeout: Seconds to wait for the response, or None for no limit
