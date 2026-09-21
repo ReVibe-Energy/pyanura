@@ -52,6 +52,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `TimeoutError`, when the device did not answer: the transport has closed
   itself by then, so the connection is gone.
 - The USB transceiver transport no longer sends keepalive pings.
+- `ProxyAVSSTransport.open()` fails with `AVSSConnectionError` without retrying
+  if the transceiver reports the node's control point as busy.
 - `ProxyAVSSTransport.program_write()` raises `AVSSConnectionError` when the
   node is unavailable or the transceiver connection broke, and
   `AVSSTransportError` for other request failures, instead of leaking

@@ -73,8 +73,11 @@ class ProxyAVSSTransport(AVSSTransport):
         # the node; a sanity check would be good.
 
         # NODE_UNAVAILABLE is expected while the transceiver is still
-        # connecting to the node, but we tolerate a limited count of other
-        # errors.
+        # connecting to the node. BUSY means the transceiver has a request
+        # for the node outstanding from elsewhere: it should clear once that
+        # request finishes, or it may be stuck. Either way it is for the caller
+        # to deal with, so it fails open() at once. A limited count of other
+        # errors is tolerated.
 
         other_error_count = 0
 
@@ -86,14 +89,18 @@ class ProxyAVSSTransport(AVSSTransport):
             except TransceiverRequestError as e:
                 if e.error.code == APIErrorCode.NODE_UNAVAILABLE:
                     other_error_count = 0
+                elif e.error.code == APIErrorCode.BUSY:
+                    raise AVSSConnectionError(
+                        f"Transceiver reports {self._address} node as busy"
+                    ) from None
                 else:
-                    logger.warning(
+                    logger.debug(
                         f"Unexpected error while waiting for {self._address} to become available: {e.error}"
                     )
                     other_error_count += 1
                     if other_error_count >= 3:
                         raise AVSSConnectionError(
-                            f"Transceiver report an error when polling for node: {e.error}"
+                            f"Transceiver reported an error when polling for node: {e.error}"
                         ) from e
             except TimeoutError as e:
                 raise AVSSConnectionError(

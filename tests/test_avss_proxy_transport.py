@@ -96,6 +96,10 @@ def operation_failed() -> TransceiverRequestError:
     return request_error(models.APIErrorCode.OPERATION_FAILED)
 
 
+def busy() -> TransceiverRequestError:
+    return request_error(models.APIErrorCode.BUSY)
+
+
 def test_program_write_passes_data_through():
     transceiver = FakeTransceiver()
     transport = open_transport(transceiver)
@@ -161,6 +165,19 @@ def test_open_tolerates_other_errors_between_node_unavailable(fast_polling):
     asyncio.run(transport._wait_available())
 
     assert transceiver.poll_count == 6
+
+
+def test_open_fails_at_once_when_the_transceiver_reports_the_node_busy(fast_polling):
+    # Another request for the node is outstanding at the transceiver. It may
+    # clear, or it may be stuck; either way that is for the caller to handle,
+    # not for the poll to wait out.
+    transceiver = FakeTransceiver(polls=[node_unavailable(), busy()])
+    transport = open_transport(transceiver)
+
+    with pytest.raises(AVSSConnectionError, match="busy"):
+        asyncio.run(transport._wait_available())
+
+    assert transceiver.poll_count == 2
 
 
 def test_open_fails_when_the_node_takes_a_poll_but_does_not_answer(fast_polling):
