@@ -91,6 +91,19 @@ PROGRAM_LEGACY_SETTLE_TIMEOUT = 1.0
 # Number of times the final chunk is re-sent as a completion probe during
 # legacy transfer completion confirmation.
 PROGRAM_LEGACY_SETTLE_PROBES = 2
+# A legacy transfer writes as fast as the transport accepts writes; the
+# transport's back-pressure sets the pace. A NACK means the node was overrun
+# anyway, so the loop then waits before each write: this long after the
+# first NACK, doubling on every further one up to the maximum, and halving
+# again after every PROGRAM_LEGACY_BACKOFF_RECOVERY consecutive writes
+# without a NACK.
+PROGRAM_LEGACY_BACKOFF_MIN = 0.005
+PROGRAM_LEGACY_BACKOFF_MAX = 0.1
+PROGRAM_LEGACY_BACKOFF_RECOVERY = 16
+# The writes already queued behind an overrun each draw a NACK of their own.
+# After acting on one, writes resume once no further NACK has arrived for
+# this long.
+PROGRAM_LEGACY_NACK_SETTLE = 0.1
 
 
 def _loads_payload(data: bytes) -> Any:
@@ -827,33 +840,51 @@ class AVSSClient:
     ):
         """Legacy transfer loop for nodes without windowed transfer support.
 
-        The node gives no positive feedback, so progress is measured by the
-        furthest offset written: ``deadline`` is pushed forward when it
-        advances, and a transfer whose NACKs keep it circling below that
-        mark is failed when the deadline expires.
+        The node gives no positive feedback, only a NACK naming the offset
+        it expects when a write arrives out of order, which is how an
+        overrun of its few receive buffers shows up. Writes are issued as
+        fast as the transport accepts them, so the transport's back-pressure
+        paces the transfer; a NACK rewinds to the named offset and adds a
+        delay before each write, which grows with further NACKs and decays
+        again while writes go through cleanly.
+
+        Progress is measured by the furthest offset written: ``deadline`` is
+        pushed forward when it advances, and a transfer whose NACKs keep it
+        circling below that mark is failed when the deadline expires.
         """
         offset = 0
         high_water = 0
+        delay = 0.0
+        clean_writes = 0
+        nacks = 0
+        peak_delay = 0.0
+
+        async def overrun(nack: int) -> int:
+            """Settle the NACK burst, back off, return the offset to resume at."""
+            nonlocal delay, clean_writes, nacks, peak_delay
+            resume, count = await self._settle_legacy_nacks(nack)
+            nacks += count
+            delay = min(
+                max(2 * delay, PROGRAM_LEGACY_BACKOFF_MIN), PROGRAM_LEGACY_BACKOFF_MAX
+            )
+            peak_delay = max(peak_delay, delay)
+            clean_writes = 0
+            return resume
+
+        # Whether the next write follows a settled NACK burst: the settle has
+        # already spaced it, so it is due at once, without the write delay.
+        rewound = False
 
         while True:
             while offset < len(binary):
-                try:
-                    while True:
-                        # Wait a short while for a NACK message to indicate the
-                        # node is not in sync with our writes.
-                        assert self._program_notify_queue is not None
-                        async with asyncio.timeout(0.04):
-                            data = await self._program_notify_queue.get()
-                        offset = self._parse_legacy_nack(data)
-                        # We received a NACK so we wait a short while to see
-                        # if any more NACKs turn up before we continue writing.
-                        # This aids re-synchronization if multiple write requests
-                        # are queued .
-                        await asyncio.sleep(0.1)
-                except TimeoutError:
-                    # No NACK was received after 40 ms of waiting so we assume
-                    # the write operation is on track.
-                    pass
+                if rewound:
+                    rewound = False
+                else:
+                    # Wait out the write delay, taking in a NACK if one arrives.
+                    nack = await self._take_legacy_nack(delay)
+                    if nack is not None:
+                        offset = await overrun(nack)
+
                 end = offset + chunk_size
                 req = bytearray(struct.pack("<L", offset))
                 if end < len(binary):
@@ -877,9 +908,74 @@ class AVSSClient:
                     # clamped above; report the true byte count.
                     progress(min(offset, len(binary)))
 
+                clean_writes += 1
+                if delay > 0 and clean_writes >= PROGRAM_LEGACY_BACKOFF_RECOVERY:
+                    clean_writes = 0
+                    delay /= 2
+                    if delay < PROGRAM_LEGACY_BACKOFF_MIN:
+                        delay = 0.0
+
             offset = await self._confirm_unsynchronized_complete(binary, chunk_size)
             if offset >= len(binary):
-                return
+                break
+            # A NACK during confirmation: a dropped chunk near the end.
+            offset = await overrun(offset)
+            rewound = True
+
+        if nacks:
+            # With working transport back-pressure the node is not overrun
+            # and no NACK arises; NACKs point at the transport, not the node.
+            log = (
+                logger.warning
+                if peak_delay >= PROGRAM_LEGACY_BACKOFF_MAX
+                else logger.info
+            )
+            log(
+                "Legacy transfer took %d NACKs; write delay peaked at %d ms",
+                nacks,
+                round(peak_delay * 1000),
+            )
+
+    async def _settle_legacy_nacks(self, nack: int) -> tuple[int, int]:
+        """Let the NACK burst behind an overrun arrive.
+
+        The writes already issued behind an overrun each draw a NACK of
+        their own. Keeps taking NACKs until none has arrived for
+        ``PROGRAM_LEGACY_NACK_SETTLE``. NACKs name the node's expected
+        offset, which only ever advances, so the last one wins.
+
+        Returns:
+            The offset to resume writing at, and the number of NACKs taken
+            including ``nack``.
+        """
+        count = 1
+        while (
+            later := await self._take_legacy_nack(PROGRAM_LEGACY_NACK_SETTLE)
+        ) is not None:
+            count += 1
+            nack = later
+        return nack, count
+
+    async def _take_legacy_nack(self, timeout: float) -> int | None:
+        """Take a legacy NACK from the notification queue.
+
+        Waits up to ``timeout`` for one; a zero timeout only takes a NACK
+        that has already arrived. Returns the offset the node expects, or
+        None when no NACK arrived in time.
+        """
+        assert self._program_notify_queue is not None
+        if timeout <= 0:
+            try:
+                data = self._program_notify_queue.get_nowait()
+            except asyncio.QueueEmpty:
+                return None
+        else:
+            try:
+                async with asyncio.timeout(timeout):
+                    data = await self._program_notify_queue.get()
+            except TimeoutError:
+                return None
+        return self._parse_legacy_nack(data)
 
     def _raise_if_disconnected(self) -> None:
         if self._transport_closed.is_set():

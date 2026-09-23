@@ -3,7 +3,9 @@
 import asyncio
 import hashlib
 import struct
+import time
 from collections.abc import Callable
+from itertools import pairwise
 
 import cbor2
 import pytest
@@ -620,3 +622,206 @@ def test_transfer_deadline_does_not_start_before_the_program_lock(monkeypatch):
     run(scenario())
 
     assert bytes(transport.received) == binary
+
+
+class OverrunLegacySensor(FakeSensorTransport):
+    """A legacy node with a few receive buffers, drained one at a time.
+
+    Buffers drain serially, as the firmware writes them to flash one after
+    the other. A write that arrives while every buffer is busy is dropped
+    without a word, as the firmware's pool overflow does; the write after it
+    is out of order and draws a NACK. NACKs reach the client after ``nack_delay``, so
+    writes already issued behind the overrun each draw one of their own.
+    Each write takes ``write_latency`` to be accepted, like the request
+    round trip of a real transport, which bounds how many writes queue up
+    behind an overrun before its NACK lands.
+    """
+
+    def __init__(
+        self,
+        image_size,
+        *,
+        buffers=3,
+        drain_time=0.02,
+        nack_delay=0.005,
+        write_latency=0.002,
+    ):
+        super().__init__(image_size, windowed_supported=False)
+        self.buffers = buffers
+        self.drain_time = drain_time
+        self.nack_delay = nack_delay
+        self.write_latency = write_latency
+        self.inflight: list[float] = []
+        self.last_free = 0.0
+        self.write_times: list[float] = []
+        self.overruns = 0
+        self.nacks_sent = 0
+
+    def set_program_callback(self, callback):
+        def delayed(data):
+            self.nacks_sent += 1
+            asyncio.get_running_loop().call_later(self.nack_delay, callback, data)
+
+        self._program_cb = delayed
+
+    def drain_time_for(self, accepted: int) -> float:
+        return self.drain_time
+
+    async def program_write(self, value):
+        await asyncio.sleep(self.write_latency)
+        now = asyncio.get_running_loop().time()
+        self.write_times.append(now)
+        self.inflight = [t for t in self.inflight if t > now]
+        (offset,) = struct.unpack("<L", value[:4])
+        if not self.ready and offset == self.expected:
+            if len(self.inflight) >= self.buffers:
+                self.overruns += 1
+                self.write_count += 1
+                return
+            self.last_free = max(now, self.last_free) + self.drain_time_for(
+                self.expected
+            )
+            self.inflight.append(self.last_free)
+        await super().program_write(value)
+
+
+def test_legacy_transfer_runs_unpaced_on_a_clean_link(monkeypatch, caplog):
+    """No NACK, no delay: the transport's back-pressure is the only pacing,
+    so a clean transfer is not slowed by a fixed wait per write."""
+    monkeypatch.setattr("anura.avss.client.PROGRAM_LEGACY_SETTLE_TIMEOUT", 0.05)
+    chunks = 100
+    binary = make_binary(chunks * CHUNK)
+    transport = FakeSensorTransport(len(binary), windowed_supported=False)
+    client = AVSSClient(transport)
+
+    start = time.monotonic()
+    with caplog.at_level("INFO", logger="anura.avss.client"):
+        run(procedures.upload_firmware(client, binary, image=0))
+    elapsed = time.monotonic() - start
+
+    assert transport.ready
+    assert bytes(transport.received) == binary
+    assert transport.write_count == chunks + 2  # chunks + completion probes
+    # The old loop waited 40 ms for a NACK before every write: 4 s here.
+    assert elapsed < 1.5
+    assert "NACK" not in caplog.text
+
+
+def test_legacy_transfer_backs_off_when_the_node_is_overrun(monkeypatch, caplog):
+    """A node that is overrun NACKs; the loop rewinds, adds a write delay and
+    converges on the node's drain rate instead of circling."""
+    monkeypatch.setattr("anura.avss.client.PROGRAM_LEGACY_SETTLE_TIMEOUT", 0.05)
+    monkeypatch.setattr("anura.avss.client.PROGRAM_LEGACY_NACK_SETTLE", 0.02)
+    monkeypatch.setattr("anura.avss.client.PROGRAM_LEGACY_BACKOFF_MAX", 0.02)
+    chunks = 40
+    binary = make_binary(chunks * CHUNK)
+    transport = OverrunLegacySensor(len(binary), buffers=3, drain_time=0.02)
+    client = AVSSClient(transport)
+
+    with caplog.at_level("INFO", logger="anura.avss.client"):
+        run(procedures.upload_firmware(client, binary, image=0))
+
+    assert transport.ready
+    assert bytes(transport.received) == binary
+    # The overrun did happen, and the loop recovered from every one.
+    assert transport.overruns > 0
+    assert transport.nacks_sent > 0
+    # Backoff converged: far fewer retransmissions than chunks.
+    assert transport.write_count < 2 * chunks
+    # The delay saturated at the (lowered) maximum, which is reported as a
+    # warning: with working transport back-pressure no NACK should arise.
+    assert any(
+        r.levelname == "WARNING" and "NACKs" in r.message for r in caplog.records
+    )
+
+
+def test_legacy_transfer_takes_a_nack_burst_as_one_rewind(monkeypatch):
+    """The writes queued behind an overrun each draw a NACK for the same
+    offset; the loop settles the burst and rewinds once, not once per NACK."""
+    monkeypatch.setattr("anura.avss.client.PROGRAM_LEGACY_SETTLE_TIMEOUT", 0.05)
+    monkeypatch.setattr("anura.avss.client.PROGRAM_LEGACY_NACK_SETTLE", 0.02)
+    chunks = 12
+    binary = make_binary(chunks * CHUNK)
+    # Buffers drain slowly enough that the fourth write overruns, and the
+    # NACK is late enough that several more writes queue behind it.
+    transport = OverrunLegacySensor(len(binary), buffers=3, nack_delay=0.01)
+    # Only the first three chunks take time to drain, so exactly one overrun
+    # occurs; they have all drained by the time the rewind lands.
+    drains = iter([0.01] * 3 + [0.0] * 1000)
+    transport.drain_time_for = lambda accepted: next(drains)
+    client = AVSSClient(transport)
+
+    run(procedures.upload_firmware(client, binary, image=0))
+
+    assert transport.ready
+    assert bytes(transport.received) == binary
+    assert transport.overruns >= 1
+    assert transport.nacks_sent >= 2
+    # One overrun costs one retransmission of the dropped chunk plus the
+    # out-of-order writes issued before the first NACK landed, and nothing
+    # more: every NACK of the burst names the same offset.
+    retransmissions = transport.write_count - 2 - chunks
+    assert 1 <= retransmissions <= transport.nacks_sent + 1
+
+
+def test_legacy_transfer_backoff_decays_once_writes_go_through(monkeypatch):
+    """After an overrun the write delay grows; once writes go through
+    cleanly it decays back to nothing, so a transient does not slow the
+    rest of the transfer."""
+    monkeypatch.setattr("anura.avss.client.PROGRAM_LEGACY_SETTLE_TIMEOUT", 0.05)
+    monkeypatch.setattr("anura.avss.client.PROGRAM_LEGACY_NACK_SETTLE", 0.02)
+    monkeypatch.setattr("anura.avss.client.PROGRAM_LEGACY_BACKOFF_MIN", 0.01)
+    monkeypatch.setattr("anura.avss.client.PROGRAM_LEGACY_BACKOFF_MAX", 0.04)
+    monkeypatch.setattr("anura.avss.client.PROGRAM_LEGACY_BACKOFF_RECOVERY", 4)
+    chunks = 40
+    binary = make_binary(chunks * CHUNK)
+    transport = OverrunLegacySensor(len(binary), buffers=3, nack_delay=0.005)
+    # The node drains slowly for its first few chunks, then instantly.
+    transport.drain_time_for = lambda accepted: 0.05 if accepted < 6 * CHUNK else 0.0
+    client = AVSSClient(transport)
+
+    run(procedures.upload_firmware(client, binary, image=0))
+
+    assert transport.ready
+    assert bytes(transport.received) == binary
+    assert transport.nacks_sent > 0
+    # The tail of the transfer ran without any write delay: gaps between the
+    # last writes are event-loop noise, well under the minimum backoff.
+    tail = transport.write_times[-10:-2]  # exclude the settle-timed probes
+    gaps = [b - a for a, b in pairwise(tail)]
+    assert max(gaps) < 0.005, gaps
+
+
+def test_legacy_transfer_write_delay_never_blocks_a_rewind(monkeypatch):
+    """A NACK arriving during the write delay is acted on at once, not after
+    the delay has run its course."""
+    monkeypatch.setattr("anura.avss.client.PROGRAM_LEGACY_SETTLE_TIMEOUT", 0.05)
+    monkeypatch.setattr("anura.avss.client.PROGRAM_LEGACY_NACK_SETTLE", 0.02)
+    monkeypatch.setattr("anura.avss.client.PROGRAM_LEGACY_BACKOFF_MIN", 0.2)
+    monkeypatch.setattr("anura.avss.client.PROGRAM_LEGACY_BACKOFF_MAX", 0.2)
+    chunks = 8
+    binary = make_binary(chunks * CHUNK)
+    # Never overrun; NACKs take 50 ms to arrive.
+    transport = OverrunLegacySensor(len(binary), buffers=1000, nack_delay=0.05)
+    # Write 2 (chunk 1) is dropped: its NACKs land after the whole first
+    # pass has been written, and impose the 200 ms write delay. Write 11
+    # (chunk 3 of the second pass) is dropped too: that NACK lands 50 ms
+    # into the delay before write 13.
+    transport.drop_chunks = {2, 11}
+    client = AVSSClient(transport)
+
+    run(procedures.upload_firmware(client, binary, image=0))
+
+    assert transport.ready
+    assert bytes(transport.received) == binary
+    # 8 chunks, 4 after the rewind to chunk 1 (writes 9 to 12, write 11
+    # dropped), 5 after the rewind to chunk 3, 2 probes.
+    assert transport.write_count == 8 + 4 + 5 + 2, transport.write_count
+    t = transport.write_times
+    # The rewound chunk is written as soon as the burst has settled.
+    assert t[8] - t[7] < 0.15, t[8] - t[7]
+    # Writes 10 to 12 each waited the full 200 ms for a NACK that never came.
+    assert t[9] - t[8] >= 0.2 and t[10] - t[9] >= 0.2 and t[11] - t[10] >= 0.2
+    # Write 13 followed the NACK of write 12: 50 ms delivery plus the 20 ms
+    # settle, well short of the 200 ms delay it interrupted.
+    assert t[12] - t[11] < 0.15, t[12] - t[11]

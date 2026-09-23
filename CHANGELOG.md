@@ -25,6 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `APIErrorCode.TIMEOUT`, `APIErrorCode.BUSY` and `AVSSRequestArgs.timeout_ms`.
 
 ### Changed
+- The legacy (unwindowed) firmware transfer no longer waits a fixed 40 ms
+  for a NACK before every write. It writes as fast as the transport accepts
+  writes, so a transceiver's back-pressure paces it, and only adds a write
+  delay after a NACK, growing with further NACKs and decaying again while
+  writes go through. A transfer that took NACKs is summarised in the log.
 - `marshal()` omits optional dataclass fields (`X | None`) whose value is
   None instead of encoding them as null, and raises `TypeError` for None
   anywhere else.
