@@ -2,6 +2,7 @@
 
 import asyncio
 import hashlib
+import logging
 import struct
 import time
 from collections.abc import Callable
@@ -11,7 +12,7 @@ import cbor2
 import pytest
 
 from anura.avss import procedures
-from anura.avss.client import PROGRAM_OFFSET_ABORT, AVSSClient
+from anura.avss.client import PROGRAM_OFFSET_ABORT, AVSSClient, ProgramTransferStats
 from anura.avss.exceptions import AVSSConnectionError, AVSSProgramTransferError
 from anura.avss.models import (
     PrepareUpgradeArgs,
@@ -557,13 +558,19 @@ def test_legacy_transfer_retries_write_timed_out_by_transport(monkeypatch):
     client = AVSSClient(transport)
     progress = []
 
-    run(procedures.upload_firmware(client, binary, image=0, progress=progress.append))
+    stats = run(
+        procedures.upload_firmware(client, binary, image=0, progress=progress.append)
+    )
 
     assert transport.ready
     assert bytes(transport.received) == binary
     assert progress[-1] == len(binary)
     # 6 chunks + 1 retry, 2 probes + 1 retry.
     assert transport.write_count == 10
+    assert stats.write_timeouts == 2
+    assert stats.writes == 8  # the timed-out writes never happened
+    assert stats.retransmissions == 0
+    assert stats.rewinds == 0
 
 
 def test_legacy_transfer_fails_when_writes_keep_timing_out(monkeypatch):
@@ -695,8 +702,8 @@ def test_legacy_transfer_runs_unpaced_on_a_clean_link(monkeypatch, caplog):
     client = AVSSClient(transport)
 
     start = time.monotonic()
-    with caplog.at_level("INFO", logger="anura.avss.client"):
-        run(procedures.upload_firmware(client, binary, image=0))
+    with caplog.at_level("INFO"):
+        stats = run(procedures.upload_firmware(client, binary, image=0))
     elapsed = time.monotonic() - start
 
     assert transport.ready
@@ -704,7 +711,16 @@ def test_legacy_transfer_runs_unpaced_on_a_clean_link(monkeypatch, caplog):
     assert transport.write_count == chunks + 2  # chunks + completion probes
     # The old loop waited 40 ms for a NACK before every write: 4 s here.
     assert elapsed < 1.5
-    assert "NACK" not in caplog.text
+    assert stats == ProgramTransferStats(
+        windowed=False,
+        size=len(binary),
+        elapsed=stats.elapsed,
+        writes=chunks + 2,
+        probes=2,
+    )
+    assert 0 < stats.elapsed <= elapsed
+    # A library stays quiet above debug level.
+    assert not [r for r in caplog.records if r.levelno > logging.DEBUG]
 
 
 def test_legacy_transfer_backs_off_when_the_node_is_overrun(monkeypatch, caplog):
@@ -718,8 +734,8 @@ def test_legacy_transfer_backs_off_when_the_node_is_overrun(monkeypatch, caplog)
     transport = OverrunLegacySensor(len(binary), buffers=3, drain_time=0.02)
     client = AVSSClient(transport)
 
-    with caplog.at_level("INFO", logger="anura.avss.client"):
-        run(procedures.upload_firmware(client, binary, image=0))
+    with caplog.at_level("INFO"):
+        stats = run(procedures.upload_firmware(client, binary, image=0))
 
     assert transport.ready
     assert bytes(transport.received) == binary
@@ -728,11 +744,15 @@ def test_legacy_transfer_backs_off_when_the_node_is_overrun(monkeypatch, caplog)
     assert transport.nacks_sent > 0
     # Backoff converged: far fewer retransmissions than chunks.
     assert transport.write_count < 2 * chunks
-    # The delay saturated at the (lowered) maximum, which is reported as a
-    # warning: with working transport back-pressure no NACK should arise.
-    assert any(
-        r.levelname == "WARNING" and "NACKs" in r.message for r in caplog.records
-    )
+    # The stats tell the story: every NACK taken, one rewind per settled
+    # burst, the delay saturated at the (lowered) maximum.
+    assert stats.nacks == transport.nacks_sent
+    assert 0 < stats.rewinds <= stats.nacks
+    assert stats.peak_write_delay == 0.02
+    assert stats.writes == transport.write_count
+    assert stats.retransmissions == transport.write_count - 2 - chunks
+    assert stats.probes == 2
+    assert not [r for r in caplog.records if r.levelno > logging.DEBUG]
 
 
 def test_legacy_transfer_takes_a_nack_burst_as_one_rewind(monkeypatch):
@@ -751,12 +771,14 @@ def test_legacy_transfer_takes_a_nack_burst_as_one_rewind(monkeypatch):
     transport.drain_time_for = lambda accepted: next(drains)
     client = AVSSClient(transport)
 
-    run(procedures.upload_firmware(client, binary, image=0))
+    stats = run(procedures.upload_firmware(client, binary, image=0))
 
     assert transport.ready
     assert bytes(transport.received) == binary
-    assert transport.overruns >= 1
+    assert transport.overruns == 1
     assert transport.nacks_sent >= 2
+    assert stats.rewinds == 1
+    assert stats.nacks == transport.nacks_sent
     # One overrun costs one retransmission of the dropped chunk plus the
     # out-of-order writes issued before the first NACK landed, and nothing
     # more: every NACK of the burst names the same offset.
@@ -825,3 +847,79 @@ def test_legacy_transfer_write_delay_never_blocks_a_rewind(monkeypatch):
     # Write 13 followed the NACK of write 12: 50 ms delivery plus the 20 ms
     # settle, well short of the 200 ms delay it interrupted.
     assert t[12] - t[11] < 0.15, t[12] - t[11]
+
+
+def test_windowed_transfer_stats_on_a_clean_link():
+    binary = make_binary(10 * CHUNK + 5)
+    transport = FakeSensorTransport(len(binary))
+    client = AVSSClient(transport)
+
+    stats = run(procedures.upload_firmware(client, binary, image=0))
+
+    assert stats == ProgramTransferStats(
+        windowed=True, size=len(binary), elapsed=stats.elapsed, writes=11
+    )
+    assert stats.elapsed > 0
+
+
+def test_windowed_transfer_stats_count_node_rewind():
+    binary = make_binary(10 * CHUNK)
+    transport = FakeSensorTransport(len(binary), strict_window=False)
+    transport.drop_chunks = {4}
+    client = AVSSClient(transport)
+
+    stats = run(procedures.upload_firmware(client, binary, image=0))
+
+    assert transport.ready
+    assert stats.rewinds == 1
+    assert stats.stall_rewinds == 0
+    assert stats.writes == transport.write_count
+    assert stats.retransmissions == transport.write_count - 10
+    assert stats.retransmissions >= 1
+
+
+def test_windowed_transfer_stats_count_stall_rewind(monkeypatch):
+    monkeypatch.setattr("anura.avss.client.PROGRAM_STALL_TIMEOUT", 0.05)
+    binary = make_binary(10 * CHUNK)
+    transport = FakeSensorTransport(len(binary), strict_window=False)
+    # Lose the final ack (number 5, see the lost-final-ack test above): only
+    # the stall timeout gets the transfer to completion.
+    transport.drop_acks = {5}
+    client = AVSSClient(transport)
+
+    stats = run(procedures.upload_firmware(client, binary, image=0))
+
+    assert transport.ready
+    assert stats.stall_rewinds == 1
+    assert stats.rewinds == 1
+    assert stats.retransmissions >= 1
+
+
+def test_windowed_transfer_stats_count_write_timeouts():
+    binary = make_binary(10 * CHUNK)
+    transport = FakeSensorTransport(len(binary))
+    transport.timeout_writes = {4}
+    client = AVSSClient(transport)
+
+    stats = run(procedures.upload_firmware(client, binary, image=0))
+
+    assert stats.write_timeouts == 1
+    assert stats.writes == 10
+    assert stats.rewinds == 0
+
+
+def test_program_transfer_returns_stats_on_the_1_0_path(monkeypatch):
+    monkeypatch.setattr("anura.avss.client.PROGRAM_LEGACY_SETTLE_TIMEOUT", 0.05)
+    binary = make_binary(3 * CHUNK)
+    transport = FakeSensorTransport(len(binary))
+    client = AVSSClient(transport)
+
+    async def flow():
+        await client.prepare_upgrade(0, len(binary))
+        return await client.program_transfer(binary, 243)
+
+    stats = run(flow())
+
+    assert stats.windowed is False
+    assert stats.writes == 5
+    assert stats.probes == 2

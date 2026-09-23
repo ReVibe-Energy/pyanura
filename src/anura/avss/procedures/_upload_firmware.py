@@ -4,7 +4,7 @@ import hashlib
 import logging
 from collections.abc import Callable
 
-from ..client import AVSSClient
+from ..client import AVSSClient, ProgramTransferStats
 from ..exceptions import AVSSOpCodeUnsupportedError
 
 logger = logging.getLogger(__name__)
@@ -18,7 +18,7 @@ async def upload_firmware(
     att_mtu: int = 243,
     progress: Callable[[int], None] | None = None,
     prepare_timeout: float = 30.0,
-) -> None:
+) -> ProgramTransferStats:
     """Prepare the node and upload a firmware image.
 
     Negotiates the windowed transfer procedure (Prepare Upgrade V2), which
@@ -41,6 +41,9 @@ async def upload_firmware(
         prepare_timeout: Timeout for the prepare step, which erases the
                   upgrade slot and can take several seconds.
 
+    Returns:
+        What the transfer took, for diagnostics.
+
     Raises:
         AVSSProgramTransferError: If a windowed transfer is aborted by the
             node or stalls without making progress.
@@ -57,7 +60,6 @@ async def upload_firmware(
             "Windowed transfer not supported by node, using unsynchronized transfer"
         )
         await client.prepare_upgrade(image, len(binary), timeout=prepare_timeout)
-        await client.program_transfer(binary, att_mtu, progress)
-        return
+        return await client.program_transfer(binary, att_mtu, progress)
 
-    await client.program_transfer_windowed(binary, params, att_mtu, progress)
+    return await client.program_transfer_windowed(binary, params, att_mtu, progress)

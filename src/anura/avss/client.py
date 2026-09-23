@@ -106,6 +106,42 @@ PROGRAM_LEGACY_BACKOFF_RECOVERY = 16
 PROGRAM_LEGACY_NACK_SETTLE = 0.1
 
 
+@dataclass
+class ProgramTransferStats:
+    """What a program transfer took.
+
+    Returned by the transfer procedures for diagnostics and tooling. Over a
+    transport whose back-pressure paces the client, a transfer takes no
+    rewinds and, on the legacy protocol, no NACKs: counts above zero point
+    at the path between client and node rather than at the node.
+    """
+
+    #: Whether the windowed protocol was used.
+    windowed: bool
+    #: Image size in bytes.
+    size: int = 0
+    #: Wall-clock seconds from the first write to confirmed completion.
+    elapsed: float = 0.0
+    #: Program writes issued, including retransmissions and probes.
+    writes: int = 0
+    #: Chunk writes that repeated an offset already written.
+    retransmissions: int = 0
+    #: Times the client went back to an earlier offset: settled NACK bursts
+    #: on the legacy protocol, node-requested and stall rewinds on the
+    #: windowed one.
+    rewinds: int = 0
+    #: Windowed: rewinds taken because no status arrived in time.
+    stall_rewinds: int = 0
+    #: Legacy: NACKs taken.
+    nacks: int = 0
+    #: Writes the transport did not send in time and the client repeated.
+    write_timeouts: int = 0
+    #: Legacy: the largest write delay the backoff reached, in seconds.
+    peak_write_delay: float = 0.0
+    #: Legacy: completion probes written.
+    probes: int = 0
+
+
 def _loads_payload(data: bytes) -> Any:
     """Decode a CBOR payload received from a node."""
     try:
@@ -648,7 +684,7 @@ class AVSSClient:
         binary,
         att_mtu=243,
         progress: Callable[[int], None] | None = None,
-    ):
+    ) -> ProgramTransferStats:
         """Transfer a firmware binary using the unsynchronized procedure.
 
         The upgrade must have been prepared with ``prepare_upgrade``. On
@@ -667,6 +703,9 @@ class AVSSClient:
             progress: Optional callback invoked with the cumulative number of
                       bytes written so far, after each chunk.
 
+        Returns:
+            What the transfer took.
+
         Raises:
             AVSSProgramTransferError: If the transfer makes no progress for
                 ``PROGRAM_PROGRESS_TIMEOUT``.
@@ -674,14 +713,16 @@ class AVSSClient:
         # Write without response is limited to ATT MTU - 3 and
         # we use 4 bytes for offset.
         chunk_size = (att_mtu - 3) - 4
+        stats = ProgramTransferStats(windowed=False, size=len(binary))
 
         async with self._program_lock:
             self._program_notify_queue = asyncio.Queue()
             deadline = asyncio.timeout(PROGRAM_PROGRESS_TIMEOUT)
+            start = time.monotonic()
             try:
                 async with deadline:
                     await self._unsynchronized_transfer_loop(
-                        binary, chunk_size, progress, deadline
+                        binary, chunk_size, progress, deadline, stats
                     )
             except TimeoutError:
                 if not deadline.expired():
@@ -689,6 +730,8 @@ class AVSSClient:
                 raise _stalled() from None
             finally:
                 self._program_notify_queue = None
+        stats.elapsed = time.monotonic() - start
+        return stats
 
     async def program_transfer_windowed(
         self,
@@ -696,7 +739,7 @@ class AVSSClient:
         params: PrepareUpgradeV2Response,
         att_mtu=243,
         progress: Callable[[int], None] | None = None,
-    ):
+    ) -> ProgramTransferStats:
         """Transfer a firmware binary using the windowed procedure.
 
         The transfer must have been negotiated with ``prepare_upgrade_v2``,
@@ -711,6 +754,9 @@ class AVSSClient:
             progress: Optional callback invoked with the cumulative number
                       of bytes acknowledged by the node.
 
+        Returns:
+            What the transfer took.
+
         Raises:
             AVSSProgramTransferError: If the transfer is aborted by the node
                 or makes no progress for ``PROGRAM_PROGRESS_TIMEOUT``.
@@ -722,11 +768,13 @@ class AVSSClient:
         if params.offset > len(binary):
             raise AVSSProtocolError(f"Resume offset {params.offset} beyond image size")
         if params.offset > 0:
-            logger.info("Resuming transfer at offset %d", params.offset)
+            logger.debug("Resuming transfer at offset %d", params.offset)
+        stats = ProgramTransferStats(windowed=True, size=len(binary))
 
         async with self._program_lock:
             self._program_notify_queue = asyncio.Queue()
             deadline = asyncio.timeout(PROGRAM_PROGRESS_TIMEOUT)
+            start = time.monotonic()
             try:
                 async with deadline:
                     await self._windowed_transfer_loop(
@@ -736,6 +784,7 @@ class AVSSClient:
                         params.offset,
                         progress,
                         deadline,
+                        stats,
                     )
             except TimeoutError:
                 if not deadline.expired():
@@ -743,6 +792,8 @@ class AVSSClient:
                 raise _stalled() from None
             finally:
                 self._program_notify_queue = None
+        stats.elapsed = time.monotonic() - start
+        return stats
 
     async def _windowed_transfer_loop(
         self,
@@ -752,6 +803,7 @@ class AVSSClient:
         start: int,
         progress: Callable[[int], None] | None,
         deadline: asyncio.Timeout,
+        stats: ProgramTransferStats,
     ):
         """Windowed transfer loop.
 
@@ -771,6 +823,7 @@ class AVSSClient:
         acked = start
         prev_acked: int | None = None
         send_pos = start
+        furthest = start
         # End offsets of writes not yet covered by the acked offset,
         # in send order.
         outstanding: deque[int] = deque()
@@ -787,12 +840,17 @@ class AVSSClient:
                     await self._transport.program_write(req)
                 except TimeoutError:
                     self._raise_if_disconnected()
-                    logger.warning(
+                    stats.write_timeouts += 1
+                    logger.debug(
                         "Program write at offset %d timed out; retrying", send_pos
                     )
                     break
+                stats.writes += 1
+                if send_pos < furthest:
+                    stats.retransmissions += 1
                 outstanding.append(end)
                 send_pos = end
+                furthest = max(furthest, end)
 
             assert self._program_notify_queue is not None
             try:
@@ -802,6 +860,8 @@ class AVSSClient:
                 self._raise_if_disconnected()
                 # An ack may have been lost; rewind and retransmit. The node
                 # acknowledges duplicates, resynchronizing us forward.
+                stats.rewinds += 1
+                stats.stall_rewinds += 1
                 send_pos = acked
                 outstanding.clear()
                 continue
@@ -818,6 +878,7 @@ class AVSSClient:
             if new_acked == prev_acked:
                 # No progress since the previous notification: the node
                 # requests a rewind to the acked offset.
+                stats.rewinds += 1
                 send_pos = new_acked
                 outstanding.clear()
             prev_acked = new_acked
@@ -837,6 +898,7 @@ class AVSSClient:
         chunk_size: int,
         progress: Callable[[int], None] | None,
         deadline: asyncio.Timeout,
+        stats: ProgramTransferStats,
     ):
         """Legacy transfer loop for nodes without windowed transfer support.
 
@@ -856,18 +918,17 @@ class AVSSClient:
         high_water = 0
         delay = 0.0
         clean_writes = 0
-        nacks = 0
-        peak_delay = 0.0
 
         async def overrun(nack: int) -> int:
             """Settle the NACK burst, back off, return the offset to resume at."""
-            nonlocal delay, clean_writes, nacks, peak_delay
+            nonlocal delay, clean_writes
             resume, count = await self._settle_legacy_nacks(nack)
-            nacks += count
+            stats.nacks += count
+            stats.rewinds += 1
             delay = min(
                 max(2 * delay, PROGRAM_LEGACY_BACKOFF_MIN), PROGRAM_LEGACY_BACKOFF_MAX
             )
-            peak_delay = max(peak_delay, delay)
+            stats.peak_write_delay = max(stats.peak_write_delay, delay)
             clean_writes = 0
             return resume
 
@@ -895,10 +956,14 @@ class AVSSClient:
                     await self._transport.program_write(bytes(req))
                 except TimeoutError:
                     self._raise_if_disconnected()
-                    logger.warning(
+                    stats.write_timeouts += 1
+                    logger.debug(
                         "Program write at offset %d timed out; retrying", offset
                     )
                     continue
+                stats.writes += 1
+                if offset < high_water:
+                    stats.retransmissions += 1
                 offset = end
                 if offset > high_water:
                     high_water = offset
@@ -915,26 +980,14 @@ class AVSSClient:
                     if delay < PROGRAM_LEGACY_BACKOFF_MIN:
                         delay = 0.0
 
-            offset = await self._confirm_unsynchronized_complete(binary, chunk_size)
+            offset = await self._confirm_unsynchronized_complete(
+                binary, chunk_size, stats
+            )
             if offset >= len(binary):
                 break
             # A NACK during confirmation: a dropped chunk near the end.
             offset = await overrun(offset)
             rewound = True
-
-        if nacks:
-            # With working transport back-pressure the node is not overrun
-            # and no NACK arises; NACKs point at the transport, not the node.
-            log = (
-                logger.warning
-                if peak_delay >= PROGRAM_LEGACY_BACKOFF_MAX
-                else logger.info
-            )
-            log(
-                "Legacy transfer took %d NACKs; write delay peaked at %d ms",
-                nacks,
-                round(peak_delay * 1000),
-            )
 
     async def _settle_legacy_nacks(self, nack: int) -> tuple[int, int]:
         """Let the NACK burst behind an overrun arrive.
@@ -989,7 +1042,7 @@ class AVSSClient:
         return offset
 
     async def _confirm_unsynchronized_complete(
-        self, binary: bytes, chunk_size: int
+        self, binary: bytes, chunk_size: int, stats: ProgramTransferStats
     ) -> int:
         """Confirm that the node received the complete image.
 
@@ -1026,8 +1079,11 @@ class AVSSClient:
                     await self._transport.program_write(req)
                 except TimeoutError:
                     self._raise_if_disconnected()
-                    logger.warning("Completion probe write timed out; retrying")
+                    stats.write_timeouts += 1
+                    logger.debug("Completion probe write timed out; retrying")
                     continue
+                stats.writes += 1
+                stats.probes += 1
                 probes_left -= 1
                 continue
 

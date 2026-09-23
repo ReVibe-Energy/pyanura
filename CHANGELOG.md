@@ -23,13 +23,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The CLI `avss reset-settings` command, which resets a node's settings to
   their defaults.
 - `APIErrorCode.TIMEOUT`, `APIErrorCode.BUSY` and `AVSSRequestArgs.timeout_ms`.
+- `anura.avss.ProgramTransferStats`, returned by `procedures.upload_firmware`,
+  `AVSSClient.program_transfer` and `AVSSClient.program_transfer_windowed`:
+  writes, retransmissions, rewinds (stall rewinds apart), legacy NACKs,
+  write timeouts, peak write delay, probes and elapsed time of a transfer.
 
 ### Changed
 - The legacy (unwindowed) firmware transfer no longer waits a fixed 40 ms
   for a NACK before every write. It writes as fast as the transport accepts
   writes, so a transceiver's back-pressure paces it, and only adds a write
   delay after a NACK, growing with further NACKs and decaying again while
-  writes go through. A transfer that took NACKs is summarised in the log.
+  writes go through.
+- The firmware transfer loops log at debug level only. Retried writes and
+  transfer resumption, previously logged as warnings and info, are reported
+  through `ProgramTransferStats` instead.
 - `marshal()` omits optional dataclass fields (`X | None`) whose value is
   None instead of encoding them as null, and raises `TypeError` for None
   anywhere else.
