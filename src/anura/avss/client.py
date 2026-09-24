@@ -335,7 +335,9 @@ class AVSSClient:
         Args:
             opcode: Request opcode to send
             argument: Request argument (will be marshaled to CBOR)
-            timeout: Timeout in seconds, True for default, None for no timeout
+            timeout: Timeout in seconds, True for default, or None for no limit
+                (which the transport may not honour, e.g. a transceiver with
+                timeout support applies its own default)
 
         Returns:
             Tuple of (response_opcode, response_payload) where:

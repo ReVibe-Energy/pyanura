@@ -164,7 +164,7 @@ class ProxyAVSSTransport(AVSSTransport):
             # Fallback to a local timeout. This will leave the transceiver's
             # connection to this node in a broken state, surfaced as all
             # subsequent avss_request attempts failing until the BLE
-            # connection is re-established.
+            # connection is broken and re-established.
             async with asyncio.timeout(timeout):
                 result = await self._transceiver.avss_request(
                     self._address, req, timeout=None
