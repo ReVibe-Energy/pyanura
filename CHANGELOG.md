@@ -54,10 +54,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The USB transceiver transport no longer sends keepalive pings.
 - `ProxyAVSSTransport.open()` fails with `AVSSConnectionError` without retrying
   if the transceiver reports the node's control point as busy.
-- `ProxyAVSSTransport.program_write()` raises `AVSSConnectionError` when the
-  node is unavailable or the transceiver connection broke, and
-  `AVSSTransportError` for other request failures, instead of leaking
-  transceiver exceptions.
+- `ProxyAVSSTransport.program_write()` and `control_point_request()` raise
+  `AVSSConnectionError` when the node is unavailable or the transceiver
+  connection broke, and `AVSSTransportError` for other request failures,
+  instead of leaking transceiver exceptions. `AVSSTransport` documents
+  `AVSSTransportError`, and `AVSSClient` passes it through instead of
+  wrapping it in another.
 - `AVSSTransport.program_write()` may raise `TimeoutError` when the write
   could not be sent within the transport's own limit; the write was not
   performed and the connection is intact. `AVSSClient` transfers retry such
@@ -74,8 +76,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `avss reset-settings`.
 
 ### Fixed
+- `ProxyAVSSTransport.open()` aborts if the transport closes while it is
+  waiting, and no longer leaves its notification subscription and transport
+  loop running behind it when it fails.
 - `ProxyAVSSTransport.open()` gives up on a node that is connected but does
   not respond, instead of waiting for it indefinitely.
+- `ProxyAVSSTransport.open()` raises `AVSSConnectionError` when the
+  transceiver connection breaks instead of leaking `TransceiverConnectionError`.
+- `BleakAVSSTransport.control_point_request()` handles any failure of the
+  control point write, not only `BleakError`.
+- `BleakAVSSTransport` holds the control point request slot busy until answered.
+  This prevents the response to a request that was abandoned by the caller from
+  being matched to the following request.
 - A CBOR payload from a node or a transceiver that carries trailing bytes is
   rejected instead of being decoded from its leading bytes.
 - `AVSSClient` raises `AVSSProtocolError` for a payload it cannot decode
