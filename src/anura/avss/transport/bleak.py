@@ -98,7 +98,9 @@ class BleakAVSSTransport(AVSSTransport):
 
         await self._closed_event.wait()
 
-    async def control_point_request(self, req: bytes) -> bytes:
+    async def control_point_request(
+        self, req: bytes, *, timeout: float | None = None
+    ) -> bytes:
         if self._client is None:
             raise RuntimeError("BleakAVSSTransport is not open")
 
@@ -109,13 +111,35 @@ class BleakAVSSTransport(AVSSTransport):
             self._cp_response_q.task_done()
 
         try:
-            await self._client.write_gatt_char(
-                avss.uuids.ControlPointCharacteristicUuid, req
-            )
-        except BleakError as e:
-            raise AVSSConnectionError(str(e)) from e
+            async with asyncio.timeout(timeout):
+                try:
+                    await self._client.write_gatt_char(
+                        avss.uuids.ControlPointCharacteristicUuid, req
+                    )
+                except BleakError as e:
+                    # The write may have gone out so the safe option is to close.
+                    try:
+                        await self.close()
+                    except AVSSTransportError:
+                        logger.debug(
+                            "Could not close the transport after GATT write error"
+                        )
 
-        response = await self._cp_response_q.get()
+                    raise AVSSConnectionError(
+                        f"Control Point write failed: {e!s}"
+                    ) from e
+
+                response = await self._cp_response_q.get()
+        except TimeoutError:
+            # The node took the request and did not answer it. Responses are
+            # matched by order, so an unanswered request leaves the protocol
+            # in a broken state. We have to close the connection.
+            try:
+                await self.close()
+            except AVSSTransportError:
+                logger.debug("Could not close the transport after a timeout")
+            raise
+
         self._cp_response_q.task_done()
         return response
 

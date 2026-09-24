@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with `--merge`.
 - The CLI `avss reset-settings` command, which resets a node's settings to
   their defaults.
+- `APIErrorCode.TIMEOUT`, `APIErrorCode.BUSY` and `AVSSRequestArgs.timeout_ms`.
 
 ### Changed
 - `marshal()` omits optional dataclass fields (`X | None`) whose value is
@@ -33,12 +34,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Report `count` arguments accept `anura.avss.UNLIMITED` for no limit; the
   model fields are typed `int | Unlimited`. `AVSSClient.report_*` still
   accept `count=None`.
+- `TransceiverClient` requests fail with `TransceiverConnectionError`, and
+  the connection is closed, if the transceiver does not answer within 5
+  seconds, instead of waiting indefinitely. `request()` takes a `timeout`
+  argument to adjust or disable (`None`) the limit per call.
+- `TransceiverClient.avss_request()` takes a `timeout` for the node's
+  response and raises `TimeoutError` when it expires. Requires transceiver
+  firmware support for proper operation.
+- `TransceiverClient.avss_program_write()` raises `TimeoutError` when the
+  transceiver reports that the write timed out before it was sent. The node
+  is still connected and the write may be retried.
+- `AVSSTransport.control_point_request()` takes a `timeout` and is
+  responsible for enforcing it. A request the device did not answer raises
+  `TimeoutError` and closes the transport, since a late response would be
+  taken for the answer to the next request.
+- `AVSSClient` control point requests raise `AVSSConnectionError`, not
+  `TimeoutError`, when the device did not answer: the transport has closed
+  itself by then, so the connection is gone.
+- The USB transceiver transport no longer sends keepalive pings.
+- `ProxyAVSSTransport.open()` fails with `AVSSConnectionError` without retrying
+  if the transceiver reports the node's control point as busy.
+- `ProxyAVSSTransport.program_write()` raises `AVSSConnectionError` when the
+  node is unavailable or the transceiver connection broke, and
+  `AVSSTransportError` for other request failures, instead of leaking
+  transceiver exceptions.
+- `AVSSTransport.program_write()` may raise `TimeoutError` when the write
+  could not be sent within the transport's own limit; the write was not
+  performed and the connection is intact. `AVSSClient` transfers retry such
+  writes, bounded by the progress deadline below. `ProxyAVSSTransport`
+  raises it when the transceiver reports a program write timed out.
+- `AVSSClient` program transfers fail once `PROGRAM_PROGRESS_TIMEOUT` (60 s)
+  passes without progress, in place of the count of consecutive silent
+  windows (`PROGRAM_STALL_LIMIT`, removed). The legacy transfer, which had no
+  bound and could circle forever on a node that keeps rejecting writes, is
+  bounded the same way.
 
 ### Removed
 - The CLI `avss write-settings`, replaced by `avss update-settings` and
   `avss reset-settings`.
 
 ### Fixed
+- `ProxyAVSSTransport.open()` gives up on a node that is connected but does
+  not respond, instead of waiting for it indefinitely.
 - A CBOR payload from a node or a transceiver that carries trailing bytes is
   rejected instead of being decoded from its leading bytes.
 - `AVSSClient` raises `AVSSProtocolError` for a payload it cannot decode
