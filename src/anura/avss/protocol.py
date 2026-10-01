@@ -40,6 +40,7 @@ class OpCode(IntEnum):
     RESET_REPORT = 20
     RESET_SETTINGS = 21
     TRIGGER_CAPTURE = 22
+    REPORT_DEBUG_DUMP = 24
     PREPARE_UPGRADE = 100
     APPLY_UPGRADE = 101
     CONFIRM_UPGRADE = 102
@@ -72,3 +73,4 @@ class ReportType(IntEnum):
     HEALTH = 4
     SETTINGS = 5
     CAPTURE = 6
+    DEBUG_DUMP = 9

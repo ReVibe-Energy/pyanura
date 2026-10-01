@@ -398,6 +398,52 @@ async def health_report(client: avss.AVSSClient):
 
 
 @avss_group.command()
+@click.option("--name", required=True, help="Dump name, e.g. fifo-stats or fifo-slip.")
+@click.option(
+    "--output",
+    type=click.Path(dir_okay=False, path_type=Path),
+    help="Write the raw dump bytes to this file.",
+)
+@with_avss_client
+async def debug_dump(client: avss.AVSSClient, name: str, output: Path | None):
+    """Fetch a firmware debug dump by name."""
+    from anura.diagnostics import fifo_slip
+
+    report = await client.get_debug_dump(name)
+    click.echo(f"Debug dump '{report.name}': {len(report.data)} bytes")
+    if output is not None:
+        output.write_bytes(report.data)
+        click.echo(f"Written to {output}")
+
+    if name in ("fifo-slip", "fifo-slip-clear"):
+        record = fifo_slip.FifoSlipRecord.decode(report.data)
+        if not record.detected:
+            click.echo("No slip recorded")
+            return
+        click.echo(
+            f"SLIP at boot {record.reboot_count}, uptime {record.uptime_ms / 1000:.1f} s, "
+            f"batch {record.batch_no}: count {record.count_before}/{record.count_after}, "
+            f"header offset {record.header_offset}, first bad packet {record.first_bad}, "
+            f"bad packets {record.bad_packets}, INT1 {record.int1_events} "
+            f"(during burst {record.int1_during}), burst {record.burst_us} us"
+        )
+        score = record.shifted_tail_score()
+        if score is not None:
+            click.echo(f"Shifted-tail score after first bad packet: {score:.2f}")
+    elif name == "fifo-stats":
+        stats = fifo_slip.FifoSlipStats.decode(report.data)
+        click.echo(
+            f"uptime {stats.uptime_ms / 1000:.1f} s, batches {stats.batches}, "
+            f"misaligned {stats.misaligned}, bad-header batches {stats.bad_header_batches}, "
+            f"INT1 multi {stats.int1_multi}, INT1 during burst {stats.int1_during}, "
+            f"count before {stats.count_before_min}..{stats.count_before_max}, "
+            f"burst max {stats.burst_us_max} us, detected {stats.detected}"
+        )
+    elif output is None:
+        click.echo(report.data[:64].hex())
+
+
+@avss_group.command()
 @with_avss_client
 async def get_firmware_info(client: avss.AVSSClient):
     """Get firmware info"""

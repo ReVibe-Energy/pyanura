@@ -115,6 +115,13 @@ class TriggerCaptureArgs:
 
 
 @dataclass
+class ReportDebugDumpArgs:
+    """Name of the debug dump to report, at most 20 characters."""
+
+    name: Annotated[str, CborKey(0)]
+
+
+@dataclass
 class ApplySettingsResponse:
     will_reboot: Annotated[bool, CborKey(0)]
 
@@ -196,6 +203,14 @@ class HealthReport:
     clock_sync_skew: Annotated[float | None, CborKey(7)] = None
     clock_sync_age: Annotated[int | None, CborKey(8)] = None
     clock_sync_diff: Annotated[int | None, CborKey(9)] = None
+
+
+@dataclass
+class DebugDumpReport:
+    """Opaque dump produced by the firmware for a Report Debug Dump request."""
+
+    name: Annotated[str, CborKey(0)]
+    data: Annotated[bytes, CborKey(1)]
 
 
 @dataclass

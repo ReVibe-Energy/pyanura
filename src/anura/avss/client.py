@@ -35,6 +35,7 @@ from .models import (
     CaptureReport,
     ConfirmUpgradeArgs,
     DeactivateArgs,
+    DebugDumpReport,
     GetFirmwareInfoResponse,
     GetVersionResponse,
     HealthReport,
@@ -43,6 +44,7 @@ from .models import (
     PrepareUpgradeV2Response,
     ReportAggregatesArgs,
     ReportCaptureArgs,
+    ReportDebugDumpArgs,
     ReportHealthArgs,
     ReportSettings,
     ReportSnippetArgs,
@@ -139,6 +141,7 @@ class Report:
             int(ReportType.HEALTH): HealthReport,
             int(ReportType.SETTINGS): SettingsReport,
             int(ReportType.CAPTURE): CaptureReport,
+            int(ReportType.DEBUG_DUMP): DebugDumpReport,
         }
         if report_class := report_classes.get(self.report_type):
             return unmarshal(report_class, _loads_payload(self.payload_cbor))
@@ -187,6 +190,9 @@ def _stalled() -> AVSSProgramTransferError:
     return AVSSProgramTransferError(
         f"Program transfer stalled: no progress for {PROGRAM_PROGRESS_TIMEOUT:g} s"
     )
+
+
+DEBUG_DUMP_NAME_MAX = 20
 
 
 class AVSSClient:
@@ -623,6 +629,29 @@ class AVSSClient:
     async def trigger_measurement(self, duration_ms: int):
         arg = TriggerMeasurementArgs(duration_ms=duration_ms)
         return await self._void_request(OpCode.TRIGGER_MEASUREMENT, arg)
+
+    async def report_debug_dump(self, name: str) -> None:
+        """Ask the device to send the debug dump called ``name`` as a report.
+
+        Raises AVSSControlPointError with BAD_ARGUMENT when the firmware has no
+        dump of that name, or OPCODE_UNSUPPORTED when the build lacks the
+        feature.
+        """
+        if not 0 < len(name) <= DEBUG_DUMP_NAME_MAX:
+            raise ValueError(f"Dump name must be 1..{DEBUG_DUMP_NAME_MAX} characters")
+        return await self._void_request(
+            OpCode.REPORT_DEBUG_DUMP, ReportDebugDumpArgs(name=name)
+        )
+
+    async def get_debug_dump(self, name: str, timeout: float = 30.0) -> DebugDumpReport:
+        """Request the debug dump ``name`` and wait for its report."""
+        with self.reports() as reports:
+            await self.report_debug_dump(name)
+            async with asyncio.timeout(timeout):
+                async for report in reports:
+                    if isinstance(report, DebugDumpReport) and report.name == name:
+                        return report
+        raise AVSSConnectionError("Disconnected while waiting for the debug dump")
 
     async def trigger_capture(self, duration_ms: int):
         arg = TriggerCaptureArgs(duration_ms=duration_ms)

@@ -99,3 +99,72 @@ def test_unmarshal_write_settings_v2_response_without_num_unhandled():
     response = unmarshal(WriteSettingsV2Response, {1: True})
     assert response.will_reboot is True
     assert response.num_unhandled is None
+
+
+def test_debug_dump_report_parses_name_and_bytes():
+    from anura.avss.models import DebugDumpReport
+    from anura.avss.protocol import ReportType
+
+    payload = cbor2.dumps({0: "fifo-stats", 1: b"\x01\x02\x03"})
+    report = Report(report_type=int(ReportType.DEBUG_DUMP), payload_cbor=payload)
+    parsed = report.parse()
+    assert isinstance(parsed, DebugDumpReport)
+    assert parsed.name == "fifo-stats"
+    assert parsed.data == b"\x01\x02\x03"
+
+
+def test_debug_dump_report_accepts_hand_encoded_firmware_header():
+    """The firmware hand-encodes map(2) {0: tstr, 1: bstr} with a 2-byte bstr length."""
+    from anura.avss.models import DebugDumpReport
+    from anura.avss.protocol import ReportType
+
+    data = bytes(range(256)) * 5
+    payload = (
+        b"\xa2\x00"
+        + b"\x69fifo-slip"
+        + b"\x01\x59"
+        + len(data).to_bytes(2, "big")
+        + data
+    )
+    report = Report(report_type=int(ReportType.DEBUG_DUMP), payload_cbor=payload)
+    parsed = report.parse()
+    assert isinstance(parsed, DebugDumpReport)
+    assert parsed.name == "fifo-slip"
+    assert parsed.data == data
+
+
+def test_fifo_slip_record_decoder_round_trip():
+    import struct
+
+    from anura.diagnostics.fifo_slip import FifoSlipRecord, FifoSlipStats
+
+    head = struct.pack(
+        "<4sIIIqIiiiiIIII",
+        b"FSR1",
+        1,
+        1,
+        7,
+        123456,
+        42,
+        1032,
+        167,
+        7,
+        3,
+        100,
+        1,
+        0,
+        1050,
+    )
+    batch = bytes([0x40, 1, 2, 3, 4, 5, 6, 7] * 128)
+    rec = FifoSlipRecord.decode(head + bytes(64) + batch)
+    assert rec.detected and rec.reboot_count == 7 and rec.count_after == 167
+    assert rec.header_offset == 7 and rec.first_bad == 3 and rec.batch == batch
+
+    stats = FifoSlipStats.decode(
+        struct.pack(
+            "<4sIqIIIIIiiII", b"FSS1", 1, 999, 5000, 0, 0, 1, 0, 1032, 1040, 1100, 0
+        )
+    )
+    assert (
+        stats.batches == 5000 and stats.count_before_max == 1040 and not stats.detected
+    )
