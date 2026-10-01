@@ -231,11 +231,14 @@ class AVSSClient:
             queue.put_nowait(report)
 
         async def _generator() -> AsyncIterator[Report]:
-            async with asyncio.TaskGroup() as tg:
-                monitor_task = tg.create_task(self._transport_closed.wait())
-
+            # Plain tasks rather than a TaskGroup: a consumer that stops
+            # iterating early closes this generator at the yield, and a
+            # TaskGroup would turn that GeneratorExit into an exception group.
+            monitor_task = asyncio.ensure_future(self._transport_closed.wait())
+            get_task: asyncio.Future[Report] | None = None
+            try:
                 while True:
-                    get_task = tg.create_task(queue.get())
+                    get_task = asyncio.ensure_future(queue.get())
 
                     done, _ = await asyncio.wait(
                         (monitor_task, get_task), return_when=asyncio.FIRST_COMPLETED
@@ -244,8 +247,11 @@ class AVSSClient:
                     if get_task in done:
                         yield get_task.result()
                     else:
-                        get_task.cancel()
                         break
+            finally:
+                if get_task is not None:
+                    get_task.cancel()
+                monitor_task.cancel()
 
             raise AVSSConnectionError("Disconnected during report iteration.")
 
