@@ -11,6 +11,7 @@ from anura.avss.models import (
     ReportHealthArgs,
     ReportSnippetArgs,
     SnippetReport,
+    StatsReport,
     WriteSettingsV2Response,
 )
 from anura.avss.protocol import ReportType
@@ -99,3 +100,25 @@ def test_unmarshal_write_settings_v2_response_without_num_unhandled():
     response = unmarshal(WriteSettingsV2Response, {1: True})
     assert response.will_reboot is True
     assert response.num_unhandled is None
+
+
+def test_unmarshal_StatsReport():
+    report = unmarshal(
+        StatsReport,
+        {
+            0: "iim42352",
+            1: {"fifo_slips": 2, "fifo_overruns": 0, "fifo_count_max": 1176},
+        },
+    )
+    assert report == StatsReport(
+        group="iim42352",
+        entries={"fifo_slips": 2, "fifo_overruns": 0, "fifo_count_max": 1176},
+    )
+
+
+def test_report_parse_stats_report():
+    payload = cbor2.dumps({0: "accel_stats", 1: {"batches": 1000, "gaps": 1}})
+    report = Report.from_record(bytes([ReportType.STATS]) + payload)
+    assert report.parse() == StatsReport(
+        group="accel_stats", entries={"batches": 1000, "gaps": 1}
+    )

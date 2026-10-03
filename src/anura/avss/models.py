@@ -202,3 +202,15 @@ class HealthReport:
 class SettingsReport:
     settings: Annotated[dict | None, CborKey(0)] = None
     pending_settings: Annotated[dict | None, CborKey(1)] = None
+
+
+@dataclass
+class StatsReport:
+    """One stats group, as emitted by Report Stats (one report per group).
+
+    Group and entry names are diagnostics, not a protocol contract: firmware may
+    add, rename or remove them without notice.
+    """
+
+    group: Annotated[str, CborKey(0)]
+    entries: Annotated[dict, CborKey(1)]
