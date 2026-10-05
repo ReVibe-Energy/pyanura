@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `anura.avss.AVSSClient.report_stats` and `StatsReport` (report type 9)
+- The CLI `avss stats` command, printing every group as a line or as JSON.
 - `anura.dfu`: support for ANURA firmware bundles
 - The CLI `avss upgrade` and `transceiver upgrade` commands accept a firmware
   bundle as `--file` in addition to a raw image.

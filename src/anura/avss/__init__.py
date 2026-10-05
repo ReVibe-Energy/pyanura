@@ -21,6 +21,7 @@ from .models import (
     HealthReport,
     SettingsReport,
     SnippetReport,
+    StatsReport,
     Unlimited,
 )
 from .protocol import OpCode, ReportType, ResponseCode
@@ -47,5 +48,6 @@ __all__ = [
     "SettingsMapper",
     "SettingsReport",
     "SnippetReport",
+    "StatsReport",
     "Unlimited",
 ]

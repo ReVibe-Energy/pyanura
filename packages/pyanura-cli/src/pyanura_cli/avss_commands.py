@@ -398,6 +398,44 @@ async def health_report(client: avss.AVSSClient):
 
 
 @avss_group.command()
+@click.option("--json", "as_json", is_flag=True, help="Print the groups as JSON")
+@click.option(
+    "--quiet-time",
+    default=2.0,
+    show_default=True,
+    help="Seconds without a further report before the set is taken as complete",
+)
+@with_avss_client
+async def stats(client: avss.AVSSClient, as_json: bool, quiet_time: float):
+    """Stats report: every stats group the node has, one line per group.
+
+    The node sends one report per group and no end marker, so collection
+    stops after --quiet-time seconds of silence.
+    """
+    groups: dict[str, dict] = {}
+    with client.reports() as reports:
+        await client.report_stats()
+        logger.info("Waiting for stats reports")
+        while True:
+            try:
+                msg = await asyncio.wait_for(reports.__anext__(), timeout=quiet_time)
+            except TimeoutError:
+                break
+            if isinstance(msg, avss.models.StatsReport):
+                groups[msg.group] = msg.entries
+
+    if as_json:
+        click.echo(json.dumps(groups, indent=2))
+        return
+    if not groups:
+        click.echo("No stats reports received")
+        return
+    for group, entries in groups.items():
+        fields = " ".join(f"{name}={value}" for name, value in entries.items())
+        click.echo(f"{group}: {fields}")
+
+
+@avss_group.command()
 @with_avss_client
 async def get_firmware_info(client: avss.AVSSClient):
     """Get firmware info"""

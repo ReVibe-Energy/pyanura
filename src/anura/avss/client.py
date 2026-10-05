@@ -48,6 +48,7 @@ from .models import (
     ReportSnippetArgs,
     SettingsReport,
     SnippetReport,
+    StatsReport,
     TestThroughputArgs,
     TriggerCaptureArgs,
     TriggerMeasurementArgs,
@@ -70,6 +71,7 @@ _ParsedReport: TypeAlias = (
     | HealthReport
     | SettingsReport
     | SnippetReport
+    | StatsReport
 )
 
 
@@ -139,6 +141,7 @@ class Report:
             int(ReportType.HEALTH): HealthReport,
             int(ReportType.SETTINGS): SettingsReport,
             int(ReportType.CAPTURE): CaptureReport,
+            int(ReportType.STATS): StatsReport,
         }
         if report_class := report_classes.get(self.report_type):
             return unmarshal(report_class, _loads_payload(self.payload_cbor))
@@ -470,6 +473,13 @@ class AVSSClient:
         else:
             arg = ReportHealthArgs(count=count)
         return await self._void_request(OpCode.REPORT_HEALTH, arg)
+
+    async def report_stats(self) -> None:
+        """Request stats reports: one StatsReport per stats group the node has.
+
+        There is no end marker; the node sends the groups it has and stops.
+        """
+        return await self._void_request(OpCode.REPORT_STATS, None)
 
     async def report_settings(self, current=True, pending=False):
         arg = ReportSettings(current=current, pending=pending)
