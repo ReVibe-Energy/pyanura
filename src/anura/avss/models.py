@@ -176,6 +176,8 @@ class CaptureReport:
     start_time_monotonic: Annotated[int, CborKey(6)]
     duration_monotonic: Annotated[int, CborKey(7)]
     transmission_offset: Annotated[int | None, CborKey(8)] = None
+    # CaptureReason bits; None from firmware that does not send them.
+    reasons: Annotated[int | None, CborKey(9)] = None
 
 
 @dataclass
