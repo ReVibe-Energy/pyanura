@@ -1,4 +1,4 @@
-from enum import IntEnum
+from enum import IntEnum, IntFlag
 
 
 class ResponseCode(IntEnum):
@@ -74,3 +74,14 @@ class ReportType(IntEnum):
     SETTINGS = 5
     CAPTURE = 6
     STATS = 9
+
+
+class CaptureReason(IntFlag):
+    """Bits of `CaptureReport.reasons`: what requested the capture buffer.
+
+    A report carries the requests active when it began plus any started
+    while it was open, so several bits are set when requests overlapped.
+    """
+
+    MOTION_START = 1 << 0
+    CLIENT_TRIGGER = 1 << 1

@@ -24,7 +24,7 @@ from .models import (
     StatsReport,
     Unlimited,
 )
-from .protocol import OpCode, ReportType, ResponseCode
+from .protocol import CaptureReason, OpCode, ReportType, ResponseCode
 from .settings import SettingsMapper
 
 __all__ = [
@@ -39,6 +39,7 @@ __all__ = [
     "AVSSProtocolError",
     "AVSSTransportError",
     "AggregatedValuesReport",
+    "CaptureReason",
     "CaptureReport",
     "HealthReport",
     "OpCode",

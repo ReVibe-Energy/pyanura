@@ -25,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The CLI `avss reset-settings` command, which resets a node's settings to
   their defaults.
 - `APIErrorCode.TIMEOUT`, `APIErrorCode.BUSY` and `AVSSRequestArgs.timeout_ms`.
+- `anura.avss.CaptureReport.reasons` field (cbor key 9), with its
+  bits defined by `anura.avss.CaptureReason`.
 
 ### Changed
 - `marshal()` omits optional dataclass fields (`X | None`) whose value is

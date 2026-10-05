@@ -5,6 +5,7 @@ from anura.avss.client import Report
 from anura.avss.exceptions import AVSSProtocolError
 from anura.avss.models import (
     UNLIMITED,
+    CaptureReport,
     HealthReport,
     ReportAggregatesArgs,
     ReportCaptureArgs,
@@ -14,7 +15,7 @@ from anura.avss.models import (
     StatsReport,
     WriteSettingsV2Response,
 )
-from anura.avss.protocol import ReportType
+from anura.avss.protocol import CaptureReason, ReportType
 from anura.marshalling import marshal, unmarshal
 
 
@@ -122,3 +123,24 @@ def test_report_parse_stats_report():
     assert report.parse() == StatsReport(
         group="accel_stats", entries={"batches": 1000, "gaps": 1}
     )
+
+
+def test_report_parse_capture_report_reasons():
+    fields = {0: 1000, 2: 16, 3: {0: b"\x00\x00"}, 4: True, 5: 1, 6: 1000, 7: 1}
+    record = bytes([ReportType.CAPTURE]) + cbor2.dumps({**fields, 9: 0b11})
+    report = Report.from_record(record).parse()
+    assert isinstance(report, CaptureReport)
+    reasons = CaptureReason(report.reasons)
+    assert reasons == (CaptureReason.MOTION_START | CaptureReason.CLIENT_TRIGGER)
+
+    old = Report.from_record(bytes([ReportType.CAPTURE]) + cbor2.dumps(fields))
+    old_report = old.parse()
+    assert isinstance(old_report, CaptureReport)
+    assert old_report.reasons is None
+
+
+def test_capture_reason_keeps_unknown_bits():
+    reasons = CaptureReason(0b110)
+    assert CaptureReason.CLIENT_TRIGGER in reasons
+    assert CaptureReason.MOTION_START not in reasons
+    assert reasons == 0b110
