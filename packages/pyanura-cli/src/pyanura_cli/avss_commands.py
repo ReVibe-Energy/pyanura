@@ -459,6 +459,15 @@ async def get_firmware_info(client: avss.AVSSClient):
 
 
 @avss_group.command()
+@with_avss_client
+async def get_device_info(client: avss.AVSSClient):
+    """Get device info"""
+    info = await client.get_device_info()
+    click.echo(f"Serial number: {info.serial_number or 'unknown'}")
+    click.echo(f"Device PN: {info.device_pn or 'unknown'}")
+
+
+@avss_group.command()
 @click.option("--duration", default=2, help="Time(seconds) to run measurement")
 @with_avss_client
 async def trigger_measurement(client: avss.AVSSClient, duration: float):

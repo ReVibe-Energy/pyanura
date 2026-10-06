@@ -155,6 +155,12 @@ class GetFirmwareInfoResponse:
 
 
 @dataclass
+class GetDeviceInfoResponse:
+    serial_number: Annotated[str | None, CborKey(0)] = None
+    device_pn: Annotated[str | None, CborKey(1)] = None
+
+
+@dataclass
 class SnippetReport:
     start_time: Annotated[int, CborKey(0)]
     sample_rate: Annotated[float, CborKey(1)]
