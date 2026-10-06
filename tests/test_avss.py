@@ -6,6 +6,8 @@ from anura.avss.exceptions import AVSSProtocolError
 from anura.avss.models import (
     UNLIMITED,
     CaptureReport,
+    GetDeviceInfoResponse,
+    GetFirmwareInfoResponse,
     HealthReport,
     ReportAggregatesArgs,
     ReportCaptureArgs,
@@ -144,3 +146,18 @@ def test_capture_reason_keeps_unknown_bits():
     assert CaptureReason.CLIENT_TRIGGER in reasons
     assert CaptureReason.MOTION_START not in reasons
     assert reasons == 0b110
+
+
+def test_unmarshal_GetFirmwareInfoResponse_firmware_pn():
+    fields = {0: 0x1A090100, 1: "v26.9.1", 2: 1, 3: 0x1A090100, 4: "v26.9.1"}
+    assert unmarshal(GetFirmwareInfoResponse, fields).firmware_pn is None
+    info = unmarshal(GetFirmwareInfoResponse, {**fields, 5: "70018"})
+    assert info.firmware_pn == "70018"
+
+
+def test_unmarshal_GetDeviceInfoResponse():
+    assert unmarshal(GetDeviceInfoResponse, {}) == GetDeviceInfoResponse()
+    info = unmarshal(GetDeviceInfoResponse, {0: "AN10067A1001-00042", 1: "10067"})
+    assert info == GetDeviceInfoResponse(
+        serial_number="AN10067A1001-00042", device_pn="10067"
+    )
