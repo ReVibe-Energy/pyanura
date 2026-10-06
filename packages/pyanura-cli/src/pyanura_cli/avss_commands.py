@@ -454,6 +454,8 @@ async def get_firmware_info(client: avss.AVSSClient):
     click.echo(
         f"Net version: v{major}.{minor}.{patch}.{tweak}, build: {info.net_build_version}"
     )
+    if info.firmware_pn is not None:
+        click.echo(f"Firmware PN: {info.firmware_pn}")
 
 
 @avss_group.command()

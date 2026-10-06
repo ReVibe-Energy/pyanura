@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `GetFirmwareInfoResponse.firmware_pn` (key 5), shown by the CLI
+  `avss get-firmware-info`.
 - `anura.avss.AVSSClient.report_stats` and `StatsReport` (report type 9)
 - The CLI `avss stats` command, printing every group as a line or as JSON.
 - `anura.dfu`: support for ANURA firmware bundles
