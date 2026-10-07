@@ -226,6 +226,7 @@ class GetFirmwareInfoResult:
     app_build_version: Annotated[str, CborKey(2)]
     net_version: Annotated[int, CborKey(3)]
     net_build_version: Annotated[str, CborKey(4)]
+    firmware_pn: Annotated[str | None, CborKey(5)] = None
 
 
 @dataclass
