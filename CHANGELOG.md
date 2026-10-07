@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `avss get-device-info`.
 - `GetFirmwareInfoResult.firmware_pn` (key 5) in the transceiver API, shown
   by the CLI `transceiver get-firmware-info`.
+- `GetDeviceInfoResult.device_pn` (key 9) in the transceiver API, shown by
+  the CLI `transceiver get-device-info`.
 - `anura.avss.AVSSClient.report_stats` and `StatsReport` (report type 9)
 - The CLI `avss stats` command, printing every group as a line or as JSON.
 - `anura.dfu`: support for ANURA firmware bundles
