@@ -35,6 +35,7 @@ from .models import (
     CaptureReport,
     ConfirmUpgradeArgs,
     DeactivateArgs,
+    GetDeviceInfoResponse,
     GetFirmwareInfoResponse,
     GetVersionResponse,
     HealthReport,
@@ -609,6 +610,16 @@ class AVSSClient:
                 expected=OpCode.GET_FIRMWARE_INFO_RESPONSE,
             )
         return unmarshal(GetFirmwareInfoResponse, _loads_payload(resp_payload))
+
+    async def get_device_info(self) -> GetDeviceInfoResponse:
+        resp_opcode, resp_payload = await self._request(OpCode.GET_DEVICE_INFO, None)
+        if resp_opcode != OpCode.GET_DEVICE_INFO_RESPONSE:
+            raise AVSSProtocolError.unexpected_response(
+                OpCode.GET_DEVICE_INFO,
+                resp_opcode,
+                expected=OpCode.GET_DEVICE_INFO_RESPONSE,
+            )
+        return unmarshal(GetDeviceInfoResponse, _loads_payload(resp_payload))
 
     async def reset_report(self):
         return await self._void_request(OpCode.RESET_REPORT, None)

@@ -210,6 +210,7 @@ class GetDeviceInfoResult:
     hostname: Annotated[str, CborKey(6)]
     mac_address: Annotated[bytes, CborKey(7)]
     ip_addresses: Annotated[list[ipaddress.IPv4Address], CborKey(8)]
+    device_pn: Annotated[str | None, CborKey(9)] = None
 
 
 @dataclass
@@ -226,6 +227,7 @@ class GetFirmwareInfoResult:
     app_build_version: Annotated[str, CborKey(2)]
     net_version: Annotated[int, CborKey(3)]
     net_build_version: Annotated[str, CborKey(4)]
+    firmware_pn: Annotated[str | None, CborKey(5)] = None
 
 
 @dataclass
