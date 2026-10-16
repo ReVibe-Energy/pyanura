@@ -28,7 +28,8 @@ class BleakAVSSTransport(AVSSTransport):
         self._addr = addr
         self._client = None
         self._closed_event = asyncio.Event()
-        self._cp_response_q = asyncio.Queue(maxsize=1)
+        # Response slot for the outstanding control point request, if any.
+        self._cp_response: asyncio.Future[bytes] | None = None
         self._report_callback = None
         self._program_callback = None
         self._closed_callback = None
@@ -39,6 +40,11 @@ class BleakAVSSTransport(AVSSTransport):
             raise RuntimeError("BleakAVSSTransport is already open")
 
         def disconnected_callback(client: BleakClient):
+            response, self._cp_response = self._cp_response, None
+            if response is not None and not response.done():
+                response.set_exception(
+                    AVSSConnectionError("Connection has been closed")
+                )
             self._closed_event.set()
 
             if self._closed_callback:
@@ -53,7 +59,11 @@ class BleakAVSSTransport(AVSSTransport):
                 self._program_callback(data)
 
         def cp_indicate(sender, data):
-            self._cp_response_q.put_nowait(data)
+            response, self._cp_response = self._cp_response, None
+            if response is None:
+                logger.debug("Control Point response with no request outstanding")
+            elif not response.done():
+                response.set_result(data)
 
         self._client = BleakClient(
             self._addr, disconnected_callback=disconnected_callback
@@ -98,17 +108,27 @@ class BleakAVSSTransport(AVSSTransport):
 
         await self._closed_event.wait()
 
+    def _discard(self, response: asyncio.Future[bytes]) -> None:
+        """Drop a response that nobody is going to wait for."""
+        if self._cp_response is response:
+            self._cp_response = None
+
+        if not response.cancel() and not response.cancelled():
+            response.exception()  # retrieve exception to prevent asyncio warning
+
     async def control_point_request(
         self, req: bytes, *, timeout: float | None = None
     ) -> bytes:
         if self._client is None:
             raise RuntimeError("BleakAVSSTransport is not open")
 
-        # Flush any lingering responses
-        while not self._cp_response_q.empty():
-            logger.warning("Flushing lingering responses")
-            await self._cp_response_q.get()
-            self._cp_response_q.task_done()
+        if self._cp_response is not None:
+            raise AVSSTransportError(
+                "A control point request is already outstanding on this device"
+            )
+
+        response = asyncio.get_running_loop().create_future()
+        self._cp_response = response
 
         try:
             async with asyncio.timeout(timeout):
@@ -116,7 +136,9 @@ class BleakAVSSTransport(AVSSTransport):
                     await self._client.write_gatt_char(
                         avss.uuids.ControlPointCharacteristicUuid, req
                     )
-                except BleakError as e:
+                except Exception as e:
+                    self._discard(response)
+
                     # The write may have gone out so the safe option is to close.
                     try:
                         await self.close()
@@ -129,7 +151,7 @@ class BleakAVSSTransport(AVSSTransport):
                         f"Control Point write failed: {e!s}"
                     ) from e
 
-                response = await self._cp_response_q.get()
+                return await response
         except TimeoutError:
             # The node took the request and did not answer it. Responses are
             # matched by order, so an unanswered request leaves the protocol
@@ -139,9 +161,6 @@ class BleakAVSSTransport(AVSSTransport):
             except AVSSTransportError:
                 logger.debug("Could not close the transport after a timeout")
             raise
-
-        self._cp_response_q.task_done()
-        return response
 
     async def program_write(self, value: bytes) -> None:
         if self._client is None:

@@ -1,6 +1,7 @@
 """Tests for the error mapping and node polling of ProxyAVSSTransport."""
 
 import asyncio
+import contextlib
 import inspect
 
 import pytest
@@ -56,6 +57,21 @@ class FakeTransceiver:
                 result = await result
         return result
 
+    @contextlib.contextmanager
+    def notifications(self):
+        """Subscribe to transceiver notifications, of which there are none.
+
+        The transport loop reads this after the node becomes available; these
+        tests drive the node through `polls` instead, so it only has to stay
+        open.
+        """
+
+        async def nothing():
+            await asyncio.Event().wait()
+            yield  # pragma: no cover
+
+        yield nothing()
+
     async def avss_program_write(self, addr, data):
         assert addr == NODE
         self.writes.append(data)
@@ -77,6 +93,13 @@ def attach_loop_task(transport: ProxyAVSSTransport) -> None:
     """
     transport._loop_task = asyncio.create_task(asyncio.Event().wait())
     transport._loop_task.add_done_callback(transport._on_closed)
+
+
+async def open_for_real(transceiver) -> ProxyAVSSTransport:
+    """Open a transport the way a caller would, loop task and all."""
+    transport = ProxyAVSSTransport(transceiver, NODE)  # type: ignore[arg-type]
+    await transport.open()
+    return transport
 
 
 def request_error(code: models.APIErrorCode) -> TransceiverRequestError:
@@ -140,11 +163,24 @@ def test_program_write_other_request_errors_are_transport_errors():
         asyncio.run(transport.program_write(b"chunk"))
 
 
-def test_open_polls_until_the_node_answers(fast_polling):
-    transceiver = FakeTransceiver(polls=[node_unavailable()] * 4)
+def test_request_other_request_errors_are_transport_errors():
+    transceiver = FakeTransceiver(
+        polls=[request_error(models.APIErrorCode.OPERATION_FAILED)]
+    )
     transport = open_transport(transceiver)
 
-    asyncio.run(transport._wait_available())
+    with pytest.raises(AVSSTransportError, match="Control point request failed"):
+        asyncio.run(transport.control_point_request(b"\x05", timeout=5.0))
+
+
+def test_open_polls_until_the_node_answers(fast_polling):
+    transceiver = FakeTransceiver(polls=[node_unavailable()] * 4)
+
+    async def scenario():
+        transport = await open_for_real(transceiver)
+        await transport.close()
+
+    asyncio.run(scenario())
 
     assert transceiver.poll_count == 5
 
@@ -160,9 +196,12 @@ def test_open_tolerates_other_errors_between_node_unavailable(fast_polling):
             operation_failed(),
         ]
     )
-    transport = open_transport(transceiver)
 
-    asyncio.run(transport._wait_available())
+    async def scenario():
+        transport = await open_for_real(transceiver)
+        await transport.close()
+
+    asyncio.run(scenario())
 
     assert transceiver.poll_count == 6
 
@@ -184,12 +223,32 @@ def test_open_fails_when_the_node_takes_a_poll_but_does_not_answer(fast_polling)
     # Unlike an unavailable node, this one is reachable and broken. Retrying
     # only has the transceiver disconnect it again, so the first one is fatal.
     transceiver = FakeTransceiver(polls=[node_unavailable(), TimeoutError()])
-    transport = open_transport(transceiver)
 
-    with pytest.raises(AVSSConnectionError, match="did not answer"):
-        asyncio.run(transport._wait_available())
+    async def scenario():
+        with pytest.raises(AVSSConnectionError, match="did not answer"):
+            await open_for_real(transceiver)
+
+    asyncio.run(scenario())
 
     assert transceiver.poll_count == 2
+
+
+def test_open_gives_up_when_the_transport_is_closed(fast_polling):
+    # The poll runs in the loop task, so closing cancels it outright.
+    transceiver = FakeTransceiver(polls=[node_unavailable()] * 10_000)
+
+    async def scenario():
+        transport = ProxyAVSSTransport(transceiver, NODE)  # type: ignore[arg-type]
+        opening = asyncio.create_task(transport.open())
+        await asyncio.sleep(0)  # let it reach the first poll
+
+        await transport.close()
+
+        with pytest.raises(AVSSConnectionError, match="closed while opening"):
+            await opening
+        assert transport._state is _State.CLOSED
+
+    asyncio.run(scenario())
 
 
 def test_request_timeout_is_left_to_the_transceiver_where_it_takes_one():
@@ -258,9 +317,23 @@ def test_open_bounds_its_poll_even_without_firmware_support(fast_polling, monkey
         await asyncio.sleep(3600)
 
     transceiver = FakeTransceiver(polls=[never_answers], supports_timeout=False)
-    transport = open_transport(transceiver)
 
-    with pytest.raises(AVSSConnectionError, match="did not answer when polled"):
-        asyncio.run(transport._wait_available())
+    async def scenario():
+        with pytest.raises(AVSSConnectionError, match="did not answer when polled"):
+            await open_for_real(transceiver)
+
+    asyncio.run(scenario())
 
     assert transceiver.timeouts == [None]
+
+
+def test_open_broken_transceiver_connection_is_a_connection_error(fast_polling):
+    transceiver = FakeTransceiver(
+        polls=[TransceiverConnectionError("transceiver went away")]
+    )
+
+    async def scenario():
+        with pytest.raises(AVSSConnectionError, match="connection broken"):
+            await open_for_real(transceiver)
+
+    asyncio.run(scenario())
