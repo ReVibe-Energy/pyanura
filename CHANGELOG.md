@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `ReportType.THROUGHPUT` (report type 7), sent by the Test Throughput
+  command.
 - `GetFirmwareInfoResponse.firmware_pn` (key 5), shown by the CLI
   `avss get-firmware-info`.
 - `pyanura.avss.AVSSClient.get_device_info` (opcode 24) and the CLI

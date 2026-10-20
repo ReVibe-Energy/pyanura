@@ -127,6 +127,13 @@ def test_report_parse_stats_report():
     )
 
 
+def test_report_parse_throughput_report():
+    # Test filler, not CBOR: kept as a raw report and skipped by parse()
+    report = Report.from_record(bytes([ReportType.THROUGHPUT]) + bytes(64))
+    assert report.report_type == ReportType.THROUGHPUT
+    assert report.parse() is None
+
+
 def test_report_parse_capture_report_reasons():
     fields = {0: 1000, 2: 16, 3: {0: b"\x00\x00"}, 4: True, 5: 1, 6: 1000, 7: 1}
     record = bytes([ReportType.CAPTURE]) + cbor2.dumps({**fields, 9: 0b11})
