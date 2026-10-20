@@ -271,7 +271,11 @@ async def throughput(client: avss.AVSSClient, duration: float):
     with client.reports(parse=False) as reports:
         click.echo(f"Starting {duration} s throughput test...")
         await client.test_throughput(duration=int(duration * 1000))
-        test = await anext(reports)
+        async for test in reports:
+            if test.report_type == avss.ReportType.THROUGHPUT:
+                break
+        else:
+            raise RuntimeError("Reports ended before the throughput test report")
 
         if test._transfer_info is None:
             raise RuntimeError("Transfer info not available")

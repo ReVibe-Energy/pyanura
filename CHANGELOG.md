@@ -96,6 +96,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `avss reset-settings`.
 
 ### Fixed
+- The CLI `avss throughput` and `transceiver avss-throughput` commands
+  measure only the report they asked for, not whichever report arrived first.
 - `ProxyAVSSTransport.open()` gives up on a node that is connected but does
   not respond, instead of waiting for it indefinitely.
 - A CBOR payload from a node or a transceiver that carries trailing bytes is

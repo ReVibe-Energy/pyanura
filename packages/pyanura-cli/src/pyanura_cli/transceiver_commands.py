@@ -10,6 +10,7 @@ from pathlib import Path
 import click
 import zeroconf
 
+from pyanura.avss import ReportType
 from pyanura.dfu import parse_bundle
 from pyanura.transceiver.client import TransceiverClient
 from pyanura.transceiver.models import BluetoothAddrLE, ScanNodesReceivedEvent
@@ -146,11 +147,15 @@ async def avss_throughput(client: TransceiverClient, mode: str, duration: int):
                 if mode == "test":
                     click.echo(f"{addr}: Starting {duration} s throughput test...")
                     await node.test_throughput(duration=duration * 1000)
+                    expected_type = ReportType.THROUGHPUT
                 elif mode == "snippets":
                     click.echo(f"{addr}: Requesting snippet reports...")
                     await node.report_snippets(count=None, auto_resume=True)
+                    expected_type = ReportType.SNIPPET
 
                 async for test in reports:
+                    if test.report_type != expected_type:
+                        continue
                     transfer_info = test._transfer_info
                     if transfer_info is None:
                         raise RuntimeError("Transfer info not available")
