@@ -5,11 +5,11 @@ import inspect
 
 import pytest
 
-from anura.avss.exceptions import AVSSConnectionError, AVSSTransportError
-from anura.avss.transport import proxy
-from anura.avss.transport.proxy import ProxyAVSSTransport, _State
-from anura.transceiver import models
-from anura.transceiver.exceptions import (
+from pyanura.avss.exceptions import AVSSConnectionError, AVSSTransportError
+from pyanura.avss.transport import proxy
+from pyanura.avss.transport.proxy import ProxyAVSSTransport, _State
+from pyanura.transceiver import models
+from pyanura.transceiver.exceptions import (
     TransceiverConnectionError,
     TransceiverRequestError,
 )

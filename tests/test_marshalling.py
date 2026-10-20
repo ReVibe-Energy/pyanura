@@ -4,7 +4,7 @@ from typing import Annotated, Any, assert_type
 import cbor2
 import pytest
 
-from anura.marshalling import CborKey, loads_exact, marshal, unmarshal
+from pyanura.marshalling import CborKey, loads_exact, marshal, unmarshal
 
 
 def test_unmarshal_dataclass_unknown_key():

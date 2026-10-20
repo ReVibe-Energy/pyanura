@@ -1,9 +1,9 @@
 import cbor2
 import pytest
 
-from anura.avss.client import Report
-from anura.avss.exceptions import AVSSProtocolError
-from anura.avss.models import (
+from pyanura.avss.client import Report
+from pyanura.avss.exceptions import AVSSProtocolError
+from pyanura.avss.models import (
     UNLIMITED,
     CaptureReport,
     GetDeviceInfoResponse,
@@ -17,8 +17,8 @@ from anura.avss.models import (
     StatsReport,
     WriteSettingsV2Response,
 )
-from anura.avss.protocol import CaptureReason, ReportType
-from anura.marshalling import marshal, unmarshal
+from pyanura.avss.protocol import CaptureReason, ReportType
+from pyanura.marshalling import marshal, unmarshal
 
 
 def test_unmarshal_HealthReport_missing_fields():

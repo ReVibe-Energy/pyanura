@@ -2,7 +2,7 @@ import enum
 from dataclasses import dataclass
 from typing import Annotated, Any
 
-from anura.marshalling import CborKey, register_codec
+from pyanura.marshalling import CborKey, register_codec
 
 
 class Unlimited(enum.Enum):

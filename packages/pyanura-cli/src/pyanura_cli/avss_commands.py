@@ -14,13 +14,13 @@ import click
 from bleak import BleakScanner
 from bleak.exc import BleakError
 
-import anura.avss as avss
-from anura.avss import procedures
-from anura.avss.bleak_avss_client import BleakAVSSClient
-from anura.dfu import parse_bundle
-from anura.transceiver.client import TransceiverClient
-from anura.transceiver.models import BluetoothAddrLE
-from anura.transceiver.proxy_avss_client import ProxyAVSSClient
+import pyanura.avss as avss
+from pyanura.avss import procedures
+from pyanura.avss.bleak_avss_client import BleakAVSSClient
+from pyanura.dfu import parse_bundle
+from pyanura.transceiver.client import TransceiverClient
+from pyanura.transceiver.models import BluetoothAddrLE
+from pyanura.transceiver.proxy_avss_client import ProxyAVSSClient
 
 from .bundle import BleakAVSSTarget, ProxyAVSSTarget, apply_bundle
 from .progress import upload_progress

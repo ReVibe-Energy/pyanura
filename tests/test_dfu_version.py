@@ -1,6 +1,6 @@
 import pytest
 
-from anura.dfu import Version, VersionSet
+from pyanura.dfu import Version, VersionSet
 
 
 def test_version_from_string():

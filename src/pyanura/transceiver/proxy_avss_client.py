@@ -6,8 +6,8 @@ class. New code should use ProxyAVSSTransport directly.
 
 import warnings
 
-import anura.avss as avss
-from anura.avss.transport import ProxyAVSSTransport
+import pyanura.avss as avss
+from pyanura.avss.transport import ProxyAVSSTransport
 
 
 class ProxyAVSSClient(avss.AVSSClient):

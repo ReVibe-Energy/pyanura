@@ -3,7 +3,7 @@
 import cbor2
 import pytest
 
-from anura.avss.settings import SettingsMapper, SettingType
+from pyanura.avss.settings import SettingsMapper, SettingType
 
 
 def test_types_cover_every_setting():
