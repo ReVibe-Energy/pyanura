@@ -2,13 +2,13 @@ import asyncio
 import enum
 import logging
 
-from anura.avss.exceptions import AVSSConnectionError, AVSSTransportError
-from anura.transceiver.client import TransceiverClient
-from anura.transceiver.exceptions import (
+from pyanura.avss.exceptions import AVSSConnectionError, AVSSTransportError
+from pyanura.transceiver.client import TransceiverClient
+from pyanura.transceiver.exceptions import (
     TransceiverConnectionError,
     TransceiverRequestError,
 )
-from anura.transceiver.models import (
+from pyanura.transceiver.models import (
     APIErrorCode,
     AVSSProgramNotifiedEvent,
     AVSSReportNotifiedEvent,

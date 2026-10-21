@@ -5,16 +5,16 @@ import asyncio
 import cbor2
 import pytest
 
-from anura.avss.client import AVSSClient
-from anura.avss.procedures import UpdateSettingsResult, update_settings
-from anura.avss.procedures._update_settings import (
+from pyanura.avss.client import AVSSClient
+from pyanura.avss.procedures import UpdateSettingsResult, update_settings
+from pyanura.avss.procedures._update_settings import (
     _SETTINGS_DEFAULTS,
     _chunk_settings,
     _write_settings_size,
 )
-from anura.avss.protocol import OpCode, ResponseCode
-from anura.avss.settings import SettingsMapper, SettingType
-from anura.avss.transport.base import AVSSTransport
+from pyanura.avss.protocol import OpCode, ResponseCode
+from pyanura.avss.settings import SettingsMapper, SettingType
+from pyanura.avss.transport.base import AVSSTransport
 
 # A value no default or written setting uses, marking "unknown prior state".
 SENTINEL = 0xDEAD

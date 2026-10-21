@@ -8,9 +8,9 @@ from pathlib import Path
 
 import numpy as np
 
-import anura.avss as avss
-from anura.transceiver import TransceiverClient
-from anura.transceiver.proxy_avss_client import ProxyAVSSClient
+import pyanura.avss as avss
+from pyanura.transceiver import TransceiverClient
+from pyanura.transceiver.proxy_avss_client import ProxyAVSSClient
 
 logging.basicConfig(
     format="[%(asctime)s] <%(levelname)s> %(module)s: %(message)s",

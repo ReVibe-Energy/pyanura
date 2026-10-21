@@ -6,8 +6,8 @@ class. New code should use BleakAVSSTransport directly.
 
 import warnings
 
-import anura.avss as avss
-from anura.avss.transport import BleakAVSSTransport
+import pyanura.avss as avss
+from pyanura.avss.transport import BleakAVSSTransport
 
 
 class BleakAVSSClient(avss.AVSSClient):

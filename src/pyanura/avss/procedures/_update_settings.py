@@ -7,7 +7,7 @@ from typing import Any
 
 import cbor2
 
-from anura.marshalling import marshal
+from pyanura.marshalling import marshal
 
 from ..client import AVSSClient
 from ..exceptions import AVSSOpCodeUnsupportedError

@@ -15,11 +15,11 @@ from typing import Protocol
 import click
 from bleak import BleakScanner
 
-from anura.avss import procedures
-from anura.avss.bleak_avss_client import BleakAVSSClient
-from anura.avss.client import AVSSClient
-from anura.avss.exceptions import AVSSOpCodeUnsupportedError
-from anura.dfu import (
+from pyanura.avss import procedures
+from pyanura.avss.bleak_avss_client import BleakAVSSClient
+from pyanura.avss.client import AVSSClient
+from pyanura.avss.exceptions import AVSSOpCodeUnsupportedError
+from pyanura.dfu import (
     Bundle,
     Component,
     Dependency,
@@ -28,10 +28,10 @@ from anura.dfu import (
     total_dependencies,
     unmet_dependencies,
 )
-from anura.transceiver.client import TransceiverClient
-from anura.transceiver.exceptions import TransceiverError
-from anura.transceiver.models import BluetoothAddrLE
-from anura.transceiver.proxy_avss_client import ProxyAVSSClient
+from pyanura.transceiver.client import TransceiverClient
+from pyanura.transceiver.exceptions import TransceiverError
+from pyanura.transceiver.models import BluetoothAddrLE
+from pyanura.transceiver.proxy_avss_client import ProxyAVSSClient
 
 from .progress import upload_progress
 

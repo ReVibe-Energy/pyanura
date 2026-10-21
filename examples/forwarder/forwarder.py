@@ -8,9 +8,9 @@ from urllib.parse import urlparse
 
 import paho.mqtt.client as mqtt
 
-import anura.avss as avss
-from anura.transceiver import BluetoothAddrLE, TransceiverClient
-from anura.transceiver.proxy_avss_client import ProxyAVSSClient
+import pyanura.avss as avss
+from pyanura.transceiver import BluetoothAddrLE, TransceiverClient
+from pyanura.transceiver.proxy_avss_client import ProxyAVSSClient
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Annotated
 from uuid import UUID
 
-from anura.marshalling import CborKey, register_codec, unmarshal
+from pyanura.marshalling import CborKey, register_codec, unmarshal
 
 msg_type = types.SimpleNamespace()
 msg_type.Request = 0

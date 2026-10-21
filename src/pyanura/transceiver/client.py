@@ -10,7 +10,7 @@ from typing import (
 
 import cbor2
 
-from anura.marshalling import loads_exact, marshal, unmarshal
+from pyanura.marshalling import loads_exact, marshal, unmarshal
 
 from . import models
 from .exceptions import (

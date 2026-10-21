@@ -5,14 +5,14 @@ import asyncio
 import cbor2
 import pytest
 
-from anura.transceiver import models
-from anura.transceiver.client import TransceiverClient
-from anura.transceiver.exceptions import (
+from pyanura.transceiver import models
+from pyanura.transceiver.client import TransceiverClient
+from pyanura.transceiver.exceptions import (
     TransceiverConnectionError,
     TransceiverError,
 )
-from anura.transceiver.transport import TCPTransport, USBTransport
-from anura.transceiver.transport.base import Transport
+from pyanura.transceiver.transport import TCPTransport, USBTransport
+from pyanura.transceiver.transport.base import Transport
 
 
 def run(coro):

@@ -17,7 +17,7 @@ from typing import (
 
 import cbor2
 
-from anura.marshalling import loads_exact, marshal, unmarshal
+from pyanura.marshalling import loads_exact, marshal, unmarshal
 
 from .exceptions import (
     AVSSConnectionError,
@@ -664,7 +664,7 @@ class AVSSClient:
         The upgrade must have been prepared with ``prepare_upgrade``. On
         nodes that support it, prefer the windowed procedure
         (``prepare_upgrade_v2`` + ``program_transfer_windowed``) or the
-        complete flow in :func:`anura.avss.procedures.upload_firmware`.
+        complete flow in :func:`pyanura.avss.procedures.upload_firmware`.
 
         Completion is confirmed before returning: after the final chunk the
         transfer waits out late NACKs and probes the node by re-sending the

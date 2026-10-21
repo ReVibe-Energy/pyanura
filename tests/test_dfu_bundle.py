@@ -4,7 +4,7 @@ import zipfile
 
 import pytest
 
-from anura.dfu import (
+from pyanura.dfu import (
     Component,
     Dependency,
     InstalledComponent,

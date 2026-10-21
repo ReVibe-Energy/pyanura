@@ -1,5 +1,5 @@
-from anura.marshalling import unmarshal
-from anura.transceiver.models import GetDeviceInfoResult, GetFirmwareInfoResult
+from pyanura.marshalling import unmarshal
+from pyanura.transceiver.models import GetDeviceInfoResult, GetFirmwareInfoResult
 
 
 def test_unmarshal_GetFirmwareInfoResult_firmware_pn():

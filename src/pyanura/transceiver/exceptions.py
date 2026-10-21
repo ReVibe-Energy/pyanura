@@ -8,7 +8,7 @@ __all__ = [
     "TransceiverRequestError",
 ]
 
-logger = logging.getLogger("anura.transceiver")
+logger = logging.getLogger("pyanura.transceiver")
 
 
 class TransceiverError(Exception):

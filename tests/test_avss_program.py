@@ -8,17 +8,17 @@ from collections.abc import Callable
 import cbor2
 import pytest
 
-from anura.avss import procedures
-from anura.avss.client import PROGRAM_OFFSET_ABORT, AVSSClient
-from anura.avss.exceptions import AVSSConnectionError, AVSSProgramTransferError
-from anura.avss.models import (
+from pyanura.avss import procedures
+from pyanura.avss.client import PROGRAM_OFFSET_ABORT, AVSSClient
+from pyanura.avss.exceptions import AVSSConnectionError, AVSSProgramTransferError
+from pyanura.avss.models import (
     PrepareUpgradeArgs,
     PrepareUpgradeV2Args,
     PrepareUpgradeV2Response,
 )
-from anura.avss.protocol import OpCode, ResponseCode
-from anura.avss.transport.base import AVSSTransport
-from anura.marshalling import marshal, unmarshal
+from pyanura.avss.protocol import OpCode, ResponseCode
+from pyanura.avss.transport.base import AVSSTransport
+from pyanura.marshalling import marshal, unmarshal
 
 
 class FakeSensorTransport(AVSSTransport):
@@ -308,7 +308,7 @@ def test_windowed_transfer_recovers_from_dropped_chunk():
 
 
 def test_windowed_transfer_recovers_from_lost_ack(monkeypatch):
-    monkeypatch.setattr("anura.avss.client.PROGRAM_STALL_TIMEOUT", 0.05)
+    monkeypatch.setattr("pyanura.avss.client.PROGRAM_STALL_TIMEOUT", 0.05)
     binary = make_binary(10 * CHUNK)
     transport = FakeSensorTransport(len(binary), strict_window=False)
     # Ack 1 is the initial window grant; drop a mid-transfer ack.
@@ -322,7 +322,7 @@ def test_windowed_transfer_recovers_from_lost_ack(monkeypatch):
 
 
 def test_windowed_transfer_recovers_from_lost_final_ack(monkeypatch):
-    monkeypatch.setattr("anura.avss.client.PROGRAM_STALL_TIMEOUT", 0.05)
+    monkeypatch.setattr("pyanura.avss.client.PROGRAM_STALL_TIMEOUT", 0.05)
     binary = make_binary(10 * CHUNK)
     transport = FakeSensorTransport(len(binary), strict_window=False)
     # With an ack interval of 3 chunks: initial grant, acks after chunks
@@ -347,8 +347,8 @@ def test_windowed_transfer_aborted_by_node():
 
 
 def test_windowed_transfer_fails_on_persistent_stall(monkeypatch):
-    monkeypatch.setattr("anura.avss.client.PROGRAM_STALL_TIMEOUT", 0.01)
-    monkeypatch.setattr("anura.avss.client.PROGRAM_PROGRESS_TIMEOUT", 0.1)
+    monkeypatch.setattr("pyanura.avss.client.PROGRAM_STALL_TIMEOUT", 0.01)
+    monkeypatch.setattr("pyanura.avss.client.PROGRAM_PROGRESS_TIMEOUT", 0.1)
     binary = make_binary(10 * CHUNK)
     transport = FakeSensorTransport(len(binary), strict_window=False)
     # Drop every notification after the initial grant.
@@ -360,8 +360,8 @@ def test_windowed_transfer_fails_on_persistent_stall(monkeypatch):
 
 
 def test_windowed_transfer_resumes_after_interruption(monkeypatch):
-    monkeypatch.setattr("anura.avss.client.PROGRAM_STALL_TIMEOUT", 0.01)
-    monkeypatch.setattr("anura.avss.client.PROGRAM_PROGRESS_TIMEOUT", 0.1)
+    monkeypatch.setattr("pyanura.avss.client.PROGRAM_STALL_TIMEOUT", 0.01)
+    monkeypatch.setattr("pyanura.avss.client.PROGRAM_PROGRESS_TIMEOUT", 0.1)
     binary = make_binary(40 * CHUNK)
     transport = FakeSensorTransport(len(binary), strict_window=False)
     client = AVSSClient(transport)
@@ -417,7 +417,7 @@ def test_windowed_transfer_different_image_restarts():
 
 
 def test_legacy_fallback_transfer_completes(monkeypatch):
-    monkeypatch.setattr("anura.avss.client.PROGRAM_LEGACY_SETTLE_TIMEOUT", 0.05)
+    monkeypatch.setattr("pyanura.avss.client.PROGRAM_LEGACY_SETTLE_TIMEOUT", 0.05)
     binary = make_binary(5 * CHUNK + 3)
     transport = FakeSensorTransport(len(binary), windowed_supported=False)
     client = AVSSClient(transport)
@@ -432,7 +432,7 @@ def test_legacy_fallback_transfer_completes(monkeypatch):
 
 
 def test_legacy_transfer_recovers_from_late_nack(monkeypatch):
-    monkeypatch.setattr("anura.avss.client.PROGRAM_LEGACY_SETTLE_TIMEOUT", 0.05)
+    monkeypatch.setattr("pyanura.avss.client.PROGRAM_LEGACY_SETTLE_TIMEOUT", 0.05)
     binary = make_binary(6 * CHUNK)
     transport = FakeSensorTransport(len(binary), windowed_supported=False)
     # Drop the second-to-last chunk: the NACK it provokes is only generated
@@ -448,7 +448,7 @@ def test_legacy_transfer_recovers_from_late_nack(monkeypatch):
 
 
 def test_legacy_transfer_recovers_from_dropped_final_chunk(monkeypatch):
-    monkeypatch.setattr("anura.avss.client.PROGRAM_LEGACY_SETTLE_TIMEOUT", 0.05)
+    monkeypatch.setattr("pyanura.avss.client.PROGRAM_LEGACY_SETTLE_TIMEOUT", 0.05)
     binary = make_binary(6 * CHUNK)
     transport = FakeSensorTransport(len(binary), windowed_supported=False)
     # Drop the final chunk: no NACK is ever generated, so only the
@@ -465,8 +465,8 @@ def test_legacy_transfer_recovers_from_dropped_final_chunk(monkeypatch):
 def test_windowed_transfer_stall_limit_is_wall_clock(monkeypatch):
     """Rewinds keep coming as long as the deadline allows, however many; the
     transfer is failed by elapsed time without progress, not by a count."""
-    monkeypatch.setattr("anura.avss.client.PROGRAM_STALL_TIMEOUT", 0.005)
-    monkeypatch.setattr("anura.avss.client.PROGRAM_PROGRESS_TIMEOUT", 0.3)
+    monkeypatch.setattr("pyanura.avss.client.PROGRAM_STALL_TIMEOUT", 0.005)
+    monkeypatch.setattr("pyanura.avss.client.PROGRAM_PROGRESS_TIMEOUT", 0.3)
     binary = make_binary(10 * CHUNK)
     transport = FakeSensorTransport(len(binary), strict_window=False)
     transport.drop_acks = set(range(2, 10_000))
@@ -482,7 +482,7 @@ def test_windowed_transfer_stall_limit_is_wall_clock(monkeypatch):
 def test_legacy_transfer_fails_when_node_never_accepts_data(monkeypatch):
     """A legacy node that NACKs every write back to the same offset used to
     keep the transfer circling forever; it is now bounded by the deadline."""
-    monkeypatch.setattr("anura.avss.client.PROGRAM_PROGRESS_TIMEOUT", 0.2)
+    monkeypatch.setattr("pyanura.avss.client.PROGRAM_PROGRESS_TIMEOUT", 0.2)
     binary = make_binary(6 * CHUNK)
     transport = FakeSensorTransport(len(binary), windowed_supported=False)
     transport.legacy_nack_all = True
@@ -510,8 +510,8 @@ def test_windowed_transfer_retries_write_timed_out_by_transport():
 
 
 def test_windowed_transfer_fails_when_writes_keep_timing_out(monkeypatch):
-    monkeypatch.setattr("anura.avss.client.PROGRAM_STALL_TIMEOUT", 0.01)
-    monkeypatch.setattr("anura.avss.client.PROGRAM_PROGRESS_TIMEOUT", 0.1)
+    monkeypatch.setattr("pyanura.avss.client.PROGRAM_STALL_TIMEOUT", 0.01)
+    monkeypatch.setattr("pyanura.avss.client.PROGRAM_PROGRESS_TIMEOUT", 0.1)
     binary = make_binary(10 * CHUNK)
     transport = FakeSensorTransport(len(binary), strict_window=False)
     transport.timeout_writes = set(range(2, 10_000))
@@ -547,7 +547,7 @@ def test_windowed_transfer_write_timeout_after_disconnect():
 
 
 def test_legacy_transfer_retries_write_timed_out_by_transport(monkeypatch):
-    monkeypatch.setattr("anura.avss.client.PROGRAM_LEGACY_SETTLE_TIMEOUT", 0.05)
+    monkeypatch.setattr("pyanura.avss.client.PROGRAM_LEGACY_SETTLE_TIMEOUT", 0.05)
     binary = make_binary(6 * CHUNK)
     transport = FakeSensorTransport(len(binary), windowed_supported=False)
     # A data chunk and the first completion probe both time out.
@@ -565,7 +565,7 @@ def test_legacy_transfer_retries_write_timed_out_by_transport(monkeypatch):
 
 
 def test_legacy_transfer_fails_when_writes_keep_timing_out(monkeypatch):
-    monkeypatch.setattr("anura.avss.client.PROGRAM_PROGRESS_TIMEOUT", 0.1)
+    monkeypatch.setattr("pyanura.avss.client.PROGRAM_PROGRESS_TIMEOUT", 0.1)
     binary = make_binary(6 * CHUNK)
     transport = FakeSensorTransport(len(binary), windowed_supported=False)
     transport.timeout_writes = set(range(2, 10_000))
@@ -578,7 +578,7 @@ def test_legacy_transfer_fails_when_writes_keep_timing_out(monkeypatch):
 def test_program_transfer_keeps_1_0_contract(monkeypatch):
     # The 1.0 calling convention: prepare_upgrade followed by
     # program_transfer with its original signature.
-    monkeypatch.setattr("anura.avss.client.PROGRAM_LEGACY_SETTLE_TIMEOUT", 0.05)
+    monkeypatch.setattr("pyanura.avss.client.PROGRAM_LEGACY_SETTLE_TIMEOUT", 0.05)
     binary = make_binary(4 * CHUNK + 9)
     transport = FakeSensorTransport(len(binary))
     client = AVSSClient(transport)
@@ -601,7 +601,7 @@ def test_transfer_deadline_does_not_start_before_the_program_lock(monkeypatch):
     Built before the program lock was held, a transfer queued behind another
     would have spent part of its own first window waiting for it, and a long
     enough wait failed it before it had written anything."""
-    monkeypatch.setattr("anura.avss.client.PROGRAM_PROGRESS_TIMEOUT", 0.1)
+    monkeypatch.setattr("pyanura.avss.client.PROGRAM_PROGRESS_TIMEOUT", 0.1)
     binary = make_binary(4 * CHUNK)
     transport = FakeSensorTransport(len(binary))
     client = AVSSClient(transport)

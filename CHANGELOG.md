@@ -10,18 +10,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - `GetFirmwareInfoResponse.firmware_pn` (key 5), shown by the CLI
   `avss get-firmware-info`.
-- `anura.avss.AVSSClient.get_device_info` (opcode 24) and the CLI
+- `pyanura.avss.AVSSClient.get_device_info` (opcode 24) and the CLI
   `avss get-device-info`.
 - `GetFirmwareInfoResult.firmware_pn` (key 5) in the transceiver API, shown
   by the CLI `transceiver get-firmware-info`.
 - `GetDeviceInfoResult.device_pn` (key 9) in the transceiver API, shown by
   the CLI `transceiver get-device-info`.
-- `anura.avss.AVSSClient.report_stats` and `StatsReport` (report type 9)
+- `pyanura.avss.AVSSClient.report_stats` and `StatsReport` (report type 9)
 - The CLI `avss stats` command, printing every group as a line or as JSON.
-- `anura.dfu`: support for ANURA firmware bundles
+- `pyanura.dfu`: support for ANURA firmware bundles
 - The CLI `avss upgrade` and `transceiver upgrade` commands accept a firmware
   bundle as `--file` in addition to a raw image.
-- `anura.avss.procedures.update_settings`: writes settings to a node, split
+- `pyanura.avss.procedures.update_settings`: writes settings to a node, split
   over several Control Point requests if required. The node is left with
   exactly the given settings, which it emulates by writing the defaults
   explicitly on firmware without a built-in reset, or with `replace=False`
@@ -33,17 +33,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The CLI `avss reset-settings` command, which resets a node's settings to
   their defaults.
 - `APIErrorCode.TIMEOUT`, `APIErrorCode.BUSY` and `AVSSRequestArgs.timeout_ms`.
-- `anura.avss.CaptureReport.reasons` field (cbor key 9), with its
-  bits defined by `anura.avss.CaptureReason`.
+- `pyanura.avss.CaptureReport.reasons` field (cbor key 9), with its
+  bits defined by `pyanura.avss.CaptureReason`.
 
 ### Changed
+- The import package is now `pyanura` (previously `anura`), matching the
+  distribution name and avoiding a clash with the unrelated `anura` package
+  on PyPI. Loggers are renamed accordingly, from `anura.*` to `pyanura.*`.
 - `marshal()` omits optional dataclass fields (`X | None`) whose value is
   None instead of encoding them as null, and raises `TypeError` for None
   anywhere else.
 - `unmarshal()` decodes unions of any member types, not only `X | None`.
 - `unmarshal()` is overloaded so that passing a union or a parameterised
   `list`/`dict` type-checks; the overload returns `Any`.
-- Report `count` arguments accept `anura.avss.UNLIMITED` for no limit; the
+- Report `count` arguments accept `pyanura.avss.UNLIMITED` for no limit; the
   model fields are typed `int | Unlimited`. `AVSSClient.report_*` still
   accept `count=None`.
 - `TransceiverClient` requests fail with `TransceiverConnectionError`, and
@@ -80,6 +83,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   windows (`PROGRAM_STALL_LIMIT`, removed). The legacy transfer, which had no
   bound and could circle forever on a node that keeps rejecting writes, is
   bounded the same way.
+
+### Deprecated
+- Importing the library as `anura`. The old name still works, resolving to
+  the same modules as `pyanura`, but emits a `DeprecationWarning` and will be
+  removed in a future release.
 
 ### Removed
 - The CLI `avss write-settings`, replaced by `avss update-settings` and
