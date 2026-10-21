@@ -75,6 +75,7 @@ class ReportType(IntEnum):
     HEALTH = 4
     SETTINGS = 5
     CAPTURE = 6
+    THROUGHPUT = 7
     STATS = 9
 
 
