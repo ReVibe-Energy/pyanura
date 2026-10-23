@@ -20,7 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the CLI `transceiver get-device-info`.
 - `pyanura.avss.AVSSClient.report_stats` and `StatsReport` (report type 9)
 - The CLI `avss stats` command, printing every group as a line or as JSON.
-- `pyanura.dfu`: support for ANURA firmware bundles
+- `pyanura.dfu`: support for ANURA firmware bundles. `open_bundle` opens a
+  bundle and exposes its `meta.json` manifest as written, as a type per
+  manifest version (`ManifestV1`), including the `firmware_pn` and
+  `compatible_device_pns` keys; `Version` and `VersionSet` parse the
+  versions and constraints it holds.
 - The CLI `avss upgrade` and `transceiver upgrade` commands accept a firmware
   bundle as `--file` in addition to a raw image.
 - `pyanura.avss.procedures.update_settings`: writes settings to a node, split

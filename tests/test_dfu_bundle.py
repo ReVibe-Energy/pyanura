@@ -4,29 +4,7 @@ import zipfile
 
 import pytest
 
-from pyanura.dfu import (
-    Component,
-    Dependency,
-    InstalledComponent,
-    Version,
-    VersionSet,
-    parse_bundle,
-    total_dependencies,
-    unmet_dependencies,
-)
-
-
-def _make_dependency(name, constraints):
-    return Dependency(name=name, version=VersionSet(constraints=constraints))
-
-
-def _make_component(name, version, dependencies=None):
-    return Component(
-        name=name,
-        version=Version.from_string(version),
-        contents=b"",
-        dependencies=dependencies or [],
-    )
+from pyanura.dfu import ManifestV1, ManifestV1Image, open_bundle
 
 
 def _make_bundle(manifest: dict, files: dict[str, bytes]) -> bytes:
@@ -38,309 +16,154 @@ def _make_bundle(manifest: dict, files: dict[str, bytes]) -> bytes:
     return buffer.getvalue()
 
 
-def test_matches_installed_prefers_build_over_version():
-    """When a target build is declared, match on it and ignore the numeric tweak."""
-    component = Component(
-        name="app",
-        version=Version.from_string("26.5.0"),
-        contents=b"",
-        dependencies=[],
-        build="v26.5.0-29-g569757bd7efa",
-    )
-
-    # Same build, differing numeric tweak (the dev sentinel) — still a match.
-    assert component.matches_installed(
-        Version.from_string("26.5.0.99"), "v26.5.0-29-g569757bd7efa"
-    )
-    # Different build — not the image we flashed.
-    assert not component.matches_installed(Version.from_string("26.5.0.99"), "v26.4.0")
-    # Device too old to report a build string — fall back to numeric version.
-    assert component.matches_installed(Version.from_string("26.5.0"), None)
-    assert not component.matches_installed(Version.from_string("26.5.0.99"), None)
-
-
-def test_matches_installed_falls_back_to_version_without_target_build():
-    """Bundles predating target_build match on exact numeric version."""
-    component = Component(
-        name="app",
-        version=Version.from_string("26.5.0"),
-        contents=b"",
-        dependencies=[],
-    )
-
-    assert component.matches_installed(Version.from_string("26.5.0"), None)
-    assert not component.matches_installed(Version.from_string("26.5.0.99"), None)
-    # The build string is irrelevant when no target build is declared.
-    assert component.matches_installed(Version.from_string("26.5.0"), "anything")
-
-
-def test_parse_bundle_v1():
-    bundle_bytes = _make_bundle(
-        {
-            "version": 1,
-            "app": {
-                "target_version": "26.5.0",
-                "path": "app.bin",
-                "net_version_match": ">=26.0.0",
+def test_open_bundle_v1():
+    """A manifest as the firmware build currently writes it."""
+    bundle = open_bundle(
+        _make_bundle(
+            {
+                "note": "This file is used for firmware update bundles.",
+                "version": 1,
+                "firmware_pn": "FW-1001",
+                "compatible_device_pns": ["VS1-A", "VS1-B"],
+                "app": {
+                    "target_version": "26.5.0",
+                    "target_build": "v26.5.0-29-g569757bd7efa",
+                    "path": "app.bin",
+                    "app_version_match": ">=24.9.0",
+                    "net_version_match": ">=24.9.0",
+                },
+                "net": {
+                    "target_version": "26.5.0",
+                    "target_build": "v26.5.0-29-g569757bd7efa",
+                    "path": "net.bin",
+                    "app_version_match": "==26.5.0",
+                    "net_version_match": None,
+                },
             },
-            "net": {"target_version": "26.1.0", "path": "net.bin"},
-        },
-        {"app.bin": b"app firmware", "net.bin": b"net firmware"},
+            {"app.bin": b"app firmware", "net.bin": b"net firmware"},
+        )
     )
 
-    bundle = parse_bundle(bundle_bytes)
+    assert bundle.manifest == ManifestV1(
+        firmware_pn="FW-1001",
+        compatible_device_pns=["VS1-A", "VS1-B"],
+        app=ManifestV1Image(
+            target_version="26.5.0",
+            path="app.bin",
+            target_build="v26.5.0-29-g569757bd7efa",
+            app_version_match=">=24.9.0",
+            net_version_match=">=24.9.0",
+        ),
+        net=ManifestV1Image(
+            target_version="26.5.0",
+            path="net.bin",
+            target_build="v26.5.0-29-g569757bd7efa",
+            app_version_match="==26.5.0",
+            net_version_match=None,
+        ),
+    )
+    assert bundle.read("app.bin") == b"app firmware"
+    assert bundle.read("net.bin") == b"net firmware"
 
-    # Components come out in app, net order regardless of manifest key order.
-    assert [c.name for c in bundle.components] == ["app", "net"]
-    app, net = bundle.components
-    assert app.version == Version.from_string("26.5.0")
-    assert app.contents == b"app firmware"
-    assert len(app.dependencies) == 1
-    assert app.dependencies[0].name == "net"
-    assert Version.from_string("26.0.0") in app.dependencies[0].version
-    assert Version.from_string("25.9.9") not in app.dependencies[0].version
-    assert net.version == Version.from_string("26.1.0")
-    assert net.contents == b"net firmware"
-    assert net.dependencies == []
+
+def test_open_bundle_v1_predating_optional_keys():
+    """Older v1 bundles lack firmware_pn, compatible_device_pns and target_build."""
+    bundle = open_bundle(
+        _make_bundle(
+            {"version": 1, "app": {"target_version": "24.9.0", "path": "app.bin"}},
+            {"app.bin": b"firmware"},
+        )
+    )
+
+    assert bundle.manifest == ManifestV1(
+        app=ManifestV1Image(target_version="24.9.0", path="app.bin")
+    )
 
 
-def test_parse_bundle_reads_target_build():
-    bundle_bytes = _make_bundle(
-        {
-            "version": 1,
-            "app": {
-                "target_version": "26.5.0",
-                "target_build": "v26.5.0-29-g569757bd7efa",
-                "path": "app.bin",
+def test_open_bundle_ignores_unknown_keys():
+    bundle = open_bundle(
+        _make_bundle(
+            {
+                "version": 1,
+                "future_key": {"anything": True},
+                "app": {
+                    "target_version": "26.5.0",
+                    "path": "app.bin",
+                    "future_image_key": 1,
+                },
             },
-        },
-        {"app.bin": b"firmware"},
+            {"app.bin": b"firmware"},
+        )
     )
 
-    bundle = parse_bundle(bundle_bytes)
-
-    assert len(bundle.components) == 1
-    assert bundle.components[0].build == "v26.5.0-29-g569757bd7efa"
-
-
-def test_parse_bundle_without_target_build_leaves_build_none():
-    bundle_bytes = _make_bundle(
-        {
-            "version": 1,
-            "app": {"target_version": "26.5.0", "path": "app.bin"},
-        },
-        {"app.bin": b"firmware"},
+    assert bundle.manifest.app == ManifestV1Image(
+        target_version="26.5.0", path="app.bin"
     )
 
-    bundle = parse_bundle(bundle_bytes)
 
-    assert bundle.components[0].build is None
-
-
-def test_parse_bundle_rejects_non_zip():
+def test_open_bundle_rejects_non_zip():
     with pytest.raises(ValueError, match="not a valid zip archive"):
-        parse_bundle(b"raw firmware image")
+        open_bundle(b"raw firmware image")
 
 
-def test_parse_bundle_rejects_missing_manifest():
+def test_open_bundle_rejects_missing_manifest():
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as zf:
         zf.writestr("app.bin", b"firmware")
 
     with pytest.raises(ValueError, match=r"missing meta\.json"):
-        parse_bundle(buffer.getvalue())
+        open_bundle(buffer.getvalue())
 
 
-def test_parse_bundle_rejects_invalid_manifest_json():
+def test_open_bundle_rejects_invalid_manifest_json():
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as zf:
         zf.writestr("meta.json", "{not json")
 
     with pytest.raises(ValueError, match="not valid JSON"):
-        parse_bundle(buffer.getvalue())
+        open_bundle(buffer.getvalue())
 
 
-def test_parse_bundle_rejects_unsupported_version():
-    bundle_bytes = _make_bundle({"version": 2}, {})
-
-    with pytest.raises(ValueError, match="Unsupported firmware bundle version"):
-        parse_bundle(bundle_bytes)
+def test_open_bundle_rejects_non_object_manifest():
+    with pytest.raises(ValueError, match="not a JSON object"):
+        open_bundle(_make_bundle([1], {}))  # pyright: ignore[reportArgumentType]
 
 
-def test_parse_bundle_rejects_missing_image():
+def test_open_bundle_rejects_unsupported_version():
+    with pytest.raises(ValueError, match="Unsupported firmware bundle version: 2"):
+        open_bundle(_make_bundle({"version": 2}, {}))
+
+
+def test_open_bundle_rejects_missing_image():
     bundle_bytes = _make_bundle(
         {"version": 1, "app": {"target_version": "26.5.0", "path": "app.bin"}},
         {},
     )
 
-    with pytest.raises(ValueError, match="missing component 'app' image"):
-        parse_bundle(bundle_bytes)
+    with pytest.raises(ValueError, match=r"missing the 'app' image: app\.bin"):
+        open_bundle(bundle_bytes)
 
 
-def test_total_dependencies_no_components():
-    """Empty component list should return empty dependencies."""
-    result = total_dependencies([])
-    assert result == []
-
-
-def test_total_dependencies_component_with_no_dependencies():
-    result = total_dependencies([_make_component("app", "1.0")])
-    assert result == []
-
-
-def test_total_dependencies_single_dependency():
-    result = total_dependencies(
-        [
-            _make_component(
-                "app", "2.0", dependencies=[_make_dependency("app", "==1.0")]
-            ),
-        ]
-    )
-    assert len(result) == 1
-    assert result[0].name == "app"
-    assert result[0].version.constraints == VersionSet(constraints="==1.0").constraints
-
-
-def test_total_dependencies_multiple_dependencies():
-    result = total_dependencies(
-        [
-            _make_component(
-                "app", "2.0", dependencies=[_make_dependency("foo", "==1.0")]
-            ),
-            _make_component(
-                "net", "2.0", dependencies=[_make_dependency("bar", "==2.0")]
-            ),
-        ]
-    )
-    assert len(result) == 2
-    assert result[0].name == "foo"
-    assert result[0].version.constraints == VersionSet(constraints="==1.0").constraints
-    assert result[1].name == "bar"
-    assert result[1].version.constraints == VersionSet(constraints="==2.0").constraints
-
-
-def test_total_dependencies_intersection():
-    result = total_dependencies(
-        [
-            _make_component(
-                "app", "2.0", dependencies=[_make_dependency("foo", "!=1.0")]
-            ),
-            _make_component(
-                "net", "2.0", dependencies=[_make_dependency("foo", "!=2.0")]
-            ),
-        ]
-    )
-    assert len(result) == 1
-    assert result[0].name == "foo"
-    # The following assertion is awkward and fragile. VersionSet does not
-    # support the type of equivalence checking we would prefer to make here.
-    assert (
-        result[0].version.constraints
-        == VersionSet(constraints="!=1.0,!=2.0").constraints
-    )
-
-
-def test_total_dependencies_satisfied_by_preceding_component():
-    result = total_dependencies(
-        [
-            _make_component(
-                "app", "2.0", dependencies=[_make_dependency("app", "==1.0")]
-            ),
-            _make_component(
-                "net", "2.0", dependencies=[_make_dependency("app", "==2.0")]
-            ),
-        ]
-    )
-    assert len(result) == 1
-    assert result[0].name == "app"
-    assert result[0].version.constraints == VersionSet(constraints="==1.0").constraints
-
-
-def test_total_dependencies_all_satisfied_within_bundle():
-    result = total_dependencies(
-        [
-            _make_component("app", "1.0", dependencies=[]),
-            _make_component(
-                "app", "2.0", dependencies=[_make_dependency("app", "==1.0")]
-            ),
-            _make_component(
-                "net", "2.0", dependencies=[_make_dependency("app", "==2.0")]
-            ),
-        ]
-    )
-    assert result == []
-
-
-def test_total_dependencies_conflicting():
-    with pytest.raises(ValueError, match="Conflicting component dependencies"):
-        total_dependencies(
-            [
-                _make_component("app", "1.0", dependencies=[]),
-                _make_component(
-                    "net", "2.0", dependencies=[_make_dependency("app", "==2.0")]
-                ),
-            ]
-        )
-
-
-def _installed(**components: str | None) -> dict[str, InstalledComponent]:
-    return {
-        name: InstalledComponent(
-            version=Version.from_string(version) if version else None, build=None
-        )
-        for name, version in components.items()
-    }
-
-
-def test_unmet_dependencies_none_required():
-    assert unmet_dependencies([], _installed(app="2.0.0")) == []
-
-
-def test_unmet_dependencies_all_satisfied():
-    assert (
-        unmet_dependencies(
-            [_make_dependency("app", ">=1.0.0"), _make_dependency("net", ">=3.0.0")],
-            _installed(app="2.0.0", net="3.0.0"),
-        )
-        == []
-    )
-
-
-def test_unmet_dependencies_checks_every_dependency():
-    """A satisfied dependency does not vouch for the ones after it."""
-    unmet = unmet_dependencies(
-        [_make_dependency("app", ">=1.0.0"), _make_dependency("net", ">=4.0.0")],
-        _installed(app="2.0.0", net="3.0.0"),
-    )
-    assert [u.dependency.name for u in unmet] == ["net"]
-    assert unmet[0].installed == Version.from_string("3.0.0")
-    assert str(unmet[0]) == "requires 'net' >=4.0.0.0, device reports 3.0.0.0"
-
-
-def test_unmet_dependencies_reports_all_failures():
-    unmet = unmet_dependencies(
-        [_make_dependency("app", ">=3.0.0"), _make_dependency("net", ">=4.0.0")],
-        _installed(app="2.0.0", net="3.0.0"),
-    )
-    assert [u.dependency.name for u in unmet] == ["app", "net"]
-
-
-def test_unmet_dependencies_unknown_component():
-    """A dependency on a component the device never reported cannot be verified."""
-    unmet = unmet_dependencies(
-        [_make_dependency("bootloader", ">=1.0.0")], _installed(app="2.0.0")
-    )
-    assert [u.dependency.name for u in unmet] == ["bootloader"]
-    assert unmet[0].installed is None
-    assert str(unmet[0]) == (
-        "requires 'bootloader' >=1.0.0.0, installed 'bootloader' version is unknown"
-    )
-
-
-def test_unmet_dependencies_unreported_version():
-    """A component present but without a reported version is equally unverifiable."""
-    unmet = unmet_dependencies(
-        [_make_dependency("net", ">=1.0.0")], _installed(net=None)
-    )
-    assert [u.dependency.name for u in unmet] == ["net"]
-    assert unmet[0].installed is None
+@pytest.mark.parametrize(
+    "manifest, message",
+    [
+        (
+            {"version": 1, "app": {"path": "app.bin"}},
+            "'app' is missing 'target_version'",
+        ),
+        ({"version": 1, "app": {"target_version": "1.0"}}, "'app' is missing 'path'"),
+        ({"version": 1, "app": "app.bin"}, "'app' is not an object"),
+        (
+            {"version": 1, "net": {"target_version": 1, "path": "net.bin"}},
+            "'net' 'target_version' is not a string",
+        ),
+        ({"version": 1, "firmware_pn": 1001}, "'firmware_pn' is not a string"),
+        (
+            {"version": 1, "compatible_device_pns": "VS1-A"},
+            "'compatible_device_pns' is not a list of strings",
+        ),
+    ],
+)
+def test_open_bundle_rejects_malformed_v1(manifest, message):
+    with pytest.raises(ValueError, match=message):
+        open_bundle(_make_bundle(manifest, {"app.bin": b"", "net.bin": b""}))
