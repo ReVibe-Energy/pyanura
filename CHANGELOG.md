@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   by the CLI `transceiver get-firmware-info`.
 - `GetDeviceInfoResult.device_pn` (key 9) in the transceiver API, shown by
   the CLI `transceiver get-device-info`.
+- `GetFirmwareInfoResponse.app_confirmed` (AVSS) and
+  `GetFirmwareInfoResult.app_confirmed` (transceiver): whether the running app
+  image is confirmed, decoded from `app_status` and `dfu_status`, which encode
+  it with opposite meanings.
 - `pyanura.avss.AVSSClient.report_stats` and `StatsReport` (report type 9)
 - The CLI `avss stats` command, printing every group as a line or as JSON.
 - `pyanura.dfu`: support for ANURA firmware bundles. `open_bundle` opens a
