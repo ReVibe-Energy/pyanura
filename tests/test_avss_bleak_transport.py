@@ -9,7 +9,7 @@ import pytest
 # which `uv run pytest` does not install on its own; CI uses --all-extras.
 pytest.importorskip("bleak", reason="BleakAVSSTransport needs the 'ble' extra")
 
-from bleak.exc import BleakError
+from bleak.exc import BleakError  # pyright: ignore[reportMissingImports]
 
 from anura.avss import uuids
 from anura.avss.exceptions import AVSSConnectionError, AVSSError
