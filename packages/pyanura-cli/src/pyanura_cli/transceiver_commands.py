@@ -11,13 +11,13 @@ import click
 import zeroconf
 
 from pyanura.avss import ReportType
-from pyanura.dfu import parse_bundle
 from pyanura.transceiver.client import TransceiverClient
 from pyanura.transceiver.models import BluetoothAddrLE, ScanNodesReceivedEvent
 from pyanura.transceiver.proxy_avss_client import ProxyAVSSClient
 from pyanura.transceiver.transport import USBTransport
 
 from .bundle import TransceiverTarget, apply_bundle
+from .components import parse_bundle
 from .progress import upload_progress
 
 logger = logging.getLogger(__name__)

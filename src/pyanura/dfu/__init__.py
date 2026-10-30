@@ -3,30 +3,26 @@
 A firmware bundle is a zip archive with a ``meta.json`` manifest at the zip
 root describing one flashable image per firmware component ("app", "net"),
 along with target version/build metadata and version constraints on the
-firmware already installed on the device.
+firmware already installed on the device. :func:`open_bundle` exposes the
+manifest as written, as a type per manifest version; :class:`Version` and
+:class:`VersionSet` parse the version strings and constraints it holds.
 """
 
 from .bundle import (
-    Bundle,
-    Component,
-    Dependency,
-    InstalledComponent,
-    UnmetDependency,
-    parse_bundle,
-    total_dependencies,
-    unmet_dependencies,
+    BundleArchive,
+    Manifest,
+    ManifestV1,
+    ManifestV1Image,
+    open_bundle,
 )
 from .version import Version, VersionSet
 
 __all__ = [
-    "Bundle",
-    "Component",
-    "Dependency",
-    "InstalledComponent",
-    "UnmetDependency",
+    "BundleArchive",
+    "Manifest",
+    "ManifestV1",
+    "ManifestV1Image",
     "Version",
     "VersionSet",
-    "parse_bundle",
-    "total_dependencies",
-    "unmet_dependencies",
+    "open_bundle",
 ]

@@ -162,6 +162,15 @@ def test_unmarshal_GetFirmwareInfoResponse_firmware_pn():
     assert info.firmware_pn == "70018"
 
 
+@pytest.mark.parametrize(
+    "app_status, confirmed", [(0, False), (1, True), (0b10, False), (0b11, True)]
+)
+def test_GetFirmwareInfoResponse_app_confirmed(app_status, confirmed):
+    fields = {0: 0x1A090100, 1: "v26.9.1", 2: app_status, 3: 0x1A090100, 4: "v26.9.1"}
+    info = unmarshal(GetFirmwareInfoResponse, fields)
+    assert info.app_confirmed is confirmed
+
+
 def test_unmarshal_GetDeviceInfoResponse():
     assert unmarshal(GetDeviceInfoResponse, {}) == GetDeviceInfoResponse()
     info = unmarshal(GetDeviceInfoResponse, {0: "AN10067A1001-00042", 1: "10067"})
