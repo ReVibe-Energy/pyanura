@@ -19,9 +19,15 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
 
-      # The uv run steps in every job pass --frozen and rely on this check.
+      # The uv run steps in every job pass --frozen and rely on these checks.
       - name: Check lockfile
         run: uv lock --check
+
+      - name: Check the examples' lockfiles
+        run: |
+          for dir in examples/*/; do
+            uv lock --check --project "$dir"
+          done
 
       - name: Run ruff
         run: uv run --frozen --dev ruff check
@@ -65,7 +71,7 @@ jobs:
       - name: Type check examples
         run: |
           for dir in examples/*/; do
-            uv run --project "$dir" --group dev ty check "$dir"
+            uv run --frozen --project "$dir" --group dev ty check "$dir"
           done
 
   typecheck:
