@@ -18,9 +18,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   by the CLI `transceiver get-firmware-info`.
 - `GetDeviceInfoResult.device_pn` (key 9) in the transceiver API, shown by
   the CLI `transceiver get-device-info`.
+- `GetFirmwareInfoResponse.app_confirmed` (AVSS) and
+  `GetFirmwareInfoResult.app_confirmed` (transceiver): whether the running app
+  image is confirmed, decoded from `app_status` and `dfu_status`, which encode
+  it with opposite meanings. The CLI `avss get-firmware-info` and
+  `transceiver get-firmware-info` show it as `status: confirmed/unconfirmed`,
+  and the latter now prints the same formatted output as the former.
 - `pyanura.avss.AVSSClient.report_stats` and `StatsReport` (report type 9)
 - The CLI `avss stats` command, printing every group as a line or as JSON.
-- `pyanura.dfu`: support for ANURA firmware bundles
+- `pyanura.dfu`: support for ANURA firmware bundles. `read_bundle` reads a
+  bundle into a `Bundle`: the images its `meta.json` manifest names, and the
+  manifest as written, as a type per manifest version (`ManifestV1`),
+  including the `firmware_pn` and `compatible_device_pns` keys; `Version` and
+  `VersionSet` parse the versions and constraints it holds. It rejects a
+  manifest larger than 32 KiB or an image larger than 1 MiB once
+  decompressed, and an archive with duplicate entry names.
 - The CLI `avss upgrade` and `transceiver upgrade` commands accept a firmware
   bundle as `--file` in addition to a raw image.
 - `pyanura.avss.procedures.update_settings`: writes settings to a node, split

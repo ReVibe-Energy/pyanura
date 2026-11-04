@@ -19,20 +19,19 @@ from pyanura.avss import procedures
 from pyanura.avss.bleak_avss_client import BleakAVSSClient
 from pyanura.avss.client import AVSSClient
 from pyanura.avss.exceptions import AVSSOpCodeUnsupportedError
-from pyanura.dfu import (
-    Bundle,
-    Component,
-    Dependency,
-    InstalledComponent,
-    Version,
-    total_dependencies,
-    unmet_dependencies,
-)
+from pyanura.dfu import Version
 from pyanura.transceiver.client import TransceiverClient
 from pyanura.transceiver.exceptions import TransceiverError
 from pyanura.transceiver.models import BluetoothAddrLE
 from pyanura.transceiver.proxy_avss_client import ProxyAVSSClient
 
+from .components import (
+    Component,
+    Dependency,
+    InstalledComponent,
+    total_dependencies,
+    unmet_dependencies,
+)
 from .progress import upload_progress
 
 RECONNECT_TIMEOUT = 60.0
@@ -225,19 +224,19 @@ def _check_dependencies(
         raise RuntimeError("Dependency not met: " + "; ".join(str(u) for u in unmet))
 
 
-async def apply_bundle(target: BundleTarget, bundle: Bundle) -> None:
+async def apply_bundle(target: BundleTarget, components: list[Component]) -> None:
     """Apply every component of a firmware bundle to a device, in order."""
-    if not bundle.components:
+    if not components:
         raise RuntimeError("Bundle contains no firmware components")
 
     checked_bundle_dependencies = False
 
-    for component in bundle.components:
+    for component in components:
         async with target.connect() as session:
             installed = await session.installed()
 
             if not checked_bundle_dependencies:
-                _check_dependencies(total_dependencies(bundle.components), installed)
+                _check_dependencies(total_dependencies(components), installed)
                 checked_bundle_dependencies = True
 
             current = installed.get(component.name)

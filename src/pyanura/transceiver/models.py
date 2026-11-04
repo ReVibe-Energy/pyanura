@@ -229,6 +229,14 @@ class GetFirmwareInfoResult:
     net_build_version: Annotated[str, CborKey(4)]
     firmware_pn: Annotated[str | None, CborKey(5)] = None
 
+    @property
+    def app_confirmed(self) -> bool:
+        """Whether the running app image is confirmed, decoded from `dfu_status`.
+
+        An unconfirmed image is reverted to the previous one on the next reboot.
+        """
+        return not self.dfu_status & 0x01
+
 
 @dataclass
 class GetPtpStatusResult:
