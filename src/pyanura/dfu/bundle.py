@@ -11,6 +11,7 @@ from __future__ import annotations
 import io
 import json
 import zipfile
+import zlib
 from dataclasses import dataclass
 
 __all__ = [
@@ -20,6 +21,11 @@ __all__ = [
     "ManifestV1Image",
     "read_bundle",
 ]
+
+# Bounds on the decompressed size of what read_bundle reads, so that a small
+# but highly compressed archive can't exhaust memory.
+_MAX_MANIFEST_SIZE = 32 * 1024
+_MAX_IMAGE_SIZE = 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -120,6 +126,30 @@ def _image_paths(manifest: Manifest) -> dict[str, str]:
     }
 
 
+def _read_bounded(
+    zip_file: zipfile.ZipFile, path: str, limit: int, label: str
+) -> bytes:
+    """Read a file from the archive, decompressing no more than `limit` bytes.
+
+    Raises:
+        KeyError: If the archive has no file at `path`.
+        ValueError: If the file is corrupt or larger than `limit`.
+    """
+    try:
+        with zip_file.open(path) as f:
+            # Bounded by what is actually decompressed, not by the size the
+            # archive declares for the file.
+            data = f.read(limit + 1)
+    except (zipfile.BadZipFile, zlib.error, EOFError) as e:
+        raise ValueError(f"Bundle {label} is corrupt: {e}") from e
+    except (NotImplementedError, RuntimeError) as e:
+        # Unsupported compression method, or encryption.
+        raise ValueError(f"Bundle {label} cannot be read: {e}") from e
+    if len(data) > limit:
+        raise ValueError(f"Bundle {label} is larger than {limit} bytes")
+    return data
+
+
 def read_bundle(bundle_bytes: bytes, /) -> Bundle:
     """Read a firmware bundle: its manifest and the images it names.
 
@@ -129,7 +159,8 @@ def read_bundle(bundle_bytes: bytes, /) -> Bundle:
     Raises:
         ValueError: If the bundle is not a zip archive, has no valid manifest
             of a supported version, or lacks an image the manifest names or
-            has one that is corrupt.
+            has one that is corrupt or too large (32 KiB for the manifest,
+            1 MiB for each image).
     """
     try:
         zip_file = zipfile.ZipFile(io.BytesIO(bundle_bytes))
@@ -138,11 +169,11 @@ def read_bundle(bundle_bytes: bytes, /) -> Bundle:
 
     with zip_file:
         try:
-            manifest_bytes = zip_file.read("meta.json")
+            manifest_bytes = _read_bounded(
+                zip_file, "meta.json", _MAX_MANIFEST_SIZE, "meta.json"
+            )
         except KeyError as e:
             raise ValueError("Bundle is missing meta.json at the archive root") from e
-        except zipfile.BadZipFile as e:
-            raise ValueError(f"Bundle meta.json is corrupt: {e}") from e
         try:
             manifest_json = json.loads(manifest_bytes)
         except json.JSONDecodeError as e:
@@ -159,10 +190,10 @@ def read_bundle(bundle_bytes: bytes, /) -> Bundle:
         images = {}
         for name, path in _image_paths(manifest).items():
             try:
-                images[path] = zip_file.read(path)
+                images[path] = _read_bounded(
+                    zip_file, path, _MAX_IMAGE_SIZE, f"'{name}' image"
+                )
             except KeyError as e:
                 raise ValueError(f"Bundle is missing the '{name}' image: {path}") from e
-            except zipfile.BadZipFile as e:
-                raise ValueError(f"Bundle '{name}' image is corrupt: {e}") from e
 
     return Bundle(manifest, images)

@@ -7,9 +7,13 @@ import pytest
 from pyanura.dfu import ManifestV1, ManifestV1Image, read_bundle
 
 
-def _make_bundle(manifest: dict, files: dict[str, bytes]) -> bytes:
+def _make_bundle(
+    manifest: dict,
+    files: dict[str, bytes],
+    compression: int = zipfile.ZIP_STORED,
+) -> bytes:
     buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, "w") as zf:
+    with zipfile.ZipFile(buffer, "w", compression=compression) as zf:
         zf.writestr("meta.json", json.dumps(manifest))
         for path, contents in files.items():
             zf.writestr(path, contents)
@@ -153,6 +157,50 @@ def test_read_bundle_rejects_corrupt_image():
 
     with pytest.raises(ValueError, match="'app' image is corrupt"):
         read_bundle(corrupt)
+
+
+def test_read_bundle_rejects_corrupt_compressed_image():
+    image = bytes(range(256)) * 64
+    bundle_bytes = _make_bundle(
+        {"version": 1, "app": {"target_version": "26.5.0", "path": "app.bin"}},
+        {"app.bin": image},
+        compression=zipfile.ZIP_DEFLATED,
+    )
+    # Corrupt the middle of the deflate stream, which follows meta.json's.
+    middle = len(bundle_bytes) // 2
+    corrupt = bundle_bytes[:middle] + b"\xff" * 16 + bundle_bytes[middle + 16 :]
+
+    with pytest.raises(ValueError, match="'app' image is corrupt"):
+        read_bundle(corrupt)
+
+
+_APP_MANIFEST = {"version": 1, "app": {"target_version": "26.5.0", "path": "app.bin"}}
+
+
+def test_read_bundle_accepts_image_of_the_maximum_size():
+    image = bytes(1024 * 1024)
+    bundle = read_bundle(
+        _make_bundle(_APP_MANIFEST, {"app.bin": image}, zipfile.ZIP_DEFLATED)
+    )
+
+    assert bundle.images["app.bin"] == image
+
+
+def test_read_bundle_rejects_oversized_image():
+    """A zip bomb: compresses to about 1 KiB, decompresses past the bound."""
+    bundle_bytes = _make_bundle(
+        _APP_MANIFEST, {"app.bin": bytes(1024 * 1024 + 1)}, zipfile.ZIP_DEFLATED
+    )
+
+    with pytest.raises(ValueError, match="'app' image is larger than 1048576 bytes"):
+        read_bundle(bundle_bytes)
+
+
+def test_read_bundle_rejects_oversized_manifest():
+    manifest = {"version": 1, "note": " " * (32 * 1024)}
+
+    with pytest.raises(ValueError, match=r"meta\.json is larger than 32768 bytes"):
+        read_bundle(_make_bundle(manifest, {}, zipfile.ZIP_DEFLATED))
 
 
 @pytest.mark.parametrize(
