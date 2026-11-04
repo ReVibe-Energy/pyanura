@@ -4,7 +4,7 @@ import zipfile
 
 import pytest
 
-from pyanura.dfu import ManifestV1, ManifestV1Image, open_bundle
+from pyanura.dfu import ManifestV1, ManifestV1Image, read_bundle
 
 
 def _make_bundle(manifest: dict, files: dict[str, bytes]) -> bytes:
@@ -16,9 +16,9 @@ def _make_bundle(manifest: dict, files: dict[str, bytes]) -> bytes:
     return buffer.getvalue()
 
 
-def test_open_bundle_v1():
+def test_read_bundle_v1():
     """A manifest as the firmware build currently writes it."""
-    bundle = open_bundle(
+    bundle = read_bundle(
         _make_bundle(
             {
                 "note": "This file is used for firmware update bundles.",
@@ -62,13 +62,12 @@ def test_open_bundle_v1():
             net_version_match=None,
         ),
     )
-    assert bundle.read("app.bin") == b"app firmware"
-    assert bundle.read("net.bin") == b"net firmware"
+    assert bundle.images == {"app.bin": b"app firmware", "net.bin": b"net firmware"}
 
 
-def test_open_bundle_v1_predating_optional_keys():
+def test_read_bundle_v1_predating_optional_keys():
     """Older v1 bundles lack firmware_pn, compatible_device_pns and target_build."""
-    bundle = open_bundle(
+    bundle = read_bundle(
         _make_bundle(
             {"version": 1, "app": {"target_version": "24.9.0", "path": "app.bin"}},
             {"app.bin": b"firmware"},
@@ -80,8 +79,8 @@ def test_open_bundle_v1_predating_optional_keys():
     )
 
 
-def test_open_bundle_ignores_unknown_keys():
-    bundle = open_bundle(
+def test_read_bundle_ignores_unknown_keys():
+    bundle = read_bundle(
         _make_bundle(
             {
                 "version": 1,
@@ -101,47 +100,59 @@ def test_open_bundle_ignores_unknown_keys():
     )
 
 
-def test_open_bundle_rejects_non_zip():
+def test_read_bundle_rejects_non_zip():
     with pytest.raises(ValueError, match="not a valid zip archive"):
-        open_bundle(b"raw firmware image")
+        read_bundle(b"raw firmware image")
 
 
-def test_open_bundle_rejects_missing_manifest():
+def test_read_bundle_rejects_missing_manifest():
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as zf:
         zf.writestr("app.bin", b"firmware")
 
     with pytest.raises(ValueError, match=r"missing meta\.json"):
-        open_bundle(buffer.getvalue())
+        read_bundle(buffer.getvalue())
 
 
-def test_open_bundle_rejects_invalid_manifest_json():
+def test_read_bundle_rejects_invalid_manifest_json():
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as zf:
         zf.writestr("meta.json", "{not json")
 
     with pytest.raises(ValueError, match="not valid JSON"):
-        open_bundle(buffer.getvalue())
+        read_bundle(buffer.getvalue())
 
 
-def test_open_bundle_rejects_non_object_manifest():
+def test_read_bundle_rejects_non_object_manifest():
     with pytest.raises(ValueError, match="not a JSON object"):
-        open_bundle(_make_bundle([1], {}))  # pyright: ignore[reportArgumentType]
+        read_bundle(_make_bundle([1], {}))  # pyright: ignore[reportArgumentType]
 
 
-def test_open_bundle_rejects_unsupported_version():
+def test_read_bundle_rejects_unsupported_version():
     with pytest.raises(ValueError, match="Unsupported firmware bundle version: 2"):
-        open_bundle(_make_bundle({"version": 2}, {}))
+        read_bundle(_make_bundle({"version": 2}, {}))
 
 
-def test_open_bundle_rejects_missing_image():
+def test_read_bundle_rejects_missing_image():
     bundle_bytes = _make_bundle(
         {"version": 1, "app": {"target_version": "26.5.0", "path": "app.bin"}},
         {},
     )
 
     with pytest.raises(ValueError, match=r"missing the 'app' image: app\.bin"):
-        open_bundle(bundle_bytes)
+        read_bundle(bundle_bytes)
+
+
+def test_read_bundle_rejects_corrupt_image():
+    bundle_bytes = _make_bundle(
+        {"version": 1, "app": {"target_version": "26.5.0", "path": "app.bin"}},
+        {"app.bin": b"app firmware"},
+    )
+    # Images are stored uncompressed, so this corrupts the data, not the CRC.
+    corrupt = bundle_bytes.replace(b"app firmware", b"app firmwarX")
+
+    with pytest.raises(ValueError, match="'app' image is corrupt"):
+        read_bundle(corrupt)
 
 
 @pytest.mark.parametrize(
@@ -164,6 +175,6 @@ def test_open_bundle_rejects_missing_image():
         ),
     ],
 )
-def test_open_bundle_rejects_malformed_v1(manifest, message):
+def test_read_bundle_rejects_malformed_v1(manifest, message):
     with pytest.raises(ValueError, match=message):
-        open_bundle(_make_bundle(manifest, {"app.bin": b"", "net.bin": b""}))
+        read_bundle(_make_bundle(manifest, {"app.bin": b"", "net.bin": b""}))

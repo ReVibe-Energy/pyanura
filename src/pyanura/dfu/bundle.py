@@ -14,11 +14,11 @@ import zipfile
 from dataclasses import dataclass
 
 __all__ = [
-    "BundleArchive",
+    "Bundle",
     "Manifest",
     "ManifestV1",
     "ManifestV1Image",
-    "open_bundle",
+    "read_bundle",
 ]
 
 
@@ -53,20 +53,13 @@ class ManifestV1:
 Manifest = ManifestV1
 
 
-class BundleArchive:
-    """An opened firmware bundle (provided by open_bundle)."""
+@dataclass(frozen=True)
+class Bundle:
+    """A firmware bundle (provided by read_bundle)."""
 
-    def __init__(self, manifest: Manifest, zip_file: zipfile.ZipFile):
-        self.manifest = manifest
-        self._zip_file = zip_file
-
-    def read(self, path: str) -> bytes:
-        """Read a file from the archive, such as an image named by the manifest.
-
-        Raises:
-            KeyError: If the archive has no file at `path`.
-        """
-        return self._zip_file.read(path)
+    manifest: Manifest
+    # The images the manifest names, keyed by their path in the archive.
+    images: dict[str, bytes]
 
 
 def _optional_str(obj: dict, key: str, where: str) -> str | None:
@@ -127,40 +120,49 @@ def _image_paths(manifest: Manifest) -> dict[str, str]:
     }
 
 
-def open_bundle(bundle_bytes: bytes, /) -> BundleArchive:
-    """Open a firmware bundle and parse its manifest.
+def read_bundle(bundle_bytes: bytes, /) -> Bundle:
+    """Read a firmware bundle: its manifest and the images it names.
 
-    Keys the manifest version does not define are ignored.
+    Keys the manifest version does not define are ignored, as are files in
+    the archive the manifest does not name.
 
     Raises:
         ValueError: If the bundle is not a zip archive, has no valid manifest
-            of a supported version, or lacks an image the manifest names.
+            of a supported version, or lacks an image the manifest names or
+            has one that is corrupt.
     """
     try:
         zip_file = zipfile.ZipFile(io.BytesIO(bundle_bytes))
     except zipfile.BadZipFile as e:
         raise ValueError(f"Bundle is not a valid zip archive: {e}") from e
 
-    try:
-        manifest_bytes = zip_file.read("meta.json")
-    except KeyError as e:
-        raise ValueError("Bundle is missing meta.json at the archive root") from e
-    try:
-        manifest_json = json.loads(manifest_bytes)
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Bundle meta.json is not valid JSON: {e}") from e
-    if not isinstance(manifest_json, dict):
-        raise ValueError("Bundle meta.json is not a JSON object")
+    with zip_file:
+        try:
+            manifest_bytes = zip_file.read("meta.json")
+        except KeyError as e:
+            raise ValueError("Bundle is missing meta.json at the archive root") from e
+        except zipfile.BadZipFile as e:
+            raise ValueError(f"Bundle meta.json is corrupt: {e}") from e
+        try:
+            manifest_json = json.loads(manifest_bytes)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Bundle meta.json is not valid JSON: {e}") from e
+        if not isinstance(manifest_json, dict):
+            raise ValueError("Bundle meta.json is not a JSON object")
 
-    version = manifest_json.get("version")
-    if version == 1:
-        manifest = _parse_manifest_v1(manifest_json)
-    else:
-        raise ValueError(f"Unsupported firmware bundle version: {version!r}")
+        version = manifest_json.get("version")
+        if version == 1:
+            manifest = _parse_manifest_v1(manifest_json)
+        else:
+            raise ValueError(f"Unsupported firmware bundle version: {version!r}")
 
-    archived = set(zip_file.namelist())
-    for name, path in _image_paths(manifest).items():
-        if path not in archived:
-            raise ValueError(f"Bundle is missing the '{name}' image: {path}")
+        images = {}
+        for name, path in _image_paths(manifest).items():
+            try:
+                images[path] = zip_file.read(path)
+            except KeyError as e:
+                raise ValueError(f"Bundle is missing the '{name}' image: {path}") from e
+            except zipfile.BadZipFile as e:
+                raise ValueError(f"Bundle '{name}' image is corrupt: {e}") from e
 
-    return BundleArchive(manifest, zip_file)
+    return Bundle(manifest, images)

@@ -11,7 +11,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import assert_never
 
-from pyanura.dfu import BundleArchive, ManifestV1, Version, VersionSet, open_bundle
+from pyanura.dfu import Bundle, ManifestV1, Version, VersionSet, read_bundle
 
 
 @dataclass
@@ -45,7 +45,7 @@ class Component:
         return version == self.version
 
 
-def _components_v1(manifest: ManifestV1, bundle: BundleArchive) -> list[Component]:
+def _components_v1(manifest: ManifestV1, bundle: Bundle) -> list[Component]:
     components = []
 
     for name, image in (("app", manifest.app), ("net", manifest.net)):
@@ -70,7 +70,7 @@ def _components_v1(manifest: ManifestV1, bundle: BundleArchive) -> list[Componen
             Component(
                 name=name,
                 version=Version.from_string(image.target_version),
-                contents=bundle.read(image.path),
+                contents=bundle.images[image.path],
                 dependencies=dependencies,
                 build=image.target_build,
             )
@@ -85,7 +85,7 @@ def parse_bundle(bundle_bytes: bytes) -> list[Component]:
     Raises:
         ValueError: If the bundle is invalid.
     """
-    bundle = open_bundle(bundle_bytes)
+    bundle = read_bundle(bundle_bytes)
     match bundle.manifest:
         case ManifestV1() as manifest:
             return _components_v1(manifest, bundle)
