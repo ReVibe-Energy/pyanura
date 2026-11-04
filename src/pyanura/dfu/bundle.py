@@ -12,6 +12,7 @@ import io
 import json
 import zipfile
 import zlib
+from collections import Counter
 from dataclasses import dataclass
 
 __all__ = [
@@ -157,10 +158,10 @@ def read_bundle(bundle_bytes: bytes, /) -> Bundle:
     the archive the manifest does not name.
 
     Raises:
-        ValueError: If the bundle is not a zip archive, has no valid manifest
-            of a supported version, or lacks an image the manifest names or
-            has one that is corrupt or too large (32 KiB for the manifest,
-            1 MiB for each image).
+        ValueError: If the bundle is not a zip archive, has duplicate entry
+            names, has no valid manifest of a supported version, or lacks an
+            image the manifest names or has one that is corrupt or too large
+            (32 KiB for the manifest, 1 MiB for each image).
     """
     try:
         zip_file = zipfile.ZipFile(io.BytesIO(bundle_bytes))
@@ -168,6 +169,13 @@ def read_bundle(bundle_bytes: bytes, /) -> Bundle:
         raise ValueError(f"Bundle is not a valid zip archive: {e}") from e
 
     with zip_file:
+        # A name that appears twice could be read as either entry, depending
+        # on the tool reading the archive.
+        counts = Counter(zip_file.namelist())
+        duplicates = sorted(name for name, count in counts.items() if count > 1)
+        if duplicates:
+            raise ValueError(f"Bundle has duplicate entries: {', '.join(duplicates)}")
+
         try:
             manifest_bytes = _read_bounded(
                 zip_file, "meta.json", _MAX_MANIFEST_SIZE, "meta.json"

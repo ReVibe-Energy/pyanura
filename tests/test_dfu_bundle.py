@@ -203,6 +203,19 @@ def test_read_bundle_rejects_oversized_manifest():
         read_bundle(_make_bundle(manifest, {}, zipfile.ZIP_DEFLATED))
 
 
+@pytest.mark.filterwarnings("ignore:Duplicate name")
+def test_read_bundle_rejects_duplicate_entries():
+    """Tools disagree on which of two same-named entries to read."""
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as zf:
+        zf.writestr("meta.json", json.dumps(_APP_MANIFEST))
+        zf.writestr("app.bin", b"app firmware")
+        zf.writestr("app.bin", b"other firmware")
+
+    with pytest.raises(ValueError, match=r"duplicate entries: app\.bin"):
+        read_bundle(buffer.getvalue())
+
+
 @pytest.mark.parametrize(
     "manifest, message",
     [
