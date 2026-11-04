@@ -17,6 +17,7 @@ from bleak.exc import BleakError
 import pyanura.avss as avss
 from pyanura.avss import procedures
 from pyanura.avss.bleak_avss_client import BleakAVSSClient
+from pyanura.dfu import Version
 from pyanura.transceiver.client import TransceiverClient
 from pyanura.transceiver.models import BluetoothAddrLE
 from pyanura.transceiver.proxy_avss_client import ProxyAVSSClient
@@ -444,19 +445,14 @@ async def stats(client: avss.AVSSClient, as_json: bool, quiet_time: float):
 async def get_firmware_info(client: avss.AVSSClient):
     """Get firmware info"""
     info = await client.get_firmware_info()
-    major = (info.app_version >> 24) & 0xFF
-    minor = (info.app_version >> 16) & 0xFF
-    patch = (info.app_version >> 8) & 0xFF
-    tweak = info.app_version & 0xFF
+    status = "confirmed" if info.app_confirmed else "unconfirmed"
     click.echo(
-        f"App version: v{major}.{minor}.{patch}.{tweak}, build: {info.app_build_version}, status: {info.app_status}"
+        f"App version: v{Version.from_numeric(info.app_version)}, "
+        f"build: {info.app_build_version}, status: {status}"
     )
-    major = (info.net_version >> 24) & 0xFF
-    minor = (info.net_version >> 16) & 0xFF
-    patch = (info.net_version >> 8) & 0xFF
-    tweak = info.net_version & 0xFF
     click.echo(
-        f"Net version: v{major}.{minor}.{patch}.{tweak}, build: {info.net_build_version}"
+        f"Net version: v{Version.from_numeric(info.net_version)}, "
+        f"build: {info.net_build_version}"
     )
     if info.firmware_pn is not None:
         click.echo(f"Firmware PN: {info.firmware_pn}")

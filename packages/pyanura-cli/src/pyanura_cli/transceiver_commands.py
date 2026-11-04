@@ -11,6 +11,7 @@ import click
 import zeroconf
 
 from pyanura.avss import ReportType
+from pyanura.dfu import Version
 from pyanura.transceiver.client import TransceiverClient
 from pyanura.transceiver.models import BluetoothAddrLE, ScanNodesReceivedEvent
 from pyanura.transceiver.proxy_avss_client import ProxyAVSSClient
@@ -211,7 +212,18 @@ async def get_device_status(client: TransceiverClient):
 @with_transceiver_client
 async def get_firmware_info(client: TransceiverClient):
     """Get firmware info."""
-    click.echo(await client.get_firmware_info())
+    info = await client.get_firmware_info()
+    status = "confirmed" if info.app_confirmed else "unconfirmed"
+    click.echo(
+        f"App version: v{Version.from_numeric(info.app_version)}, "
+        f"build: {info.app_build_version}, status: {status}"
+    )
+    click.echo(
+        f"Net version: v{Version.from_numeric(info.net_version)}, "
+        f"build: {info.net_build_version}"
+    )
+    if info.firmware_pn is not None:
+        click.echo(f"Firmware PN: {info.firmware_pn}")
 
 
 @transceiver_group.command()

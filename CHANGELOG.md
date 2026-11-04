@@ -21,7 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `GetFirmwareInfoResponse.app_confirmed` (AVSS) and
   `GetFirmwareInfoResult.app_confirmed` (transceiver): whether the running app
   image is confirmed, decoded from `app_status` and `dfu_status`, which encode
-  it with opposite meanings.
+  it with opposite meanings. The CLI `avss get-firmware-info` and
+  `transceiver get-firmware-info` show it as `status: confirmed/unconfirmed`,
+  and the latter now prints the same formatted output as the former.
 - `pyanura.avss.AVSSClient.report_stats` and `StatsReport` (report type 9)
 - The CLI `avss stats` command, printing every group as a line or as JSON.
 - `pyanura.dfu`: support for ANURA firmware bundles. `open_bundle` opens a
