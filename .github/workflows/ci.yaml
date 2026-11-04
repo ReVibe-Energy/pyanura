@@ -19,11 +19,18 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
 
-      - name: Install dependencies
-        run: uv sync --locked --dev
+      # The uv run steps in every job pass --frozen and rely on these checks.
+      - name: Check lockfile
+        run: uv lock --check
+
+      - name: Check the examples' lockfiles
+        run: |
+          for dir in examples/*/; do
+            uv lock --check --project "$dir"
+          done
 
       - name: Run ruff
-        run: uv run ruff check
+        run: uv run --frozen --dev ruff check
 
   test:
     name: Test (Python ${{ matrix.python-version }})
@@ -47,11 +54,8 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install dependencies
-        run: uv sync --locked --all-extras --dev
-
       - name: Run tests
-        run: uv run pytest -v
+        run: uv run --frozen --dev pytest -v
 
   typecheck-examples:
     name: Type check examples
@@ -67,7 +71,7 @@ jobs:
       - name: Type check examples
         run: |
           for dir in examples/*/; do
-            uv run --project "$dir" --group dev ty check "$dir"
+            uv run --frozen --project "$dir" --group dev ty check "$dir"
           done
 
   typecheck:
@@ -81,15 +85,11 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
 
-      - name: Type check without optional backends
-        run: |
-          uv sync --locked --dev
-          uv run pyright
+      - name: Type check the library without optional backends
+        run: uv run --frozen --isolated --no-dev --group typecheck pyright src
 
-      - name: Type check with optional backends
-        run: |
-          uv sync --locked --all-extras --dev
-          uv run --all-extras pyright
+      - name: Type check
+        run: uv run --frozen --dev pyright
 
   build:
     name: Build package
