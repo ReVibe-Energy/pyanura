@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from typing import assert_never
 
 from pyanura.dfu import BundleArchive, ManifestV1, Version, VersionSet, open_bundle
 
@@ -88,6 +89,8 @@ def parse_bundle(bundle_bytes: bytes) -> list[Component]:
     match bundle.manifest:
         case ManifestV1() as manifest:
             return _components_v1(manifest, bundle)
+        case _:
+            assert_never(bundle.manifest)
 
 
 def total_dependencies(components: list[Component]) -> list[Dependency]:
