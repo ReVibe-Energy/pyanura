@@ -1,4 +1,5 @@
 import asyncio
+import enum
 import logging
 
 from bleak import BleakClient  # pyright: ignore[reportMissingImports]
@@ -10,6 +11,16 @@ from pyanura.avss.exceptions import AVSSConnectionError, AVSSTransportError
 from .base import AVSSTransport
 
 logger = logging.getLogger(__name__)
+
+
+class _State(enum.Enum):
+    CREATED = "created"
+    CONNECTING = "connecting"
+    OPENED = "opened"
+    # close() has been called but the device has not disconnected yet. The
+    # device may still answer an earlier request, so no new one is taken.
+    CLOSING = "closing"
+    CLOSED = "closed"
 
 
 class BleakAVSSTransport(AVSSTransport):
@@ -26,6 +37,7 @@ class BleakAVSSTransport(AVSSTransport):
             addr: BLE address or device identifier for the AVSS device
         """
         self._addr = addr
+        self._state = _State.CREATED
         self._client = None
         self._closed_event = asyncio.Event()
         # Response slot for the outstanding control point request, if any.
@@ -36,10 +48,13 @@ class BleakAVSSTransport(AVSSTransport):
 
     async def open(self) -> None:
         """Connect to the BLE device and start notifications."""
-        if self._client is not None:
-            raise RuntimeError("BleakAVSSTransport is already open")
+        if self._state is not _State.CREATED:
+            raise RuntimeError("Transport has already been opened")
+
+        self._state = _State.CONNECTING
 
         def disconnected_callback(client: BleakClient):
+            self._state = _State.CLOSED
             response, self._cp_response = self._cp_response, None
             if response is not None and not response.done():
                 response.set_exception(
@@ -81,21 +96,39 @@ class BleakAVSSTransport(AVSSTransport):
                 avss.uuids.ProgramCharacteristicUuid, program_notify
             )
         except BaseException as e:
-            # Tear down on any failure so close() can't hang on a half-open
-            # client or leak a live connection.
+            # Tear down on any failure so as not to leak a live connection.
             try:
                 await self._client.disconnect()
             except BleakError:
                 pass
-            self._client = None
+            self._state = _State.CLOSED
             if isinstance(e, BleakError):
                 raise AVSSConnectionError(str(e)) from e
             raise
 
+        if self._state is not _State.CONNECTING:
+            # Disconnected, or closed by the caller, while opening.
+            raise AVSSConnectionError(
+                f"Transport for {self._addr} closed while opening"
+            )
+
+        self._state = _State.OPENED
+
     async def close(self) -> None:
-        """Disconnect from the BLE device."""
-        if not self._client:
+        """Disconnect from the BLE device.
+
+        The transport takes no further requests from the moment this is
+        called, even if the disconnect fails. Calling it again retries the
+        disconnect.
+        """
+        if self._state is _State.CREATED:
+            raise RuntimeError("Transport has not been opened")
+
+        if self._state is _State.CLOSED:
             return
+
+        assert self._client is not None
+        self._state = _State.CLOSING
 
         try:
             await self._client.disconnect()
@@ -119,8 +152,13 @@ class BleakAVSSTransport(AVSSTransport):
     async def control_point_request(
         self, req: bytes, *, timeout: float | None = None
     ) -> bytes:
-        if self._client is None:
-            raise RuntimeError("BleakAVSSTransport is not open")
+        if self._state in (_State.CREATED, _State.CONNECTING):
+            raise RuntimeError("Transport has not been opened")
+
+        if self._state in (_State.CLOSING, _State.CLOSED):
+            raise AVSSConnectionError("Connection has been closed")
+
+        assert self._client is not None
 
         if self._cp_response is not None:
             raise AVSSTransportError(
@@ -163,8 +201,13 @@ class BleakAVSSTransport(AVSSTransport):
             raise
 
     async def program_write(self, value: bytes) -> None:
-        if self._client is None:
-            raise RuntimeError("BleakAVSSTransport is not open")
+        if self._state in (_State.CREATED, _State.CONNECTING):
+            raise RuntimeError("Transport has not been opened")
+
+        if self._state in (_State.CLOSING, _State.CLOSED):
+            raise AVSSConnectionError("Connection has been closed")
+
+        assert self._client is not None
 
         try:
             await self._client.write_gatt_char(
