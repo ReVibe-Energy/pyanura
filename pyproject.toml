@@ -46,15 +46,19 @@ ble = [
 ]
 
 [dependency-groups]
-# Separate from dev so the library can be type checked without the extras.
+# Separate from dev so the library can be type checked and tested without
+# the extras.
 typecheck = [
     "pyright>=1.1.411",
+]
+test = [
+    "pytest>=9.0.1",
 ]
 dev = [
     "pyanura[ble,usb]",
     { include-group = "typecheck" },
+    { include-group = "test" },
     "packaging>=26.0",
-    "pytest>=9.0.1",
     "ruff>=0.15.13",
 ]
 

@@ -54,6 +54,10 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      # As the Debian package build runs them.
+      - name: Run the library's tests without optional backends
+        run: uv run --frozen --isolated --no-dev --group test pytest -v tests
+
       - name: Run tests
         # --all-packages installs the CLI too, for its tests.
         run: uv run --frozen --dev --all-packages pytest -v

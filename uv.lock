@@ -198,6 +198,9 @@ dev = [
     { name = "pytest" },
     { name = "ruff" },
 ]
+test = [
+    { name = "pytest" },
+]
 typecheck = [
     { name = "pyright" },
 ]
@@ -218,6 +221,7 @@ dev = [
     { name = "pytest", specifier = ">=9.0.1" },
     { name = "ruff", specifier = ">=0.15.13" },
 ]
+test = [{ name = "pytest", specifier = ">=9.0.1" }]
 typecheck = [{ name = "pyright", specifier = ">=1.1.411" }]
 
 [[package]]
