@@ -64,6 +64,7 @@ class AVSSTransport(ABC):
             TimeoutError: If no response arrived within the timeout. The
                 transport has closed itself.
             AVSSConnectionError: If transport is not open or connection lost
+            AVSSTransportError: If the request failed for any other reason
         """
 
     @abstractmethod
@@ -78,6 +79,7 @@ class AVSSTransport(ABC):
                 its own limit. The write was not performed and the
                 connection is intact, so the caller may retry it.
             AVSSConnectionError: If transport is not open or connection lost
+            AVSSTransportError: If the write failed for any other reason
         """
 
     @abstractmethod

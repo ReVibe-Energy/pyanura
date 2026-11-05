@@ -1,4 +1,5 @@
 import asyncio
+import enum
 import logging
 
 from bleak import BleakClient  # pyright: ignore[reportMissingImports]
@@ -10,6 +11,16 @@ from pyanura.avss.exceptions import AVSSConnectionError, AVSSTransportError
 from .base import AVSSTransport
 
 logger = logging.getLogger(__name__)
+
+
+class _State(enum.Enum):
+    CREATED = "created"
+    CONNECTING = "connecting"
+    OPENED = "opened"
+    # close() has been called but the device has not disconnected yet. The
+    # device may still answer an earlier request, so no new one is taken.
+    CLOSING = "closing"
+    CLOSED = "closed"
 
 
 class BleakAVSSTransport(AVSSTransport):
@@ -26,19 +37,29 @@ class BleakAVSSTransport(AVSSTransport):
             addr: BLE address or device identifier for the AVSS device
         """
         self._addr = addr
+        self._state = _State.CREATED
         self._client = None
         self._closed_event = asyncio.Event()
-        self._cp_response_q = asyncio.Queue(maxsize=1)
+        # Response slot for the outstanding control point request, if any.
+        self._cp_response: asyncio.Future[bytes] | None = None
         self._report_callback = None
         self._program_callback = None
         self._closed_callback = None
 
     async def open(self) -> None:
         """Connect to the BLE device and start notifications."""
-        if self._client is not None:
-            raise RuntimeError("BleakAVSSTransport is already open")
+        if self._state is not _State.CREATED:
+            raise RuntimeError("Transport has already been opened")
+
+        self._state = _State.CONNECTING
 
         def disconnected_callback(client: BleakClient):
+            self._state = _State.CLOSED
+            response, self._cp_response = self._cp_response, None
+            if response is not None and not response.done():
+                response.set_exception(
+                    AVSSConnectionError("Connection has been closed")
+                )
             self._closed_event.set()
 
             if self._closed_callback:
@@ -53,7 +74,11 @@ class BleakAVSSTransport(AVSSTransport):
                 self._program_callback(data)
 
         def cp_indicate(sender, data):
-            self._cp_response_q.put_nowait(data)
+            response, self._cp_response = self._cp_response, None
+            if response is None:
+                logger.debug("Control Point response with no request outstanding")
+            elif not response.done():
+                response.set_result(data)
 
         self._client = BleakClient(
             self._addr, disconnected_callback=disconnected_callback
@@ -71,21 +96,39 @@ class BleakAVSSTransport(AVSSTransport):
                 avss.uuids.ProgramCharacteristicUuid, program_notify
             )
         except BaseException as e:
-            # Tear down on any failure so close() can't hang on a half-open
-            # client or leak a live connection.
+            # Tear down on any failure so as not to leak a live connection.
             try:
                 await self._client.disconnect()
             except BleakError:
                 pass
-            self._client = None
+            self._state = _State.CLOSED
             if isinstance(e, BleakError):
                 raise AVSSConnectionError(str(e)) from e
             raise
 
+        if self._state is not _State.CONNECTING:
+            # Disconnected, or closed by the caller, while opening.
+            raise AVSSConnectionError(
+                f"Transport for {self._addr} closed while opening"
+            )
+
+        self._state = _State.OPENED
+
     async def close(self) -> None:
-        """Disconnect from the BLE device."""
-        if not self._client:
+        """Disconnect from the BLE device.
+
+        The transport takes no further requests from the moment this is
+        called, even if the disconnect fails. Calling it again retries the
+        disconnect.
+        """
+        if self._state is _State.CREATED:
+            raise RuntimeError("Transport has not been opened")
+
+        if self._state is _State.CLOSED:
             return
+
+        assert self._client is not None
+        self._state = _State.CLOSING
 
         try:
             await self._client.disconnect()
@@ -98,17 +141,32 @@ class BleakAVSSTransport(AVSSTransport):
 
         await self._closed_event.wait()
 
+    def _discard(self, response: asyncio.Future[bytes]) -> None:
+        """Drop a response that nobody is going to wait for."""
+        if self._cp_response is response:
+            self._cp_response = None
+
+        if not response.cancel() and not response.cancelled():
+            response.exception()  # retrieve exception to prevent asyncio warning
+
     async def control_point_request(
         self, req: bytes, *, timeout: float | None = None
     ) -> bytes:
-        if self._client is None:
-            raise RuntimeError("BleakAVSSTransport is not open")
+        if self._state in (_State.CREATED, _State.CONNECTING):
+            raise RuntimeError("Transport has not been opened")
 
-        # Flush any lingering responses
-        while not self._cp_response_q.empty():
-            logger.warning("Flushing lingering responses")
-            await self._cp_response_q.get()
-            self._cp_response_q.task_done()
+        if self._state in (_State.CLOSING, _State.CLOSED):
+            raise AVSSConnectionError("Connection has been closed")
+
+        assert self._client is not None
+
+        if self._cp_response is not None:
+            raise AVSSTransportError(
+                "A control point request is already outstanding on this device"
+            )
+
+        response = asyncio.get_running_loop().create_future()
+        self._cp_response = response
 
         try:
             async with asyncio.timeout(timeout):
@@ -116,7 +174,9 @@ class BleakAVSSTransport(AVSSTransport):
                     await self._client.write_gatt_char(
                         avss.uuids.ControlPointCharacteristicUuid, req
                     )
-                except BleakError as e:
+                except Exception as e:
+                    self._discard(response)
+
                     # The write may have gone out so the safe option is to close.
                     try:
                         await self.close()
@@ -129,7 +189,7 @@ class BleakAVSSTransport(AVSSTransport):
                         f"Control Point write failed: {e!s}"
                     ) from e
 
-                response = await self._cp_response_q.get()
+                return await response
         except TimeoutError:
             # The node took the request and did not answer it. Responses are
             # matched by order, so an unanswered request leaves the protocol
@@ -140,12 +200,14 @@ class BleakAVSSTransport(AVSSTransport):
                 logger.debug("Could not close the transport after a timeout")
             raise
 
-        self._cp_response_q.task_done()
-        return response
-
     async def program_write(self, value: bytes) -> None:
-        if self._client is None:
-            raise RuntimeError("BleakAVSSTransport is not open")
+        if self._state in (_State.CREATED, _State.CONNECTING):
+            raise RuntimeError("Transport has not been opened")
+
+        if self._state in (_State.CLOSING, _State.CLOSED):
+            raise AVSSConnectionError("Connection has been closed")
+
+        assert self._client is not None
 
         try:
             await self._client.write_gatt_char(
