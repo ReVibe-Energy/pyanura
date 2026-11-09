@@ -55,16 +55,14 @@ def with_avss_client(f):
         async def do_proxy_async():
             logger.info(f"Connect to transceiver {transceiver}")
             async with TransceiverClient(transceiver, transceiver_port) as trx_client:
-                # Check if the transceiver is assigned to the given node
-                resp = await trx_client.get_assigned_nodes()
-                if not any(node.address == address for node in resp.nodes):
-                    click.echo(f"Error: Transceiver not assigned to node {address}")
+                try:
+                    async with avss_client(
+                        ProxyAVSSTransport(trx_client, address)
+                    ) as client:
+                        return await f(*args, client=client, **kwargs)
+                except avss.AVSSConnectionError as ex:
+                    click.echo(f"Error: {ex}", err=True)
                     sys.exit(1)
-
-                async with avss_client(
-                    ProxyAVSSTransport(trx_client, address)
-                ) as client:
-                    return await f(*args, client=client, **kwargs)
 
         if transceiver:
             asyncio.run(do_proxy_async())
@@ -153,10 +151,15 @@ def upgrade(transceiver, transceiver_port, address, file, confirm_only):
         try:
             logger.info(f"Connect to transceiver {transceiver}")
             async with TransceiverClient(transceiver, transceiver_port) as trx_client:
-                # Check if the transceiver is assigned to the given node
+                # ProxyAVSSTarget retries a failed connection, as the node
+                # takes a while to come back from a reboot. Check the
+                # assignment first, so that this failure is not retried.
                 resp = await trx_client.get_assigned_nodes()
                 if not any(node.address == address for node in resp.nodes):
-                    click.echo(f"Error: Transceiver not assigned to node {address}")
+                    click.echo(
+                        f"Error: Transceiver is not assigned to node {address}",
+                        err=True,
+                    )
                     sys.exit(1)
 
                 await apply_bundle(ProxyAVSSTarget(trx_client, address), bundle)
@@ -205,12 +208,6 @@ def upgrade(transceiver, transceiver_port, address, file, confirm_only):
         try:
             logger.info(f"Connect to transceiver {transceiver}")
             async with TransceiverClient(transceiver, transceiver_port) as trx_client:
-                # Check if the transceiver is assigned to the given node
-                resp = await trx_client.get_assigned_nodes()
-                if not any(node.address == address for node in resp.nodes):
-                    click.echo(f"Error: Transceiver not assigned to node {address}")
-                    sys.exit(1)
-
                 image_index = 0
 
                 if not confirm_only:

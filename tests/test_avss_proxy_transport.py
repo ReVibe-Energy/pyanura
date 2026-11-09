@@ -26,7 +26,8 @@ class FakeTransceiver:
     result awaited if need be, anything else is returned. Once ``polls`` is
     exhausted they succeed with an empty response. ``timeouts`` records the
     timeout each request was given, which is None where the firmware cannot
-    take one.
+    take one. The transceiver is assigned to the nodes in ``assigned``, or
+    raises it when asked if it is an exception.
     """
 
     def __init__(
@@ -34,13 +35,22 @@ class FakeTransceiver:
         outcome: BaseException | None = None,
         polls=(),
         supports_timeout: bool = True,
+        assigned: tuple[models.BluetoothAddrLE, ...] | BaseException = (NODE,),
     ):
         self.outcome = outcome
+        self.assigned = assigned
         self.polls = list(polls)
         self.poll_count = 0
         self.writes: list[bytes] = []
         self.timeouts: list[float | None] = []
         self.supports_avss_request_timeout = supports_timeout
+
+    async def get_assigned_nodes(self) -> models.GetAssignedNodesResult:
+        if isinstance(self.assigned, BaseException):
+            raise self.assigned
+        return models.GetAssignedNodesResult(
+            nodes=[models.AssignedNode(address=addr) for addr in self.assigned]
+        )
 
     async def avss_request(self, addr, req, *, timeout=None):
         assert addr == NODE
@@ -330,6 +340,45 @@ def test_open_bounds_its_poll_even_without_firmware_support(fast_polling, monkey
 def test_open_broken_transceiver_connection_is_a_connection_error(fast_polling):
     transceiver = FakeTransceiver(
         polls=[TransceiverConnectionError("transceiver went away")]
+    )
+
+    async def scenario():
+        with pytest.raises(AVSSConnectionError, match="connection broken"):
+            await open_for_real(transceiver)
+
+    asyncio.run(scenario())
+
+
+def test_open_fails_at_once_when_the_transceiver_is_not_assigned_to_the_node(
+    fast_polling,
+):
+    """Such a transceiver answers NODE_UNAVAILABLE forever."""
+    other = models.BluetoothAddrLE.parse("C0:00:00:00:00:02")
+    transceiver = FakeTransceiver(assigned=(other,), polls=[node_unavailable()])
+
+    async def scenario():
+        with pytest.raises(AVSSConnectionError, match="not assigned"):
+            await open_for_real(transceiver)
+
+    asyncio.run(scenario())
+    assert transceiver.poll_count == 0
+
+
+def test_open_failing_to_get_assigned_nodes_is_a_transport_error():
+    transceiver = FakeTransceiver(
+        assigned=request_error(models.APIErrorCode.OPERATION_FAILED)
+    )
+
+    async def scenario():
+        with pytest.raises(AVSSTransportError, match="assigned nodes"):
+            await open_for_real(transceiver)
+
+    asyncio.run(scenario())
+
+
+def test_open_broken_connection_when_getting_assigned_nodes_is_a_connection_error():
+    transceiver = FakeTransceiver(
+        assigned=TransceiverConnectionError("transceiver went away")
     )
 
     async def scenario():

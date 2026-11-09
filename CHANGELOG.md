@@ -88,6 +88,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The USB transceiver transport no longer sends keepalive pings.
 - `ProxyAVSSTransport.open()` fails with `AVSSConnectionError` without retrying
   if the transceiver reports the node's control point as busy.
+- `ProxyAVSSTransport.open()` fails with `AVSSConnectionError` if the
+  transceiver is not assigned to the node, instead of waiting for it
+  indefinitely.
 - `ProxyAVSSTransport.program_write()` and `control_point_request()` raise
   `AVSSConnectionError` when the node is unavailable or the transceiver
   connection broke, and `AVSSTransportError` for other request failures,

@@ -61,6 +61,19 @@ class ProxyAVSSTransport(AVSSTransport):
         self._closed_callback = None
 
     async def open(self) -> None:
+        """Wait for the node to become available through the transceiver.
+
+        The transceiver must be assigned to the node. Once it is, a node that
+        is out of range or switched off is waited for until it connects;
+        bound the wait with ``asyncio.timeout()`` if need be.
+
+        Raises:
+            AVSSConnectionError: If the transceiver is not assigned to the
+                node, reports it as busy, or the node or transceiver
+                connection fails while waiting.
+            AVSSTransportError: If the transceiver fails to report the nodes
+                it is assigned to.
+        """
         if self._state is not _State.CREATED:
             raise RuntimeError("Transport has already been opened")
 
@@ -87,9 +100,25 @@ class ProxyAVSSTransport(AVSSTransport):
             raise exc
         raise AVSSConnectionError(f"Transport for {self._address} closed while opening")
 
+    async def _check_assigned(self):
+        # A transceiver not assigned to the node answers NODE_UNAVAILABLE for
+        # it forever, which _wait_available could not tell from a node that
+        # has yet to connect.
+        try:
+            assigned = await self._transceiver.get_assigned_nodes()
+        except TransceiverConnectionError as e:
+            raise AVSSConnectionError(f"Transceiver connection broken: {e}") from e
+        except TransceiverRequestError as e:
+            raise AVSSTransportError(
+                f"Transceiver failed to report its assigned nodes: {e.error}"
+            ) from e
+        if not any(node.address == self._address for node in assigned.nodes):
+            raise AVSSConnectionError(
+                f"Transceiver is not assigned to node {self._address}"
+            )
+
     async def _wait_available(self):
-        # TODO: This will wait indefinitely if transceiver is not assigned to
-        # the node; a sanity check would be good.
+        await self._check_assigned()
 
         # NODE_UNAVAILABLE is expected while the transceiver is still
         # connecting to the node. BUSY means the transceiver has a request
