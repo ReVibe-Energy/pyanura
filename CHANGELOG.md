@@ -103,7 +103,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Deprecated
 - Importing the library as `anura`. The old name still works, resolving to
   the same modules as `pyanura`, but emits a `DeprecationWarning` and will be
-  removed in a future release.
+  removed in 3.0.
 
 ### Removed
 - The CLI `avss write-settings`, replaced by `avss update-settings` and
