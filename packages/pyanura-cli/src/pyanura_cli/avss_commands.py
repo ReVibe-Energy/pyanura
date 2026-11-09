@@ -508,15 +508,15 @@ async def collect_reports(
     with client.reports(parse=False) as reports:
         if snippets:
             logger.info("Requesting snippet reports")
-            await client.report_snippets(count=None, auto_resume=True)
+            await client.report_snippets(count=avss.UNLIMITED, auto_resume=True)
 
         if health:
             logger.info("Requesting health reports")
-            await client.report_health(count=None)
+            await client.report_health(count=avss.UNLIMITED)
 
         if captures:
             logger.info("Requesting capture reports")
-            await client.report_capture(count=None, auto_resume=True)
+            await client.report_capture(count=avss.UNLIMITED, auto_resume=True)
 
         if settings:
             logger.info("Requesting settings report")
@@ -607,13 +607,13 @@ async def quick_measurement(
 
     with client.reports(parse=False) as reports:
         if captures:
-            await client.report_capture(count=None, auto_resume=False)
+            await client.report_capture(count=avss.UNLIMITED, auto_resume=False)
 
         if snippets:
-            await client.report_snippets(count=None, auto_resume=False)
+            await client.report_snippets(count=avss.UNLIMITED, auto_resume=False)
 
         if aggregates:
-            await client.report_aggregates(count=None, auto_resume=False)
+            await client.report_aggregates(count=avss.UNLIMITED, auto_resume=False)
 
         await client.trigger_measurement(duration_ms=duration * 1000)
 

@@ -47,9 +47,9 @@ async def connect_node(transceiver, output_dir, addr):
                 logger.info("Requesting settings from %s", addr)
                 await node.report_settings()
                 logger.info("Enabling health reports from %s", addr)
-                await node.report_health()
+                await node.report_health(count=avss.UNLIMITED)
                 logger.info("Enabling snippet reports from %s", addr)
-                await node.report_snippets(count=None, auto_resume=True)
+                await node.report_snippets(count=avss.UNLIMITED, auto_resume=True)
 
                 async for msg in reports:
                     if isinstance(msg, avss.HealthReport):

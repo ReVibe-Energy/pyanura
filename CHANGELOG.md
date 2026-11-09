@@ -64,9 +64,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `unmarshal()` decodes unions of any member types, not only `X | None`.
 - `unmarshal()` is overloaded so that passing a union or a parameterised
   `list`/`dict` type-checks; the overload returns `Any`.
-- Report `count` arguments accept `pyanura.avss.UNLIMITED` for no limit; the
-  model fields are typed `int | Unlimited`. `AVSSClient.report_*` still
-  accept `count=None`.
+- Report `count` arguments take `pyanura.avss.UNLIMITED` for no limit; the
+  model fields are typed `int | Unlimited`. `AVSSClient.report_*` no longer
+  accept `count=None`, and `report_health` no longer defaults to unlimited
+  reports: every one of them takes a count.
 - `TransceiverClient` requests fail with `TransceiverConnectionError`, and
   the connection is closed, if the transceiver does not answer within 5
   seconds, instead of waiting indefinitely. `request()` takes a `timeout`
@@ -112,6 +113,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 - `BleakAVSSClient` and `ProxyAVSSClient`, deprecated since 1.0.0a1. Use
   `BleakAVSSTransport` or `ProxyAVSSTransport` with `AVSSClient` instead.
+- The `active` argument of `AVSSClient.report_health`.
 - The CLI `avss write-settings`, replaced by `avss update-settings` and
   `avss reset-settings`.
 

@@ -1,9 +1,13 @@
-"""Tests for how AVSSClient maps what its transport raises."""
+"""Tests for AVSSClient: how it maps what its transport raises, and the
+requests it sends."""
 
 import asyncio
+from typing import Any
 
+import cbor2
 import pytest
 
+from pyanura.avss import UNLIMITED
 from pyanura.avss.client import AVSSClient
 from pyanura.avss.exceptions import AVSSConnectionError, AVSSTransportError
 from pyanura.avss.protocol import OpCode, ResponseCode
@@ -90,6 +94,51 @@ class RecordingTransport(AVSSTransport):
 
     def set_closed_callback(self, callback):
         pass
+
+
+def sent_argument(transport: RecordingTransport) -> Any:
+    (req,) = transport.requests
+    return cbor2.loads(req[1:])
+
+
+@pytest.mark.parametrize(
+    "count, wire_count", [(UNLIMITED, True), (3, 3), (0, 0)], ids=str
+)
+def test_report_health_sends_true_for_unlimited(count, wire_count):
+    """Older firmware understands only True for no limit."""
+    transport = RecordingTransport()
+    asyncio.run(AVSSClient(transport).report_health(count))
+
+    assert sent_argument(transport) == {0: wire_count}
+
+
+@pytest.mark.parametrize(
+    "method", ["report_snippets", "report_capture", "report_aggregates"]
+)
+@pytest.mark.parametrize("count, wire_count", [(UNLIMITED, None), (3, 3)], ids=str)
+def test_report_count(method, count, wire_count):
+    transport = RecordingTransport()
+    asyncio.run(getattr(AVSSClient(transport), method)(count, auto_resume=False))
+
+    assert sent_argument(transport)[0] == wire_count
+
+
+@pytest.mark.parametrize(
+    "method, kwargs",
+    [
+        ("report_snippets", {"auto_resume": False}),
+        ("report_capture", {"auto_resume": False}),
+        ("report_aggregates", {"auto_resume": False}),
+        ("report_health", {}),
+    ],
+)
+def test_report_count_none_is_rejected(method, kwargs):
+    """None used to mean unlimited; UNLIMITED has to be said explicitly."""
+    transport = RecordingTransport()
+
+    with pytest.raises(TypeError, match="UNLIMITED, not None"):
+        asyncio.run(getattr(AVSSClient(transport), method)(None, **kwargs))
+    assert transport.requests == []
 
 
 def test_transport_is_an_async_context_manager():

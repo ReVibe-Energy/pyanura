@@ -10,7 +10,7 @@ from pathlib import Path
 import click
 import zeroconf
 
-from pyanura.avss import ReportType
+from pyanura.avss import UNLIMITED, ReportType
 from pyanura.avss.transport import ProxyAVSSTransport
 from pyanura.dfu import Version
 from pyanura.transceiver.client import TransceiverClient
@@ -152,7 +152,7 @@ async def avss_throughput(client: TransceiverClient, mode: str, duration: int):
                     expected_type = ReportType.THROUGHPUT
                 elif mode == "snippets":
                     click.echo(f"{addr}: Requesting snippet reports...")
-                    await node.report_snippets(count=None, auto_resume=True)
+                    await node.report_snippets(count=UNLIMITED, auto_resume=True)
                     expected_type = ReportType.SNIPPET
 
                 async for test in reports:
