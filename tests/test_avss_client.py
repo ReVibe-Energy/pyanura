@@ -6,6 +6,7 @@ import pytest
 
 from pyanura.avss.client import AVSSClient
 from pyanura.avss.exceptions import AVSSConnectionError, AVSSTransportError
+from pyanura.avss.protocol import OpCode, ResponseCode
 from pyanura.avss.transport.base import AVSSTransport
 
 
@@ -59,3 +60,45 @@ def test_request_wraps_other_exceptions_as_transport_errors():
         asyncio.run(client.get_version())
 
     assert excinfo.value.__cause__ is cause
+
+
+class RecordingTransport(AVSSTransport):
+    """Answers every control point request with OK, recording the requests."""
+
+    def __init__(self):
+        self.requests: list[bytes] = []
+        self.events: list[str] = []
+
+    async def open(self):
+        self.events.append("open")
+
+    async def close(self):
+        self.events.append("close")
+
+    async def control_point_request(self, req, *, timeout=None):
+        self.requests.append(bytes(req))
+        return bytes([OpCode.RESPONSE, req[0], ResponseCode.OK])
+
+    async def program_write(self, value):
+        raise NotImplementedError
+
+    def set_report_callback(self, callback):
+        pass
+
+    def set_program_callback(self, callback):
+        pass
+
+    def set_closed_callback(self, callback):
+        pass
+
+
+def test_transport_is_an_async_context_manager():
+    transport = RecordingTransport()
+
+    async def scenario():
+        async with transport as entered:
+            assert entered is transport
+            assert transport.events == ["open"]
+        assert transport.events == ["open", "close"]
+
+    asyncio.run(scenario())

@@ -35,6 +35,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   32 KiB or an image larger than 1 MiB once decompressed, an archive with
   duplicate entry names, and a manifest whose versions or version match
   specifications do not parse.
+- `AVSSTransport` is an async context manager, opening the transport on
+  entry and closing it on exit.
 - The CLI `avss upgrade` and `transceiver upgrade` commands accept a firmware
   bundle as `--file` in addition to a raw image.
 - `pyanura.avss.procedures.update_settings`: writes settings to a node, split
