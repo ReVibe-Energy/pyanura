@@ -53,7 +53,7 @@ class ManifestV1:
     """
 
     firmware_pn: str | None = None
-    compatible_device_pns: list[str] | None = None
+    compatible_device_pns: tuple[str, ...] | None = None
     app: ManifestV1Image | None = None
     net: ManifestV1Image | None = None
 
@@ -136,7 +136,7 @@ def _parse_manifest_v1(manifest: dict) -> ManifestV1:
 
     return ManifestV1(
         firmware_pn=_optional_str(manifest, "firmware_pn", ""),
-        compatible_device_pns=pns,
+        compatible_device_pns=tuple(pns) if pns is not None else None,
         app=images.get("app"),
         net=images.get("net"),
     )

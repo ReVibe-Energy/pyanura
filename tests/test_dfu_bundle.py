@@ -50,7 +50,7 @@ def test_read_bundle_v1():
 
     assert bundle.manifest == ManifestV1(
         firmware_pn="FW-1001",
-        compatible_device_pns=["VS1-A", "VS1-B"],
+        compatible_device_pns=("VS1-A", "VS1-B"),
         app=ManifestV1Image(
             target_version="26.5.0",
             path="app.bin",
