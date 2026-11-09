@@ -32,8 +32,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   including the `firmware_pn` and `compatible_device_pns` keys. `Version`
   parses the versions it holds, and `Version.matches` tests a version against
   its `*_version_match` specifications. It rejects a manifest larger than
-  32 KiB or an image larger than 1 MiB once decompressed, and an archive with
-  duplicate entry names.
+  32 KiB or an image larger than 1 MiB once decompressed, an archive with
+  duplicate entry names, and a manifest whose versions or version match
+  specifications do not parse.
 - The CLI `avss upgrade` and `transceiver upgrade` commands accept a firmware
   bundle as `--file` in addition to a raw image.
 - `pyanura.avss.procedures.update_settings`: writes settings to a node, split
