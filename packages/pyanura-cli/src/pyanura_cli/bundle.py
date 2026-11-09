@@ -16,14 +16,13 @@ import click
 from bleak import BleakScanner
 
 from pyanura.avss import procedures
-from pyanura.avss.bleak_avss_client import BleakAVSSClient
 from pyanura.avss.client import AVSSClient
 from pyanura.avss.exceptions import AVSSOpCodeUnsupportedError
+from pyanura.avss.transport import BleakAVSSTransport, ProxyAVSSTransport
 from pyanura.dfu import Version
 from pyanura.transceiver.client import TransceiverClient
 from pyanura.transceiver.exceptions import TransceiverError
 from pyanura.transceiver.models import BluetoothAddrLE
-from pyanura.transceiver.proxy_avss_client import ProxyAVSSClient
 
 from .components import (
     Component,
@@ -32,6 +31,7 @@ from .components import (
     total_dependencies,
     unmet_dependencies,
 )
+from .connect import avss_client
 from .progress import upload_progress
 
 RECONNECT_TIMEOUT = 60.0
@@ -114,7 +114,7 @@ class BleakAVSSTarget:
         )
         if device is None:
             raise RuntimeError(f"Node {self._address} not found")
-        async with BleakAVSSClient(device) as client:
+        async with avss_client(BleakAVSSTransport(device)) as client:
             yield AVSSBundleSession(client)
 
     async def wait_reboot(self) -> None:
@@ -139,7 +139,7 @@ class ProxyAVSSTarget:
             stack = AsyncExitStack()
             try:
                 client = await stack.enter_async_context(
-                    ProxyAVSSClient(self._transceiver, self._address)
+                    avss_client(ProxyAVSSTransport(self._transceiver, self._address))
                 )
                 await client.get_version()
                 break

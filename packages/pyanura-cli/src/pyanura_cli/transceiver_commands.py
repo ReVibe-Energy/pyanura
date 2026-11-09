@@ -11,14 +11,15 @@ import click
 import zeroconf
 
 from pyanura.avss import ReportType
+from pyanura.avss.transport import ProxyAVSSTransport
 from pyanura.dfu import Version
 from pyanura.transceiver.client import TransceiverClient
 from pyanura.transceiver.models import BluetoothAddrLE, ScanNodesReceivedEvent
-from pyanura.transceiver.proxy_avss_client import ProxyAVSSClient
 from pyanura.transceiver.transport import USBTransport
 
 from .bundle import TransceiverTarget, apply_bundle
 from .components import parse_bundle
+from .connect import avss_client
 from .progress import upload_progress
 
 logger = logging.getLogger(__name__)
@@ -143,7 +144,7 @@ async def avss_throughput(client: TransceiverClient, mode: str, duration: int):
     """Measure concurrent AVSS throughput."""
 
     async def test_throughput(addr):
-        async with ProxyAVSSClient(client, addr) as node:
+        async with avss_client(ProxyAVSSTransport(client, addr)) as node:
             with node.reports(parse=False) as reports:
                 if mode == "test":
                     click.echo(f"{addr}: Starting {duration} s throughput test...")

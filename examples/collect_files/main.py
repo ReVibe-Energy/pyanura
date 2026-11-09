@@ -9,8 +9,8 @@ from pathlib import Path
 import numpy as np
 
 import pyanura.avss as avss
+from pyanura.avss.transport import ProxyAVSSTransport
 from pyanura.transceiver import TransceiverClient
-from pyanura.transceiver.proxy_avss_client import ProxyAVSSClient
 
 logging.basicConfig(
     format="[%(asctime)s] <%(levelname)s> %(module)s: %(message)s",
@@ -33,7 +33,8 @@ async def connect_node(transceiver, output_dir, addr):
 
     logger.info("Started task for node %s", addr)
     try:
-        async with ProxyAVSSClient(transceiver, addr) as node:
+        async with ProxyAVSSTransport(transceiver, addr) as transport:
+            node = avss.AVSSClient(transport)
             version = await node.get_version()
             logger.info(
                 "%s version: %s (build: %s)",

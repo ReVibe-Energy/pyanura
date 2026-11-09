@@ -16,14 +16,14 @@ from bleak.exc import BleakError
 
 import pyanura.avss as avss
 from pyanura.avss import procedures
-from pyanura.avss.bleak_avss_client import BleakAVSSClient
+from pyanura.avss.transport import BleakAVSSTransport, ProxyAVSSTransport
 from pyanura.dfu import Version
 from pyanura.transceiver.client import TransceiverClient
 from pyanura.transceiver.models import BluetoothAddrLE
-from pyanura.transceiver.proxy_avss_client import ProxyAVSSClient
 
 from .bundle import BleakAVSSTarget, ProxyAVSSTarget, apply_bundle
 from .components import parse_bundle
+from .connect import avss_client
 from .progress import upload_progress
 from .session import SessionFile
 
@@ -43,7 +43,9 @@ def with_avss_client(f):
         async def do_async():
             try:
                 logger.info(f"Connecting to {address}")
-                async with BleakAVSSClient(address.address_str()) as client:
+                async with avss_client(
+                    BleakAVSSTransport(address.address_str())
+                ) as client:
                     logger.info("Connected")
                     return await f(*args, client=client, **kwargs)
             except BleakError as ex:
@@ -59,7 +61,9 @@ def with_avss_client(f):
                     click.echo(f"Error: Transceiver not assigned to node {address}")
                     sys.exit(1)
 
-                async with ProxyAVSSClient(trx_client, address) as client:
+                async with avss_client(
+                    ProxyAVSSTransport(trx_client, address)
+                ) as client:
                     return await f(*args, client=client, **kwargs)
 
         if transceiver:
@@ -173,7 +177,7 @@ def upgrade(transceiver, transceiver_port, address, file, confirm_only):
             image_index = 0
 
             if not confirm_only:
-                async with BleakAVSSClient(device) as client:
+                async with avss_client(BleakAVSSTransport(device)) as client:
                     with upload_progress(
                         len(binary), "Uploading firmware"
                     ) as on_progress:
@@ -190,7 +194,7 @@ def upgrade(transceiver, transceiver_port, address, file, confirm_only):
                     address.address_str(), timeout=60
                 )
 
-            async with BleakAVSSClient(device) as client:
+            async with avss_client(BleakAVSSTransport(device)) as client:
                 click.echo("Confirming new image")
                 await client.confirm_upgrade(image_index)
         except Exception as ex:
@@ -210,7 +214,9 @@ def upgrade(transceiver, transceiver_port, address, file, confirm_only):
                 image_index = 0
 
                 if not confirm_only:
-                    async with ProxyAVSSClient(trx_client, address) as client:
+                    async with avss_client(
+                        ProxyAVSSTransport(trx_client, address)
+                    ) as client:
                         with upload_progress(
                             len(binary), "Uploading firmware"
                         ) as on_progress:
@@ -222,7 +228,9 @@ def upgrade(transceiver, transceiver_port, address, file, confirm_only):
                     click.echo("Waiting for node to reboot with new firmware image...")
                     await asyncio.sleep(30.0)
 
-                async with ProxyAVSSClient(trx_client, address) as client:
+                async with avss_client(
+                    ProxyAVSSTransport(trx_client, address)
+                ) as client:
                     while True:
                         try:
                             version = await client.get_version()

@@ -110,6 +110,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   removed in 3.0.
 
 ### Removed
+- `BleakAVSSClient` and `ProxyAVSSClient`, deprecated since 1.0.0a1. Use
+  `BleakAVSSTransport` or `ProxyAVSSTransport` with `AVSSClient` instead.
 - The CLI `avss write-settings`, replaced by `avss update-settings` and
   `avss reset-settings`.
 
