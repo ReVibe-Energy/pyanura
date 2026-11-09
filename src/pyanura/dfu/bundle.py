@@ -19,6 +19,7 @@ from .version import Version, _parse_spec
 
 __all__ = [
     "Bundle",
+    "InstalledImage",
     "Manifest",
     "ManifestV1",
     "ManifestV1Image",
@@ -29,6 +30,15 @@ __all__ = [
 # but highly compressed archive can't exhaust memory.
 _MAX_MANIFEST_SIZE = 32 * 1024
 _MAX_IMAGE_SIZE = 1024 * 1024
+
+
+@dataclass(frozen=True)
+class InstalledImage:
+    """A firmware image on a device, as the device reports it."""
+
+    version: Version
+    # None when the device reports no build string.
+    build: str | None = None
 
 
 @dataclass(frozen=True)
@@ -54,6 +64,23 @@ class ManifestV1Image:
             )
             if spec is not None
         )
+
+    def matches(self, installed: InstalledImage | None) -> bool:
+        """Whether an image on a device is this image.
+
+        The build strings are compared when both the bundle and the device
+        have one, since they tell builds apart even where the numeric
+        versions are the same. Otherwise the versions are compared.
+
+        `installed` is None when the device reports no image for the
+        component. The result is then False, since the image is not known to
+        be this one.
+        """
+        if installed is None:
+            return False
+        if self.target_build and installed.build:
+            return installed.build == self.target_build
+        return installed.version == Version.from_string(self.target_version)
 
 
 @dataclass(frozen=True)
