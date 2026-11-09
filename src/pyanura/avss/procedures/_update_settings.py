@@ -139,6 +139,15 @@ async def update_settings(
     Returns:
         An :class:`UpdateSettingsResult` describing whether the settings were
         applied and whether the node reboots to take them into use.
+
+    Raises:
+        ValueError: If a setting name or key is unknown.
+        AVSSControlPointError: If the node rejects a request.
+        AVSSConnectionError: If the connection to the node is lost, or the
+            node does not answer a request.
+        AVSSTransportError: If the transport fails for any other reason.
+        AVSSProtocolError: If the node answers with a malformed or
+            unexpected response.
     """
     mapped = SettingsMapper.from_readable(settings)
     try:

@@ -42,8 +42,14 @@ async def upload_firmware(
                   upgrade slot and can take several seconds.
 
     Raises:
-        AVSSProgramTransferError: If a windowed transfer is aborted by the
-            node or stalls without making progress.
+        AVSSProgramTransferError: If the transfer is aborted by the node or
+            makes no progress for ``PROGRAM_PROGRESS_TIMEOUT`` seconds.
+        AVSSControlPointError: If the node rejects the prepare request.
+        AVSSConnectionError: If the connection to the node is lost, or the
+            node does not answer a request.
+        AVSSTransportError: If the transport fails for any other reason.
+        AVSSProtocolError: If the node answers with a malformed or
+            unexpected response.
     """
     try:
         params = await client.prepare_upgrade_v2(
