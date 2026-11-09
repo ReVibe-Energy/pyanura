@@ -11,13 +11,21 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import assert_never
 
-from pyanura.dfu import Bundle, ManifestV1, Version, VersionSet, read_bundle
+from pyanura.dfu import Bundle, ManifestV1, Version, read_bundle
 
 
 @dataclass
 class Dependency:
     name: str
-    version: VersionSet
+    # Version match specifications (see `Version.matches`), all of which the
+    # installed version must satisfy.
+    specs: tuple[str, ...]
+
+    def satisfied_by(self, version: Version) -> bool:
+        return all(version.matches(spec) for spec in self.specs)
+
+    def __str__(self) -> str:
+        return ",".join(self.specs)
 
 
 @dataclass
@@ -54,17 +62,9 @@ def _components_v1(manifest: ManifestV1, bundle: Bundle) -> list[Component]:
 
         dependencies = []
         if image.app_version_match is not None:
-            dependencies.append(
-                Dependency(
-                    name="app", version=VersionSet(constraints=image.app_version_match)
-                )
-            )
+            dependencies.append(Dependency("app", (image.app_version_match,)))
         if image.net_version_match is not None:
-            dependencies.append(
-                Dependency(
-                    name="net", version=VersionSet(constraints=image.net_version_match)
-                )
-            )
+            dependencies.append(Dependency("net", (image.net_version_match,)))
 
         components.append(
             Component(
@@ -107,21 +107,19 @@ def total_dependencies(components: list[Component]) -> list[Dependency]:
     Raises:
         ValueError if bundle contains conflicting dependencies
     """
-    dependencies = defaultdict(lambda: VersionSet(constraints=None))
+    dependencies: defaultdict[str, tuple[str, ...]] = defaultdict(tuple)
     installed_components = {}
 
     for component in components:
         for dep in component.dependencies:
             if dep.name in installed_components:
-                if installed_components[dep.name].version not in dep.version:
+                if not dep.satisfied_by(installed_components[dep.name].version):
                     raise ValueError("Conflicting component dependencies")
             else:
-                dependencies[dep.name] = dependencies[dep.name].intersection(
-                    dep.version
-                )
+                dependencies[dep.name] += dep.specs
         installed_components[component.name] = component
 
-    return [Dependency(name, version) for name, version in dependencies.items()]
+    return [Dependency(name, specs) for name, specs in dependencies.items()]
 
 
 @dataclass
@@ -147,11 +145,11 @@ class UnmetDependency:
     def __str__(self) -> str:
         if self.installed is None:
             return (
-                f"requires '{self.dependency.name}' {self.dependency.version}, "
+                f"requires '{self.dependency.name}' {self.dependency}, "
                 f"installed '{self.dependency.name}' version is unknown"
             )
         return (
-            f"requires '{self.dependency.name}' {self.dependency.version}, "
+            f"requires '{self.dependency.name}' {self.dependency}, "
             f"device reports {self.installed}"
         )
 
@@ -172,6 +170,6 @@ def unmet_dependencies(
     for dep in dependencies:
         current = installed.get(dep.name)
         version = current.version if current is not None else None
-        if version is None or version not in dep.version:
+        if version is None or not dep.satisfied_by(version):
             unmet.append(UnmetDependency(dependency=dep, installed=version))
     return unmet

@@ -29,10 +29,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `pyanura.dfu`: support for ANURA firmware bundles. `read_bundle` reads a
   bundle into a `Bundle`: the images its `meta.json` manifest names, and the
   manifest as written, as a type per manifest version (`ManifestV1`),
-  including the `firmware_pn` and `compatible_device_pns` keys; `Version` and
-  `VersionSet` parse the versions and constraints it holds. It rejects a
-  manifest larger than 32 KiB or an image larger than 1 MiB once
-  decompressed, and an archive with duplicate entry names.
+  including the `firmware_pn` and `compatible_device_pns` keys. `Version`
+  parses the versions it holds, and `Version.matches` tests a version against
+  its `*_version_match` specifications. It rejects a manifest larger than
+  32 KiB or an image larger than 1 MiB once decompressed, and an archive with
+  duplicate entry names.
 - The CLI `avss upgrade` and `transceiver upgrade` commands accept a firmware
   bundle as `--file` in addition to a raw image.
 - `pyanura.avss.procedures.update_settings`: writes settings to a node, split

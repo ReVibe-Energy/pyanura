@@ -1,6 +1,6 @@
 import pytest
 
-from pyanura.dfu import Version, VersionSet
+from pyanura.dfu import Version
 
 
 def test_version_from_string():
@@ -34,77 +34,65 @@ def test_version_str():
     assert str(Version.from_string("1.2")) == "1.2.0.0"
 
 
-def test_empty_version_set_contains_all_versions():
-    version_set = VersionSet()
-
-    assert Version.from_string("0.0.0") in version_set
-    assert Version.from_string("1.0.0") in version_set
-    assert Version.from_string("255.255.255") in version_set
+def v(version_str: str) -> Version:
+    return Version.from_string(version_str)
 
 
-def test_single_constraint_greater_than_or_equal():
-    version_set = VersionSet(constraints=">=1.2.3")
-
-    assert Version.from_string("1.2.3") in version_set
-    assert Version.from_string("1.2.4") in version_set
-    assert Version.from_string("2.0.0") in version_set
-    assert Version.from_string("1.2.2") not in version_set
-    assert Version.from_string("1.1.9") not in version_set
+@pytest.mark.parametrize("spec", ["", " "])
+def test_empty_spec_matches_all_versions(spec):
+    assert v("0.0.0").matches(spec)
+    assert v("255.255.255").matches(spec)
 
 
-def test_single_constraint_less_than():
-    version_set = VersionSet(constraints="<2.0.0")
-
-    assert Version.from_string("1.9.9") in version_set
-    assert Version.from_string("1.0.0") in version_set
-    assert Version.from_string("2.0.0") not in version_set
-    assert Version.from_string("2.1.0") not in version_set
+def test_greater_than_or_equal():
+    assert v("1.2.3").matches(">=1.2.3")
+    assert v("2.0.0").matches(">=1.2.3")
+    assert not v("1.2.2").matches(">=1.2.3")
 
 
-def test_multiple_constraints():
-    version_set = VersionSet(constraints=">=1.0.0,<2.0.0,!=1.5.0")
-
-    assert Version.from_string("1.0.0") in version_set
-    assert Version.from_string("1.4.9") in version_set
-    assert Version.from_string("1.5.1") in version_set
-    assert Version.from_string("1.5.0") not in version_set
-    assert Version.from_string("0.9.9") not in version_set
-    assert Version.from_string("2.0.0") not in version_set
+def test_greater_than():
+    assert v("1.2.4").matches(">1.2.3")
+    assert not v("1.2.3").matches(">1.2.3")
 
 
-def test_equality_constraint():
-    version_set = VersionSet(constraints="==1.2.3")
-
-    assert Version.from_string("1.2.3") in version_set
-    assert Version.from_string("1.2.4") not in version_set
-    assert Version.from_string("1.2.2") not in version_set
+def test_less_than():
+    assert v("1.9.9").matches("<2.0.0")
+    assert not v("2.0.0").matches("<2.0.0")
 
 
-def test_not_equal_constraint():
-    version_set = VersionSet(constraints="!=1.2.3")
-
-    assert Version.from_string("1.2.3") not in version_set
-    assert Version.from_string("1.2.4") in version_set
-    assert Version.from_string("1.2.2") in version_set
+def test_less_than_or_equal():
+    assert v("2.0.0").matches("<=2.0.0")
+    assert not v("2.0.1").matches("<=2.0.0")
 
 
-def test_intersection():
-    version_set = VersionSet(constraints=">=1.0.0").intersection(
-        VersionSet(constraints="<2.0.0")
-    )
-
-    assert Version.from_string("1.5.0") in version_set
-    assert Version.from_string("0.9.9") not in version_set
-    assert Version.from_string("2.0.0") not in version_set
+def test_equal():
+    assert v("1.2.3").matches("==1.2.3")
+    assert not v("1.2.4").matches("==1.2.3")
 
 
-def test_version_set_str():
-    assert str(VersionSet(constraints=">=1.0.0,<2.0.0")) == ">=1.0.0.0,<2.0.0.0"
+def test_not_equal():
+    assert v("1.2.4").matches("!=1.2.3")
+    assert not v("1.2.3").matches("!=1.2.3")
 
 
-def test_invalid_constraint_raises_error():
-    with pytest.raises(ValueError, match="Invalid constraint"):
-        VersionSet(constraints="invalid_constraint")
+def test_all_comparisons_must_hold():
+    spec = ">=1.0.0,<2.0.0,!=1.5.0"
 
-    with pytest.raises(ValueError, match="Invalid constraint"):
-        VersionSet(constraints="2.0.0")
+    assert v("1.0.0").matches(spec)
+    assert v("1.5.1").matches(spec)
+    assert not v("1.5.0").matches(spec)
+    assert not v("0.9.9").matches(spec)
+    assert not v("2.0.0").matches(spec)
+
+
+def test_whitespace_around_comparisons_is_ignored():
+    assert v("1.5.0").matches(" >= 1.0 , < 2.0 ")
+    assert not v("2.0.0").matches(" >= 1.0 , < 2.0 ")
+
+
+@pytest.mark.parametrize(
+    "spec", ["invalid", "2.0.0", "~1.0", ">=1.0,", ">=", ">=1.0.0.0.0", "<256"]
+)
+def test_malformed_spec_raises(spec):
+    with pytest.raises(ValueError, match="Invalid version match"):
+        v("1.0").matches(spec)

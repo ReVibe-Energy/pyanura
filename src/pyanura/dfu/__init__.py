@@ -5,8 +5,9 @@ root describing one flashable image per firmware component ("app", "net"),
 along with target version/build metadata and version constraints on the
 firmware already installed on the device. :func:`read_bundle` reads the
 images the manifest names and exposes the manifest as written, as a type per
-manifest version; :class:`Version` and :class:`VersionSet` parse the version
-strings and constraints it holds.
+manifest version; :class:`Version` parses the version strings it holds, and
+:meth:`Version.matches` tests a version against its version match
+specifications.
 """
 
 from .bundle import (
@@ -16,7 +17,7 @@ from .bundle import (
     ManifestV1Image,
     read_bundle,
 )
-from .version import Version, VersionSet
+from .version import Version
 
 __all__ = [
     "Bundle",
@@ -24,6 +25,5 @@ __all__ = [
     "ManifestV1",
     "ManifestV1Image",
     "Version",
-    "VersionSet",
     "read_bundle",
 ]

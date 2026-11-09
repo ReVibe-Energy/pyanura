@@ -12,11 +12,11 @@ from pyanura_cli.components import (
     unmet_dependencies,
 )
 
-from pyanura.dfu import Version, VersionSet
+from pyanura.dfu import Version
 
 
 def _make_dependency(name, constraints):
-    return Dependency(name=name, version=VersionSet(constraints=constraints))
+    return Dependency(name=name, specs=(constraints,))
 
 
 def _make_component(name, version, dependencies=None):
@@ -96,8 +96,8 @@ def test_parse_bundle_v1():
     assert app.contents == b"app firmware"
     assert len(app.dependencies) == 1
     assert app.dependencies[0].name == "net"
-    assert Version.from_string("26.0.0") in app.dependencies[0].version
-    assert Version.from_string("25.9.9") not in app.dependencies[0].version
+    assert app.dependencies[0].satisfied_by(Version.from_string("26.0.0"))
+    assert not app.dependencies[0].satisfied_by(Version.from_string("25.9.9"))
     assert net.version == Version.from_string("26.1.0")
     assert net.contents == b"net firmware"
     assert net.dependencies == []
@@ -157,7 +157,7 @@ def test_total_dependencies_single_dependency():
     )
     assert len(result) == 1
     assert result[0].name == "app"
-    assert result[0].version.constraints == VersionSet(constraints="==1.0").constraints
+    assert result[0].specs == ("==1.0",)
 
 
 def test_total_dependencies_multiple_dependencies():
@@ -173,9 +173,9 @@ def test_total_dependencies_multiple_dependencies():
     )
     assert len(result) == 2
     assert result[0].name == "foo"
-    assert result[0].version.constraints == VersionSet(constraints="==1.0").constraints
+    assert result[0].specs == ("==1.0",)
     assert result[1].name == "bar"
-    assert result[1].version.constraints == VersionSet(constraints="==2.0").constraints
+    assert result[1].specs == ("==2.0",)
 
 
 def test_total_dependencies_intersection():
@@ -191,12 +191,7 @@ def test_total_dependencies_intersection():
     )
     assert len(result) == 1
     assert result[0].name == "foo"
-    # The following assertion is awkward and fragile. VersionSet does not
-    # support the type of equivalence checking we would prefer to make here.
-    assert (
-        result[0].version.constraints
-        == VersionSet(constraints="!=1.0,!=2.0").constraints
-    )
+    assert result[0].specs == ("!=1.0", "!=2.0")
 
 
 def test_total_dependencies_satisfied_by_preceding_component():
@@ -212,7 +207,7 @@ def test_total_dependencies_satisfied_by_preceding_component():
     )
     assert len(result) == 1
     assert result[0].name == "app"
-    assert result[0].version.constraints == VersionSet(constraints="==1.0").constraints
+    assert result[0].specs == ("==1.0",)
 
 
 def test_total_dependencies_all_satisfied_within_bundle():
@@ -273,7 +268,7 @@ def test_unmet_dependencies_checks_every_dependency():
     )
     assert [u.dependency.name for u in unmet] == ["net"]
     assert unmet[0].installed == Version.from_string("3.0.0")
-    assert str(unmet[0]) == "requires 'net' >=4.0.0.0, device reports 3.0.0.0"
+    assert str(unmet[0]) == "requires 'net' >=4.0.0, device reports 3.0.0.0"
 
 
 def test_unmet_dependencies_reports_all_failures():
@@ -292,7 +287,7 @@ def test_unmet_dependencies_unknown_component():
     assert [u.dependency.name for u in unmet] == ["bootloader"]
     assert unmet[0].installed is None
     assert str(unmet[0]) == (
-        "requires 'bootloader' >=1.0.0.0, installed 'bootloader' version is unknown"
+        "requires 'bootloader' >=1.0.0, installed 'bootloader' version is unknown"
     )
 
 
