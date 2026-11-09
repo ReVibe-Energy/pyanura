@@ -1,3 +1,4 @@
+import re
 from collections import namedtuple
 from typing import Self
 
@@ -9,11 +10,14 @@ _VersionTuple = namedtuple(
     defaults=(0, 0, 0),  # defaults for minor, patch and tweak
 )
 
+_PART = re.compile(r"[0-9]+")
+
 
 class Version(_VersionTuple):
     """
     Represents a version number with major, minor, patch and version tweak
-    components.
+    components, each in the range 0-255 as in the bit-packed format that
+    Anura devices use.
     """
 
     def __str__(self) -> str:
@@ -22,15 +26,26 @@ class Version(_VersionTuple):
     @classmethod
     def from_string(cls, version_str: str) -> Self:
         """
-        Parse a version string in the format "major.minor.patch.tweak".
+        Parse a version string in the format "major[.minor[.patch[.tweak]]]".
+
+        Omitted components are 0.
+
+        Raises:
+            ValueError: If the string has more than four components, or one
+                that is not a decimal number in the range 0-255.
         """
         parts = version_str.split(".")
-        major = int(parts[0])
-        minor = int(parts[1]) if len(parts) > 1 else 0
-        patch = int(parts[2]) if len(parts) > 2 else 0
-        tweak = int(parts[3]) if len(parts) > 3 else 0
-
-        return cls(major, minor, patch, tweak)
+        if len(parts) > 4:
+            raise ValueError(f"Invalid version {version_str!r}: too many components")
+        numbers = []
+        for part in parts:
+            if not _PART.fullmatch(part) or int(part) > 255:
+                raise ValueError(
+                    f"Invalid version {version_str!r}: components must be"
+                    " numbers in the range 0-255"
+                )
+            numbers.append(int(part))
+        return cls(*numbers)
 
     @classmethod
     def from_numeric(cls, version_numeric: int) -> Self:

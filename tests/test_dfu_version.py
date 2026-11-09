@@ -8,6 +8,16 @@ def test_version_from_string():
     assert Version.from_string("1.2") == Version(1, 2, 0, 0)
     assert Version.from_string("1.2.3") == Version(1, 2, 3, 0)
     assert Version.from_string("1.2.3.4") == Version(1, 2, 3, 4)
+    assert Version.from_string("255.255.255.255") == Version(255, 255, 255, 255)
+
+
+@pytest.mark.parametrize(
+    "version_str",
+    ["", "1.2.3.4.5", "256.0.0", "1.-2", "26.5.0+99", " 1.2", "1..2", "1.2.", "a.b"],
+)
+def test_version_from_string_rejects_invalid(version_str):
+    with pytest.raises(ValueError, match="Invalid version"):
+        Version.from_string(version_str)
 
 
 def test_version_from_numeric():
