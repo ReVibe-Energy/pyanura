@@ -12,13 +12,12 @@ import zeroconf
 
 from pyanura.avss import UNLIMITED, ReportType
 from pyanura.avss.transport import ProxyAVSSTransport
-from pyanura.dfu import Version
+from pyanura.dfu import Version, read_bundle
 from pyanura.transceiver.client import TransceiverClient
 from pyanura.transceiver.models import BluetoothAddrLE, ScanNodesReceivedEvent
 from pyanura.transceiver.transport import USBTransport
 
 from .bundle import TransceiverTarget, apply_bundle
-from .components import parse_bundle
 from .connect import avss_client
 from .progress import upload_progress
 
@@ -298,7 +297,7 @@ def upgrade(host, port, file, confirm_only):
 
         if not confirm_only and zipfile.is_zipfile(io.BytesIO(image)):
             try:
-                bundle = parse_bundle(image)
+                bundle = read_bundle(image)
             except ValueError as ex:
                 click.echo(f"Error: {ex}", err=True)
                 sys.exit(1)
