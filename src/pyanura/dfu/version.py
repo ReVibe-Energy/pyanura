@@ -1,3 +1,4 @@
+import re
 from collections import namedtuple
 from typing import Self
 
@@ -9,11 +10,17 @@ _VersionTuple = namedtuple(
     defaults=(0, 0, 0),  # defaults for minor, patch and tweak
 )
 
+_PART = re.compile(r"[0-9]+")
+
+# NB! The order matters: "<=" must be tried before "<", and ">=" before ">".
+_OPERATORS = ("==", "!=", "<=", ">=", "<", ">")
+
 
 class Version(_VersionTuple):
     """
     Represents a version number with major, minor, patch and version tweak
-    components.
+    components, each in the range 0-255 as in the bit-packed format that
+    Anura devices use.
     """
 
     def __str__(self) -> str:
@@ -22,15 +29,26 @@ class Version(_VersionTuple):
     @classmethod
     def from_string(cls, version_str: str) -> Self:
         """
-        Parse a version string in the format "major.minor.patch.tweak".
+        Parse a version string in the format "major[.minor[.patch[.tweak]]]".
+
+        Omitted components are 0.
+
+        Raises:
+            ValueError: If the string has more than four components, or one
+                that is not a decimal number in the range 0-255.
         """
         parts = version_str.split(".")
-        major = int(parts[0])
-        minor = int(parts[1]) if len(parts) > 1 else 0
-        patch = int(parts[2]) if len(parts) > 2 else 0
-        tweak = int(parts[3]) if len(parts) > 3 else 0
-
-        return cls(major, minor, patch, tweak)
+        if len(parts) > 4:
+            raise ValueError(f"Invalid version {version_str!r}: too many components")
+        numbers = []
+        for part in parts:
+            if not _PART.fullmatch(part) or int(part) > 255:
+                raise ValueError(
+                    f"Invalid version {version_str!r}: components must be"
+                    " numbers in the range 0-255"
+                )
+            numbers.append(int(part))
+        return cls(*numbers)
 
     @classmethod
     def from_numeric(cls, version_numeric: int) -> Self:
@@ -50,85 +68,59 @@ class Version(_VersionTuple):
         """
         return (self.major << 24) | (self.minor << 16) | (self.patch << 8) | self.tweak
 
+    def matches(self, spec: str) -> bool:
+        """
+        Whether this version satisfies a version match specification.
 
-class VersionSet:
+        A specification, as held by a bundle manifest's ``*_version_match``
+        keys, is a comma-separated list of comparisons such as
+        ``">=26.4.0,<27"``, all of which must hold. The operators are ``==``,
+        ``!=``, ``<``, ``<=``, ``>`` and ``>=``; whitespace around a
+        comparison or its version is ignored. An empty specification matches
+        every version.
+
+        Raises:
+            ValueError: If the specification is malformed.
+        """
+        return all(_compare(self, op, version) for op, version in _parse_spec(spec))
+
+
+def _parse_spec(spec: str) -> list[tuple[str, Version]]:
+    """Parse a version match specification into (operator, version) pairs.
+
+    Raises:
+        ValueError: If the specification is malformed.
     """
-    Represents a set of versions. A VersionSet can be used for checking if a
-    Version instance is in the set by doing `Version() in VersionSet()`.
+    if not spec.strip():
+        return []
+    comparisons = []
+    for comparison in spec.split(","):
+        comparison = comparison.strip()
+        op = next((op for op in _OPERATORS if comparison.startswith(op)), None)
+        if op is None:
+            raise ValueError(
+                f"Invalid version match {spec!r}: {comparison!r} has no operator"
+            )
+        try:
+            version = Version.from_string(comparison[len(op) :].strip())
+        except ValueError as e:
+            raise ValueError(f"Invalid version match {spec!r}: {e}") from None
+        comparisons.append((op, version))
+    return comparisons
 
-    A VersionSet is defined by a set of constraints. For a `Version` to be
-    considered within a `VersionSet`, it must fulfill all constraints. A
-    VersionSet without constraints, `VersionSet()` is the set of all possible
-    versions.
 
-    The constraints are represented by a list of tuples, where each tuple
-    contains an operator and a Version instance.
-
-    To initialize a VersionSet, provide a string of constraints in the format
-    ">=1.2.3,<2.0.0". The operators can be one of the following: >=, >, <=, <,
-    ==, !=.
-
-    Example:
-    >>> version_set = VersionSet(constraints=">=1.0.0,<2.0.0")
-    >>> version = Version.from_string("1.5.0")
-    >>> version in version_set
-    True
-    """
-
-    def __init__(self, *, constraints: str | None = None):
-        """
-        Parse a version constraint string in the format ">=1.2.3,<2.0.0".
-        """
-        self.constraints: list[tuple[str, Version]] = []
-        if not constraints:
-            return
-        for constraint in constraints.split(","):
-            # NB! The order of the operators matters. Strings starting with "<="
-            # also start with "<". Therefore, check for "<=" before "<".
-            for op in ("==", "!=", "<=", ">=", "<", ">"):
-                if constraint.startswith(op):
-                    self.constraints.append(
-                        (op, Version.from_string(constraint[len(op) :]))
-                    )
-                    break
-            else:
-                raise ValueError(f"Invalid constraint: '{constraint}'")
-
-    def __str__(self) -> str:
-        return ",".join(f"{op}{version}" for op, version in self.constraints)
-
-    def __contains__(self, version: Version) -> bool:
-        """
-        Check if a Version instance satisfies the constraints in the VersionSet.
-        """
-        for operator, constraint_version in self.constraints:
-            if operator == ">=" and not (version >= constraint_version):
-                return False
-            elif operator == ">" and not (version > constraint_version):
-                return False
-            elif operator == "<=" and not (version <= constraint_version):
-                return False
-            elif operator == "<" and not (version < constraint_version):
-                return False
-            elif operator == "==" and not (version == constraint_version):
-                return False
-            elif operator == "!=" and not (version != constraint_version):
-                return False
-        return True
-
-    def intersection(self, other: "VersionSet") -> "VersionSet":
-        """
-        Compute the intersection between this VersionSet and another VersionSet.
-
-        The intersection of two VersionSets contains all versions that satisfy
-        both sets of constraints.
-
-        Args:
-            other: Another VersionSet instance to intersect with.
-
-        Returns:
-            A new VersionSet representing the intersection of both sets.
-        """
-        result = VersionSet()
-        result.constraints = self.constraints + other.constraints
-        return result
+def _compare(version: Version, op: str, other: Version) -> bool:
+    match op:
+        case "==":
+            return version == other
+        case "!=":
+            return version != other
+        case "<":
+            return version < other
+        case "<=":
+            return version <= other
+        case ">":
+            return version > other
+        case ">=":
+            return version >= other
+    raise AssertionError(op)

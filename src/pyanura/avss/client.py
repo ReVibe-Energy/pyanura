@@ -177,9 +177,10 @@ class _ReportBuffer:
         return Report.from_record(bytes(self._buffer), transfer_info=transfer_info)
 
 
-def _count(count: int | Unlimited | None) -> int | Unlimited:
-    """Normalize a report count argument; None means unlimited."""
-    return UNLIMITED if count is None else count
+def _check_count(count: object) -> None:
+    """Reject None as a report count, which used to mean `UNLIMITED`."""
+    if count is None:
+        raise TypeError("count must be a number of reports or UNLIMITED, not None")
 
 
 def _push_deadline(deadline: asyncio.Timeout) -> None:
@@ -435,44 +436,48 @@ class AVSSClient:
 
         return None
 
-    async def report_snippets(
-        self, count: int | Unlimited | None, auto_resume: bool
-    ) -> None:
+    async def report_snippets(self, count: int | Unlimited, auto_resume: bool) -> None:
         """Request snippet reports.
 
         Args:
-            count: Number of reports, or `UNLIMITED` (None is accepted as a
-                   synonym) for no limit.
+            count: Number of reports, or `UNLIMITED` for no limit.
         """
-        arg = ReportSnippetArgs(count=_count(count), auto_resume=auto_resume)
+        _check_count(count)
+        arg = ReportSnippetArgs(count=count, auto_resume=auto_resume)
         return await self._void_request(OpCode.REPORT_SNIPPETS, arg)
 
-    async def report_capture(
-        self, count: int | Unlimited | None, auto_resume: bool
-    ) -> None:
-        arg = ReportCaptureArgs(count=_count(count), auto_resume=auto_resume)
+    async def report_capture(self, count: int | Unlimited, auto_resume: bool) -> None:
+        """Request capture reports.
+
+        Args:
+            count: Number of reports, or `UNLIMITED` for no limit.
+        """
+        _check_count(count)
+        arg = ReportCaptureArgs(count=count, auto_resume=auto_resume)
         return await self._void_request(OpCode.REPORT_CAPTURE, arg)
 
     async def report_aggregates(
-        self, count: int | Unlimited | None, auto_resume: bool
+        self, count: int | Unlimited, auto_resume: bool
     ) -> None:
-        arg = ReportAggregatesArgs(count=_count(count), auto_resume=auto_resume)
+        """Request aggregates reports.
+
+        Args:
+            count: Number of reports, or `UNLIMITED` for no limit.
+        """
+        _check_count(count)
+        arg = ReportAggregatesArgs(count=count, auto_resume=auto_resume)
         return await self._void_request(OpCode.REPORT_AGGREGATES, arg)
 
-    async def report_health(
-        self,
-        count: int | Unlimited | None = None,
-        *,
-        active: bool | None = None,
-    ) -> None:
-        if active is not None:
-            arg = ReportHealthArgs(count=active)
-        elif count is None or count is UNLIMITED:
-            # Send True rather than null for "unlimited" since this is
-            # compatible with older sensor firmware versions.
-            arg = ReportHealthArgs(count=True)
-        else:
-            arg = ReportHealthArgs(count=count)
+    async def report_health(self, count: int | Unlimited) -> None:
+        """Request health reports.
+
+        Args:
+            count: Number of reports, or `UNLIMITED` for no limit.
+        """
+        _check_count(count)
+        # Send True rather than null for "unlimited" since this is
+        # compatible with older sensor firmware versions.
+        arg = ReportHealthArgs(count=True if count is UNLIMITED else count)
         return await self._void_request(OpCode.REPORT_HEALTH, arg)
 
     async def report_stats(self) -> None:

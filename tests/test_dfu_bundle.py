@@ -50,7 +50,7 @@ def test_read_bundle_v1():
 
     assert bundle.manifest == ManifestV1(
         firmware_pn="FW-1001",
-        compatible_device_pns=["VS1-A", "VS1-B"],
+        compatible_device_pns=("VS1-A", "VS1-B"),
         app=ManifestV1Image(
             target_version="26.5.0",
             path="app.bin",
@@ -132,9 +132,10 @@ def test_read_bundle_rejects_non_object_manifest():
         read_bundle(_make_bundle([1], {}))  # pyright: ignore[reportArgumentType]
 
 
-def test_read_bundle_rejects_unsupported_version():
-    with pytest.raises(ValueError, match="Unsupported firmware bundle version: 2"):
-        read_bundle(_make_bundle({"version": 2}, {}))
+@pytest.mark.parametrize("version", [2, True, 1.0, "1", None])
+def test_read_bundle_rejects_unsupported_version(version):
+    with pytest.raises(ValueError, match="Unsupported firmware bundle version: "):
+        read_bundle(_make_bundle({"version": version}, {}))
 
 
 def test_read_bundle_rejects_missing_image():
@@ -233,6 +234,21 @@ def test_read_bundle_rejects_duplicate_entries():
         (
             {"version": 1, "compatible_device_pns": "VS1-A"},
             "'compatible_device_pns' is not a list of strings",
+        ),
+        (
+            {"version": 1, "app": {"target_version": "26.5.0+99", "path": "app.bin"}},
+            "'app' 'target_version' is invalid",
+        ),
+        (
+            {
+                "version": 1,
+                "app": {
+                    "target_version": "26.5.0",
+                    "path": "app.bin",
+                    "net_version_match": "~26.4",
+                },
+            },
+            "'app' 'net_version_match' is invalid",
         ),
     ],
 )

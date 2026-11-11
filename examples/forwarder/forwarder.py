@@ -9,8 +9,8 @@ from urllib.parse import urlparse
 import paho.mqtt.client as mqtt
 
 import pyanura.avss as avss
+from pyanura.avss.transport import ProxyAVSSTransport
 from pyanura.transceiver import BluetoothAddrLE, TransceiverClient
-from pyanura.transceiver.proxy_avss_client import ProxyAVSSClient
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -37,7 +37,8 @@ class AnuraSupervisor:
 
         while True:
             try:
-                async with ProxyAVSSClient(transceiver, node_addr) as node:
+                async with ProxyAVSSTransport(transceiver, node_addr) as transport:
+                    node = avss.AVSSClient(transport)
                     logger.info("Waiting for node to become available")
                     # Probe for node availability by sending periodic requests.
                     while True:
@@ -209,9 +210,9 @@ class Forwarder(AnuraSupervisor):
                 logger.info("Node will reboot to apply settings")
 
         logger.info("Request health reports")
-        await node.report_health()
+        await node.report_health(count=avss.UNLIMITED)
         logger.info("Request snippet reports")
-        await node.report_snippets(count=None, auto_resume=True)
+        await node.report_snippets(count=avss.UNLIMITED, auto_resume=True)
 
     async def on_avss_report(self, node, report, node_id):
         if isinstance(report, avss.HealthReport):

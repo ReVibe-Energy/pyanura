@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
 from collections.abc import Callable
+from types import TracebackType
+from typing import Self
 
 
 class AVSSTransport(ABC):
@@ -10,8 +12,26 @@ class AVSSTransport(ABC):
     notification dispatching.
 
     The transport lifecycle is managed explicitly via open() and close() methods,
-    allowing for flexible retry logic and connection state management.
+    allowing for flexible retry logic and connection state management. A
+    transport is also an async context manager that opens it on entry and
+    closes it on exit::
+
+        async with BleakAVSSTransport(address) as transport:
+            client = AVSSClient(transport)
+            ...
     """
+
+    async def __aenter__(self) -> Self:
+        await self.open()
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        await self.close()
 
     @abstractmethod
     async def open(self) -> None:

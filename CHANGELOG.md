@@ -29,10 +29,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `pyanura.dfu`: support for ANURA firmware bundles. `read_bundle` reads a
   bundle into a `Bundle`: the images its `meta.json` manifest names, and the
   manifest as written, as a type per manifest version (`ManifestV1`),
-  including the `firmware_pn` and `compatible_device_pns` keys; `Version` and
-  `VersionSet` parse the versions and constraints it holds. It rejects a
-  manifest larger than 32 KiB or an image larger than 1 MiB once
-  decompressed, and an archive with duplicate entry names.
+  including the `firmware_pn` and `compatible_device_pns` keys. `Version`
+  parses the versions it holds, and `Version.matches` tests a version against
+  its `*_version_match` specifications. It rejects a manifest larger than
+  32 KiB or an image larger than 1 MiB once decompressed, an archive with
+  duplicate entry names, and a manifest whose versions or version match
+  specifications do not parse.
+- `AVSSTransport` is an async context manager, opening the transport on
+  entry and closing it on exit.
 - The CLI `avss upgrade` and `transceiver upgrade` commands accept a firmware
   bundle as `--file` in addition to a raw image.
 - `pyanura.avss.procedures.update_settings`: writes settings to a node, split
@@ -60,9 +64,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `unmarshal()` decodes unions of any member types, not only `X | None`.
 - `unmarshal()` is overloaded so that passing a union or a parameterised
   `list`/`dict` type-checks; the overload returns `Any`.
-- Report `count` arguments accept `pyanura.avss.UNLIMITED` for no limit; the
-  model fields are typed `int | Unlimited`. `AVSSClient.report_*` still
-  accept `count=None`.
+- Report `count` arguments take `pyanura.avss.UNLIMITED` for no limit; the
+  model fields are typed `int | Unlimited`. `AVSSClient.report_*` no longer
+  accept `count=None`, and `report_health` no longer defaults to unlimited
+  reports: every one of them takes a count.
 - `TransceiverClient` requests fail with `TransceiverConnectionError`, and
   the connection is closed, if the transceiver does not answer within 5
   seconds, instead of waiting indefinitely. `request()` takes a `timeout`
@@ -83,6 +88,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The USB transceiver transport no longer sends keepalive pings.
 - `ProxyAVSSTransport.open()` fails with `AVSSConnectionError` without retrying
   if the transceiver reports the node's control point as busy.
+- `ProxyAVSSTransport.open()` fails with `AVSSConnectionError` if the
+  transceiver is not assigned to the node, instead of waiting for it
+  indefinitely.
 - `ProxyAVSSTransport.program_write()` and `control_point_request()` raise
   `AVSSConnectionError` when the node is unavailable or the transceiver
   connection broke, and `AVSSTransportError` for other request failures,
@@ -103,9 +111,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Deprecated
 - Importing the library as `anura`. The old name still works, resolving to
   the same modules as `pyanura`, but emits a `DeprecationWarning` and will be
-  removed in a future release.
+  removed in 3.0.
 
 ### Removed
+- `BleakAVSSClient` and `ProxyAVSSClient`, deprecated since 1.0.0a1. Use
+  `BleakAVSSTransport` or `ProxyAVSSTransport` with `AVSSClient` instead.
+- The `active` argument of `AVSSClient.report_health`.
 - The CLI `avss write-settings`, replaced by `avss update-settings` and
   `avss reset-settings`.
 

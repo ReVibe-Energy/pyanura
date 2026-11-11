@@ -4,8 +4,7 @@ The library used to be imported as ``anura``, which clashes with an
 unrelated package of the same name on PyPI. ``import anura.avss`` and the
 like keep working for now, but resolve to the very same module objects as
 ``pyanura.avss``, so classes, exceptions and monkeypatching behave
-identically under either name. This shim will be removed in a future
-release.
+identically under either name. This shim will be removed in pyanura 3.0.
 """
 
 import importlib
@@ -17,8 +16,8 @@ import types
 import warnings
 
 warnings.warn(
-    "The 'anura' import name is deprecated and will be removed in a future"
-    " release; import 'pyanura' instead.",
+    "The 'anura' import name is deprecated and will be removed in pyanura"
+    " 3.0; import 'pyanura' instead.",
     DeprecationWarning,
     stacklevel=2,
 )

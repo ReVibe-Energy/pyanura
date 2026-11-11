@@ -16,14 +16,14 @@ from bleak.exc import BleakError
 
 import pyanura.avss as avss
 from pyanura.avss import procedures
-from pyanura.avss.bleak_avss_client import BleakAVSSClient
+from pyanura.avss.transport import BleakAVSSTransport, ProxyAVSSTransport
 from pyanura.dfu import Version
 from pyanura.transceiver.client import TransceiverClient
 from pyanura.transceiver.models import BluetoothAddrLE
-from pyanura.transceiver.proxy_avss_client import ProxyAVSSClient
 
 from .bundle import BleakAVSSTarget, ProxyAVSSTarget, apply_bundle
 from .components import parse_bundle
+from .connect import avss_client
 from .progress import upload_progress
 from .session import SessionFile
 
@@ -43,7 +43,9 @@ def with_avss_client(f):
         async def do_async():
             try:
                 logger.info(f"Connecting to {address}")
-                async with BleakAVSSClient(address.address_str()) as client:
+                async with avss_client(
+                    BleakAVSSTransport(address.address_str())
+                ) as client:
                     logger.info("Connected")
                     return await f(*args, client=client, **kwargs)
             except BleakError as ex:
@@ -53,14 +55,14 @@ def with_avss_client(f):
         async def do_proxy_async():
             logger.info(f"Connect to transceiver {transceiver}")
             async with TransceiverClient(transceiver, transceiver_port) as trx_client:
-                # Check if the transceiver is assigned to the given node
-                resp = await trx_client.get_assigned_nodes()
-                if not any(node.address == address for node in resp.nodes):
-                    click.echo(f"Error: Transceiver not assigned to node {address}")
+                try:
+                    async with avss_client(
+                        ProxyAVSSTransport(trx_client, address)
+                    ) as client:
+                        return await f(*args, client=client, **kwargs)
+                except avss.AVSSConnectionError as ex:
+                    click.echo(f"Error: {ex}", err=True)
                     sys.exit(1)
-
-                async with ProxyAVSSClient(trx_client, address) as client:
-                    return await f(*args, client=client, **kwargs)
 
         if transceiver:
             asyncio.run(do_proxy_async())
@@ -149,10 +151,15 @@ def upgrade(transceiver, transceiver_port, address, file, confirm_only):
         try:
             logger.info(f"Connect to transceiver {transceiver}")
             async with TransceiverClient(transceiver, transceiver_port) as trx_client:
-                # Check if the transceiver is assigned to the given node
+                # ProxyAVSSTarget retries a failed connection, as the node
+                # takes a while to come back from a reboot. Check the
+                # assignment first, so that this failure is not retried.
                 resp = await trx_client.get_assigned_nodes()
                 if not any(node.address == address for node in resp.nodes):
-                    click.echo(f"Error: Transceiver not assigned to node {address}")
+                    click.echo(
+                        f"Error: Transceiver is not assigned to node {address}",
+                        err=True,
+                    )
                     sys.exit(1)
 
                 await apply_bundle(ProxyAVSSTarget(trx_client, address), bundle)
@@ -173,7 +180,7 @@ def upgrade(transceiver, transceiver_port, address, file, confirm_only):
             image_index = 0
 
             if not confirm_only:
-                async with BleakAVSSClient(device) as client:
+                async with avss_client(BleakAVSSTransport(device)) as client:
                     with upload_progress(
                         len(binary), "Uploading firmware"
                     ) as on_progress:
@@ -190,7 +197,7 @@ def upgrade(transceiver, transceiver_port, address, file, confirm_only):
                     address.address_str(), timeout=60
                 )
 
-            async with BleakAVSSClient(device) as client:
+            async with avss_client(BleakAVSSTransport(device)) as client:
                 click.echo("Confirming new image")
                 await client.confirm_upgrade(image_index)
         except Exception as ex:
@@ -201,16 +208,12 @@ def upgrade(transceiver, transceiver_port, address, file, confirm_only):
         try:
             logger.info(f"Connect to transceiver {transceiver}")
             async with TransceiverClient(transceiver, transceiver_port) as trx_client:
-                # Check if the transceiver is assigned to the given node
-                resp = await trx_client.get_assigned_nodes()
-                if not any(node.address == address for node in resp.nodes):
-                    click.echo(f"Error: Transceiver not assigned to node {address}")
-                    sys.exit(1)
-
                 image_index = 0
 
                 if not confirm_only:
-                    async with ProxyAVSSClient(trx_client, address) as client:
+                    async with avss_client(
+                        ProxyAVSSTransport(trx_client, address)
+                    ) as client:
                         with upload_progress(
                             len(binary), "Uploading firmware"
                         ) as on_progress:
@@ -222,7 +225,9 @@ def upgrade(transceiver, transceiver_port, address, file, confirm_only):
                     click.echo("Waiting for node to reboot with new firmware image...")
                     await asyncio.sleep(30.0)
 
-                async with ProxyAVSSClient(trx_client, address) as client:
+                async with avss_client(
+                    ProxyAVSSTransport(trx_client, address)
+                ) as client:
                     while True:
                         try:
                             version = await client.get_version()
@@ -500,15 +505,15 @@ async def collect_reports(
     with client.reports(parse=False) as reports:
         if snippets:
             logger.info("Requesting snippet reports")
-            await client.report_snippets(count=None, auto_resume=True)
+            await client.report_snippets(count=avss.UNLIMITED, auto_resume=True)
 
         if health:
             logger.info("Requesting health reports")
-            await client.report_health(count=None)
+            await client.report_health(count=avss.UNLIMITED)
 
         if captures:
             logger.info("Requesting capture reports")
-            await client.report_capture(count=None, auto_resume=True)
+            await client.report_capture(count=avss.UNLIMITED, auto_resume=True)
 
         if settings:
             logger.info("Requesting settings report")
@@ -599,13 +604,13 @@ async def quick_measurement(
 
     with client.reports(parse=False) as reports:
         if captures:
-            await client.report_capture(count=None, auto_resume=False)
+            await client.report_capture(count=avss.UNLIMITED, auto_resume=False)
 
         if snippets:
-            await client.report_snippets(count=None, auto_resume=False)
+            await client.report_snippets(count=avss.UNLIMITED, auto_resume=False)
 
         if aggregates:
-            await client.report_aggregates(count=None, auto_resume=False)
+            await client.report_aggregates(count=avss.UNLIMITED, auto_resume=False)
 
         await client.trigger_measurement(duration_ms=duration * 1000)
 

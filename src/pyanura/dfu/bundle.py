@@ -15,6 +15,8 @@ import zlib
 from collections import Counter
 from dataclasses import dataclass
 
+from .version import Version, _parse_spec
+
 __all__ = [
     "Bundle",
     "Manifest",
@@ -51,7 +53,7 @@ class ManifestV1:
     """
 
     firmware_pn: str | None = None
-    compatible_device_pns: list[str] | None = None
+    compatible_device_pns: tuple[str, ...] | None = None
     app: ManifestV1Image | None = None
     net: ManifestV1Image | None = None
 
@@ -83,16 +85,37 @@ def _str(obj: dict, key: str, where: str) -> str:
     return value
 
 
+def _version(obj: dict, key: str, where: str) -> str:
+    value = _str(obj, key, where)
+    try:
+        Version.from_string(value)
+    except ValueError as e:
+        raise ValueError(f"Bundle manifest {where}'{key}' is invalid: {e}") from None
+    return value
+
+
+def _optional_version_match(obj: dict, key: str, where: str) -> str | None:
+    value = _optional_str(obj, key, where)
+    if value is not None:
+        try:
+            _parse_spec(value)
+        except ValueError as e:
+            raise ValueError(
+                f"Bundle manifest {where}'{key}' is invalid: {e}"
+            ) from None
+    return value
+
+
 def _parse_image_v1(name: str, data: object) -> ManifestV1Image:
     where = f"'{name}' "
     if not isinstance(data, dict):
         raise ValueError(f"Bundle manifest {where}is not an object")
     return ManifestV1Image(
-        target_version=_str(data, "target_version", where),
+        target_version=_version(data, "target_version", where),
         path=_str(data, "path", where),
         target_build=_optional_str(data, "target_build", where),
-        app_version_match=_optional_str(data, "app_version_match", where),
-        net_version_match=_optional_str(data, "net_version_match", where),
+        app_version_match=_optional_version_match(data, "app_version_match", where),
+        net_version_match=_optional_version_match(data, "net_version_match", where),
     )
 
 
@@ -113,7 +136,7 @@ def _parse_manifest_v1(manifest: dict) -> ManifestV1:
 
     return ManifestV1(
         firmware_pn=_optional_str(manifest, "firmware_pn", ""),
-        compatible_device_pns=pns,
+        compatible_device_pns=tuple(pns) if pns is not None else None,
         app=images.get("app"),
         net=images.get("net"),
     )
@@ -159,9 +182,11 @@ def read_bundle(bundle_bytes: bytes, /) -> Bundle:
 
     Raises:
         ValueError: If the bundle is not a zip archive, has duplicate entry
-            names, has no valid manifest of a supported version, or lacks an
-            image the manifest names or has one that is corrupt or too large
-            (32 KiB for the manifest, 1 MiB for each image).
+            names, has no valid manifest of a supported version (including
+            one with a version or version match specification that does not
+            parse), or lacks an image the manifest names or has one that is
+            corrupt or too large (32 KiB for the manifest, 1 MiB for each
+            image).
     """
     try:
         zip_file = zipfile.ZipFile(io.BytesIO(bundle_bytes))
@@ -190,7 +215,8 @@ def read_bundle(bundle_bytes: bytes, /) -> Bundle:
             raise ValueError("Bundle meta.json is not a JSON object")
 
         version = manifest_json.get("version")
-        if version == 1:
+        # Not `version == 1`, which True and 1.0 would pass as well.
+        if type(version) is int and version == 1:
             manifest = _parse_manifest_v1(manifest_json)
         else:
             raise ValueError(f"Unsupported firmware bundle version: {version!r}")
