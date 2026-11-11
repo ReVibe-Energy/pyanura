@@ -33,8 +33,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   parses the versions it holds, and `Version.matches` tests a version against
   its `*_version_match` specifications. It rejects a manifest larger than
   32 KiB or an image larger than 1 MiB once decompressed, an archive with
-  duplicate entry names, and a manifest whose versions or version match
-  specifications do not parse.
+  duplicate entry names, a manifest whose versions or version match
+  specifications do not parse, and one that cannot be installed app image
+  first, as a bundle always is.
+- `ManifestV1Image.matches` and `pyanura.dfu.unmet_dependencies` check a
+  bundle's images against the images a device runs (`InstalledImage`):
+  whether an image is already running, and which dependencies are not met.
+  `pyanura.dfu.running_images` reads those images from a firmware info
+  response.
 - `AVSSTransport` is an async context manager, opening the transport on
   entry and closing it on exit.
 - The CLI `avss upgrade` and `transceiver upgrade` commands accept a firmware

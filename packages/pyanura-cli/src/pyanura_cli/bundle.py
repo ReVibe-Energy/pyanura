@@ -1,9 +1,9 @@
 """Applying DFU bundles to AVSS nodes and transceivers.
 
-For each component in the bundle, in order — check its dependencies against
-the installed firmware, skip straight to confirmation if the component is
-already running, otherwise upload, apply, wait for the device to reboot into
-the new image, verify that the image was not reverted, and confirm it.
+For each image in the bundle, in order: if the device already runs it, just
+confirm it. Otherwise check the dependencies against the running firmware,
+upload and apply the image, wait for the device to reboot, check that it
+runs the image, and confirm it.
 """
 
 import asyncio
@@ -19,18 +19,18 @@ from pyanura.avss import procedures
 from pyanura.avss.client import AVSSClient
 from pyanura.avss.exceptions import AVSSOpCodeUnsupportedError
 from pyanura.avss.transport import BleakAVSSTransport, ProxyAVSSTransport
-from pyanura.dfu import Version
+from pyanura.dfu import (
+    Bundle,
+    InstalledImage,
+    ManifestV1Image,
+    Version,
+    running_images,
+    unmet_dependencies,
+)
 from pyanura.transceiver.client import TransceiverClient
 from pyanura.transceiver.exceptions import TransceiverError
 from pyanura.transceiver.models import BluetoothAddrLE
 
-from .components import (
-    Component,
-    Dependency,
-    InstalledComponent,
-    total_dependencies,
-    unmet_dependencies,
-)
 from .connect import avss_client
 from .progress import upload_progress
 
@@ -40,10 +40,10 @@ RECONNECT_TIMEOUT = 60.0
 class BundleSession(Protocol):
     """Bundle operations on a connected device."""
 
-    async def installed(self) -> dict[str, InstalledComponent]: ...
+    async def running(self) -> dict[str, InstalledImage]: ...
 
     async def upload(
-        self, component: Component, progress: Callable[[int], None]
+        self, contents: bytes, progress: Callable[[int], None]
     ) -> None: ...
 
     async def apply(self) -> None: ...
@@ -63,7 +63,7 @@ class AVSSBundleSession:
     def __init__(self, client: AVSSClient):
         self._client = client
 
-    async def installed(self) -> dict[str, InstalledComponent]:
+    async def running(self) -> dict[str, InstalledImage]:
         try:
             info = await self._client.get_firmware_info()
         except AVSSOpCodeUnsupportedError:
@@ -71,27 +71,16 @@ class AVSSBundleSession:
             # version is available and the net image is unknown.
             version_info = await self._client.get_version()
             return {
-                "app": InstalledComponent(
-                    version=Version.from_string(version_info.version),
-                    build=version_info.build_version,
+                "app": InstalledImage(
+                    Version.from_string(version_info.version),
+                    version_info.build_version or None,
                 ),
             }
-        return {
-            "app": InstalledComponent(
-                version=Version.from_numeric(info.app_version),
-                build=info.app_build_version,
-            ),
-            "net": InstalledComponent(
-                version=Version.from_numeric(info.net_version),
-                build=info.net_build_version,
-            ),
-        }
+        return running_images(info)
 
-    async def upload(
-        self, component: Component, progress: Callable[[int], None]
-    ) -> None:
+    async def upload(self, contents: bytes, progress: Callable[[int], None]) -> None:
         await procedures.upload_firmware(
-            self._client, component.contents, image=0, progress=progress
+            self._client, contents, image=0, progress=progress
         )
 
     async def apply(self) -> None:
@@ -159,24 +148,12 @@ class TransceiverBundleSession:
     def __init__(self, client: TransceiverClient):
         self._client = client
 
-    async def installed(self) -> dict[str, InstalledComponent]:
-        info = await self._client.get_firmware_info()
-        return {
-            "app": InstalledComponent(
-                version=Version.from_numeric(info.app_version),
-                build=info.app_build_version,
-            ),
-            "net": InstalledComponent(
-                version=Version.from_numeric(info.net_version),
-                build=info.net_build_version,
-            ),
-        }
+    async def running(self) -> dict[str, InstalledImage]:
+        return running_images(await self._client.get_firmware_info())
 
-    async def upload(
-        self, component: Component, progress: Callable[[int], None]
-    ) -> None:
-        await self._client.dfu_prepare(size=len(component.contents))
-        await self._client.dfu_write_image(component.contents, progress=progress)
+    async def upload(self, contents: bytes, progress: Callable[[int], None]) -> None:
+        await self._client.dfu_prepare(size=len(contents))
+        await self._client.dfu_write_image(contents, progress=progress)
 
     async def apply(self) -> None:
         await self._client.dfu_apply()
@@ -218,63 +195,52 @@ class TransceiverTarget:
 
 
 def _check_dependencies(
-    dependencies: list[Dependency], installed: dict[str, InstalledComponent]
+    images: tuple[tuple[str, ManifestV1Image], ...],
+    running: dict[str, InstalledImage],
 ) -> None:
-    if unmet := unmet_dependencies(dependencies, installed):
+    if unmet := unmet_dependencies(images, running):
         raise RuntimeError("Dependency not met: " + "; ".join(str(u) for u in unmet))
 
 
-async def apply_bundle(target: BundleTarget, components: list[Component]) -> None:
-    """Apply every component of a firmware bundle to a device, in order."""
-    if not components:
-        raise RuntimeError("Bundle contains no firmware components")
+async def apply_bundle(target: BundleTarget, bundle: Bundle) -> None:
+    """Apply every image of a firmware bundle to a device, in order."""
+    images = bundle.manifest.images
+    if not images:
+        raise RuntimeError("Bundle contains no firmware images")
 
-    checked_bundle_dependencies = False
-
-    for component in components:
+    for index, (name, image) in enumerate(images):
         async with target.connect() as session:
-            installed = await session.installed()
+            running = await session.running()
 
-            if not checked_bundle_dependencies:
-                _check_dependencies(total_dependencies(components), installed)
-                checked_bundle_dependencies = True
-
-            current = installed.get(component.name)
-            if current is not None and component.matches_installed(
-                current.version, current.build
-            ):
+            if image.matches(running.get(name)):
                 click.echo(
-                    f"Component '{component.name}' is already running "
-                    f"{component.version}, confirming"
+                    f"Component '{name}' is already running "
+                    f"{image.target_version}, confirming"
                 )
                 await session.confirm()
                 continue
 
-            _check_dependencies(component.dependencies, installed)
+            # Check this image and the ones after it, so that the update
+            # stops before it starts rather than halfway through.
+            _check_dependencies(images[index:], running)
 
+            contents = bundle.images[image.path]
             with upload_progress(
-                len(component.contents),
-                f"Uploading '{component.name}' {component.version}",
+                len(contents), f"Uploading '{name}' {image.target_version}"
             ) as on_progress:
-                await session.upload(component, on_progress)
+                await session.upload(contents, on_progress)
             await session.apply()
 
         click.echo("Waiting for device to reboot with new firmware image...")
         await target.wait_reboot()
 
         async with target.connect() as session:
-            installed = await session.installed()
-            current = installed.get(component.name)
-            if current is None or not component.matches_installed(
-                current.version, current.build
-            ):
-                running = (
-                    f" (running {current.version})"
-                    if current is not None and current.version is not None
-                    else ""
-                )
+            current = (await session.running()).get(name)
+            if not image.matches(current):
+                now = f", it runs {current.version}" if current is not None else ""
                 raise RuntimeError(
-                    f"Device has reverted the '{component.name}' update{running}"
+                    f"Device is not running '{name}' {image.target_version}"
+                    f" after the reboot{now}"
                 )
-            click.echo(f"Confirming '{component.name}' {component.version}")
+            click.echo(f"Confirming '{name}' {image.target_version}")
             await session.confirm()

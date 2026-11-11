@@ -17,12 +17,11 @@ from bleak.exc import BleakError
 import pyanura.avss as avss
 from pyanura.avss import procedures
 from pyanura.avss.transport import BleakAVSSTransport, ProxyAVSSTransport
-from pyanura.dfu import Version
+from pyanura.dfu import Version, read_bundle
 from pyanura.transceiver.client import TransceiverClient
 from pyanura.transceiver.models import BluetoothAddrLE
 
 from .bundle import BleakAVSSTarget, ProxyAVSSTarget, apply_bundle
-from .components import parse_bundle
 from .connect import avss_client
 from .progress import upload_progress
 from .session import SessionFile
@@ -133,7 +132,7 @@ def upgrade(transceiver, transceiver_port, address, file, confirm_only):
 
         if zipfile.is_zipfile(io.BytesIO(binary)):
             try:
-                bundle = parse_bundle(binary)
+                bundle = read_bundle(binary)
             except ValueError as ex:
                 click.echo(f"Error: {ex}", err=True)
                 sys.exit(1)
