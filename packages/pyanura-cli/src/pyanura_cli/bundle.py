@@ -209,24 +209,27 @@ async def apply_bundle(target: BundleTarget, bundle: Bundle) -> None:
         raise RuntimeError("Bundle contains no firmware images")
 
     for index, (name, image) in enumerate(images):
+        # Shown the way the device's versions are, with all four components.
+        target_version = Version.from_string(image.target_version)
+
         async with target.connect() as session:
             running = await session.running()
+
+            # Check this image and the ones after it, so that the update
+            # stops early rather than halfway, if it can be avoided.
+            _check_dependencies(images[index:], running)
 
             if image.matches(running.get(name)):
                 click.echo(
                     f"Component '{name}' is already running "
-                    f"{image.target_version}, confirming"
+                    f"{target_version}, confirming"
                 )
                 await session.confirm()
                 continue
 
-            # Check this image and the ones after it, so that the update
-            # stops before it starts rather than halfway through.
-            _check_dependencies(images[index:], running)
-
             contents = bundle.images[image.path]
             with upload_progress(
-                len(contents), f"Uploading '{name}' {image.target_version}"
+                len(contents), f"Uploading '{name}' {target_version}"
             ) as on_progress:
                 await session.upload(contents, on_progress)
             await session.apply()
@@ -239,8 +242,8 @@ async def apply_bundle(target: BundleTarget, bundle: Bundle) -> None:
             if not image.matches(current):
                 now = f", it runs {current.version}" if current is not None else ""
                 raise RuntimeError(
-                    f"Device is not running '{name}' {image.target_version}"
+                    f"Device is not running '{name}' {target_version}"
                     f" after the reboot{now}"
                 )
-            click.echo(f"Confirming '{name}' {image.target_version}")
+            click.echo(f"Confirming '{name}' {target_version}")
             await session.confirm()

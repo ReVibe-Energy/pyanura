@@ -107,6 +107,15 @@ def test_stops_before_uploading_when_a_later_image_has_an_unmet_dependency():
     assert device.log == []
 
 
+def test_an_image_already_running_is_not_confirmed_when_a_later_image_cannot_install():
+    device = FakeDevice(app="2.0", net="1.0")
+    bundle = make_bundle(app=image("app", "2.0"), net=image("net", "2.0", net=">=1.5"))
+
+    with pytest.raises(RuntimeError, match=r"'net' requires 'net' >=1\.5"):
+        apply(device, bundle)
+    assert device.log == []
+
+
 def test_a_dependency_the_bundle_satisfies_itself_does_not_stop_it():
     device = FakeDevice(app="1.0", net="1.0")
     bundle = make_bundle(app=image("app", "2.0"), net=image("net", "2.0", app=">=2.0"))
@@ -120,7 +129,8 @@ def test_a_reverted_image_fails_the_update_without_confirming():
     device = FakeDevice(revert=True, app="1.0")
 
     with pytest.raises(
-        RuntimeError, match=r"not running 'app' 2\.0 after the reboot, it runs 1"
+        RuntimeError,
+        match=r"not running 'app' 2\.0\.0\.0 after the reboot, it runs 1\.0\.0\.0",
     ):
         apply(device, make_bundle(app=image("app", "2.0")))
     assert "confirm" not in device.log
