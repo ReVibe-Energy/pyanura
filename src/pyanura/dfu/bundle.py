@@ -19,6 +19,7 @@ from .version import Version, _parse_spec
 
 __all__ = [
     "Bundle",
+    "InstalledImage",
     "Manifest",
     "ManifestV1",
     "ManifestV1Image",
@@ -29,6 +30,15 @@ __all__ = [
 # but highly compressed archive can't exhaust memory.
 _MAX_MANIFEST_SIZE = 32 * 1024
 _MAX_IMAGE_SIZE = 1024 * 1024
+
+
+@dataclass(frozen=True)
+class InstalledImage:
+    """A firmware image on a device, as the device reports it."""
+
+    version: Version
+    # None when the device reports no build string.
+    build: str | None = None
 
 
 @dataclass(frozen=True)
@@ -43,6 +53,35 @@ class ManifestV1Image:
     app_version_match: str | None = None
     net_version_match: str | None = None
 
+    @property
+    def dependencies(self) -> tuple[tuple[str, str], ...]:
+        """The image's version match specifications, as (component, spec)."""
+        return tuple(
+            (name, spec)
+            for name, spec in (
+                ("app", self.app_version_match),
+                ("net", self.net_version_match),
+            )
+            if spec is not None
+        )
+
+    def matches(self, installed: InstalledImage | None) -> bool:
+        """Whether an image on a device is this image.
+
+        The build strings are compared when both the bundle and the device
+        have one, since they tell builds apart even where the numeric
+        versions are the same. Otherwise the versions are compared.
+
+        `installed` is None when the device reports no image for the
+        component. The result is then False, since the image is not known to
+        be this one.
+        """
+        if installed is None:
+            return False
+        if self.target_build and installed.build:
+            return installed.build == self.target_build
+        return installed.version == Version.from_string(self.target_version)
+
 
 @dataclass(frozen=True)
 class ManifestV1:
@@ -56,6 +95,20 @@ class ManifestV1:
     compatible_device_pns: tuple[str, ...] | None = None
     app: ManifestV1Image | None = None
     net: ManifestV1Image | None = None
+
+    @property
+    def images(self) -> tuple[tuple[str, ManifestV1Image], ...]:
+        """The images as (component, image), in the order to install them.
+
+        A version 1 bundle installs its "app" image before its "net" image.
+        If the update goes wrong, the app image can roll back and the net
+        image can't, so the step that can't be undone comes last.
+        """
+        return tuple(
+            (name, image)
+            for name, image in (("app", self.app), ("net", self.net))
+            if image is not None
+        )
 
 
 # Union of the supported manifest versions.
@@ -134,20 +187,37 @@ def _parse_manifest_v1(manifest: dict) -> ManifestV1:
         if manifest.get(name) is not None
     }
 
-    return ManifestV1(
+    parsed = ManifestV1(
         firmware_pn=_optional_str(manifest, "firmware_pn", ""),
         compatible_device_pns=tuple(pns) if pns is not None else None,
         app=images.get("app"),
         net=images.get("net"),
     )
+    _check_consistent(parsed)
+    return parsed
+
+
+def _check_consistent(manifest: ManifestV1) -> None:
+    """Check that the bundle can be installed in the order of `images`.
+
+    Raises:
+        ValueError: If an image depends on a component that an earlier image
+            in the bundle installs, at a version the dependency rules out.
+    """
+    installed: dict[str, str] = {}
+    for name, image in manifest.images:
+        for component, spec in image.dependencies:
+            target = installed.get(component)
+            if target is not None and not Version.from_string(target).matches(spec):
+                raise ValueError(
+                    f"Bundle manifest '{name}' requires '{component}' {spec},"
+                    f" but the bundle installs '{component}' {target}"
+                )
+        installed[name] = image.target_version
 
 
 def _image_paths(manifest: Manifest) -> dict[str, str]:
-    return {
-        name: image.path
-        for name, image in (("app", manifest.app), ("net", manifest.net))
-        if image is not None
-    }
+    return {name: image.path for name, image in manifest.images}
 
 
 def _read_bounded(
@@ -181,12 +251,8 @@ def read_bundle(bundle_bytes: bytes, /) -> Bundle:
     the archive the manifest does not name.
 
     Raises:
-        ValueError: If the bundle is not a zip archive, has duplicate entry
-            names, has no valid manifest of a supported version (including
-            one with a version or version match specification that does not
-            parse), or lacks an image the manifest names or has one that is
-            corrupt or too large (32 KiB for the manifest, 1 MiB for each
-            image).
+        ValueError: If the bundle is malformed or cannot be applied as
+            written. The message says what is wrong.
     """
     try:
         zip_file = zipfile.ZipFile(io.BytesIO(bundle_bytes))

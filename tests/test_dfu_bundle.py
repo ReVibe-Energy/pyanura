@@ -255,3 +255,56 @@ def test_read_bundle_rejects_duplicate_entries():
 def test_read_bundle_rejects_malformed_v1(manifest, message):
     with pytest.raises(ValueError, match=message):
         read_bundle(_make_bundle(manifest, {"app.bin": b"", "net.bin": b""}))
+
+
+def test_manifest_images_are_in_apply_order():
+    manifest = ManifestV1(
+        net=ManifestV1Image(target_version="1.0", path="net.bin"),
+        app=ManifestV1Image(target_version="2.0", path="app.bin"),
+    )
+
+    assert [name for name, _ in manifest.images] == ["app", "net"]
+
+
+def test_image_dependencies():
+    image = ManifestV1Image(
+        target_version="2.0",
+        path="app.bin",
+        app_version_match=">=1.0",
+        net_version_match="==3.0",
+    )
+
+    assert image.dependencies == (("app", ">=1.0"), ("net", "==3.0"))
+
+
+def test_read_bundle_accepts_a_dependency_an_earlier_image_satisfies():
+    manifest = {
+        "version": 1,
+        "app": {"target_version": "26.5.0", "path": "app.bin"},
+        "net": {
+            "target_version": "26.5.0",
+            "path": "net.bin",
+            "app_version_match": ">=26.5.0",
+        },
+    }
+
+    read_bundle(_make_bundle(manifest, {"app.bin": b"", "net.bin": b""}))
+
+
+def test_read_bundle_rejects_a_dependency_an_earlier_image_rules_out():
+    """Once the app image is installed, the net image's dependency fails."""
+    manifest = {
+        "version": 1,
+        "app": {"target_version": "26.5.0", "path": "app.bin"},
+        "net": {
+            "target_version": "26.5.0",
+            "path": "net.bin",
+            "app_version_match": "<26.5.0",
+        },
+    }
+
+    with pytest.raises(
+        ValueError,
+        match=r"'net' requires 'app' <26\.5\.0, but the bundle installs 'app' 26\.5\.0",
+    ):
+        read_bundle(_make_bundle(manifest, {"app.bin": b"", "net.bin": b""}))
