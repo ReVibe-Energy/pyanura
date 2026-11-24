@@ -7,149 +7,88 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Upgrading from 1.x
+- Import `pyanura` instead of `anura`. Loggers are now named `pyanura.*`.
+- Use `AVSSClient` with `BleakAVSSTransport` or `ProxyAVSSTransport` in
+  place of `BleakAVSSClient` and `ProxyAVSSClient`.
+- Give every `AVSSClient.report_*` call a count. Use `UNLIMITED` where you
+  passed `None`.
+- Catch `AVSSConnectionError` where you caught `TimeoutError` from an
+  `AVSSClient` request, and reconnect.
+- Transceiver requests now time out after 5 seconds. Pass `timeout` to
+  `TransceiverClient.request()` for calls that need longer.
+- In the CLI, use `avss update-settings --merge` for `avss write-settings`,
+  `avss update-settings` for `write-settings --reset-defaults`, and
+  `avss reset-settings` to only reset.
+
 ### Added
-- `ReportType.THROUGHPUT` (report type 7), sent by the Test Throughput
-  command.
-- `GetFirmwareInfoResponse.firmware_pn` (key 5), shown by the CLI
-  `avss get-firmware-info`.
-- `pyanura.avss.AVSSClient.get_device_info` (opcode 24) and the CLI
-  `avss get-device-info`.
-- `GetFirmwareInfoResult.firmware_pn` (key 5) in the transceiver API, shown
-  by the CLI `transceiver get-firmware-info`.
-- `GetDeviceInfoResult.device_pn` (key 9) in the transceiver API, shown by
-  the CLI `transceiver get-device-info`.
-- `GetFirmwareInfoResponse.app_confirmed` (AVSS) and
-  `GetFirmwareInfoResult.app_confirmed` (transceiver): whether the running app
-  image is confirmed, decoded from `app_status` and `dfu_status`, which encode
-  it with opposite meanings. The CLI `avss get-firmware-info` and
-  `transceiver get-firmware-info` show it as `status: confirmed/unconfirmed`,
-  and the latter now prints the same formatted output as the former.
-- `pyanura.avss.AVSSClient.report_stats` and `StatsReport` (report type 9)
-- The CLI `avss stats` command, printing every group as a line or as JSON.
-- `pyanura.dfu`: support for ANURA firmware bundles. `read_bundle` reads a
-  bundle into a `Bundle`: the images its `meta.json` manifest names, and the
-  manifest as written, as a type per manifest version (`ManifestV1`),
-  including the `firmware_pn` and `compatible_device_pns` keys. `Version`
-  parses the versions it holds, and `Version.matches` tests a version against
-  its `*_version_match` specifications. It rejects a manifest larger than
-  32 KiB or an image larger than 1 MiB once decompressed, an archive with
-  duplicate entry names, a manifest whose versions or version match
-  specifications do not parse, and one that cannot be installed app image
-  first, as a bundle always is.
-- `ManifestV1Image.matches` and `pyanura.dfu.unmet_dependencies` check a
-  bundle's images against the images a device runs (`InstalledImage`):
-  whether an image is already running, and which dependencies are not met.
-  `pyanura.dfu.running_images` reads those images from a firmware info
-  response.
-- `AVSSTransport` is an async context manager, opening the transport on
-  entry and closing it on exit.
-- The CLI `avss upgrade` and `transceiver upgrade` commands accept a firmware
-  bundle as `--file` in addition to a raw image.
-- `pyanura.avss.procedures.update_settings`: writes settings to a node, split
-  over several Control Point requests if required. The node is left with
-  exactly the given settings, which it emulates by writing the defaults
-  explicitly on firmware without a built-in reset, or with `replace=False`
-  they are merged into the node's settings.
-- The CLI `avss update-settings` command, which updates a node's settings
-  from a settings file of any size, on any firmware version. Settings the
-  file does not name are reset to the sensor's defaults, or left as they are
-  with `--merge`.
-- The CLI `avss reset-settings` command, which resets a node's settings to
-  their defaults.
-- `APIErrorCode.TIMEOUT`, `APIErrorCode.BUSY` and `AVSSRequestArgs.timeout_ms`.
-- `pyanura.avss.CaptureReport.reasons` field (cbor key 9), with its
-  bits defined by `pyanura.avss.CaptureReason`.
+- `pyanura.dfu` for reading firmware bundles (`read_bundle`) and checking
+  them against the firmware a device runs (`unmet_dependencies`).
+- Firmware bundles are accepted by the CLI `avss upgrade` and
+  `transceiver upgrade` commands.
+- `pyanura.avss.procedures.update_settings`, which replaces or merges a
+  node's settings and works with settings of any size.
+- CLI `avss update-settings` and `avss reset-settings` commands.
+- `AVSSClient.get_device_info` and the CLI `avss get-device-info` command.
+- `firmware_pn` and `app_confirmed` in the firmware info of nodes and
+  transceivers.
+- `device_pn` in the device info of nodes and transceivers.
+- `AVSSClient.report_stats`, `StatsReport` and the CLI `avss stats` command.
+- `CaptureReport.reasons` and `CaptureReason`.
+- `ReportType.THROUGHPUT`.
+- AVSS transports can be used with `async with`.
+- `timeout` argument on `TransceiverClient.request()` and `avss_request()`.
+  The latter needs transceiver firmware support, see
+  `supports_avss_request_timeout`.
+- `APIErrorCode.TIMEOUT` and `APIErrorCode.BUSY`.
+- Debian package (`python3-pyanura`) and source distributions.
 
 ### Changed
-- The import package is now `pyanura` (previously `anura`), matching the
-  distribution name and avoiding a clash with the unrelated `anura` package
-  on PyPI. Loggers are renamed accordingly, from `anura.*` to `pyanura.*`.
-- `marshal()` omits optional dataclass fields (`X | None`) whose value is
-  None instead of encoding them as null, and raises `TypeError` for None
-  anywhere else.
-- `unmarshal()` decodes unions of any member types, not only `X | None`.
-- `unmarshal()` is overloaded so that passing a union or a parameterised
-  `list`/`dict` type-checks; the overload returns `Any`.
-- Report `count` arguments take `pyanura.avss.UNLIMITED` for no limit; the
-  model fields are typed `int | Unlimited`. `AVSSClient.report_*` no longer
-  accept `count=None`, and `report_health` no longer defaults to unlimited
-  reports: every one of them takes a count.
-- `TransceiverClient` requests fail with `TransceiverConnectionError`, and
-  the connection is closed, if the transceiver does not answer within 5
-  seconds, instead of waiting indefinitely. `request()` takes a `timeout`
-  argument to adjust or disable (`None`) the limit per call.
-- `TransceiverClient.avss_request()` takes a `timeout` for the node's
-  response and raises `TimeoutError` when it expires. Requires transceiver
-  firmware support for proper operation.
+- The import package is renamed from `anura` to `pyanura`, to match the
+  distribution name. Loggers are renamed the same way.
+- `AVSSClient.report_*` require a count, which is a number or `UNLIMITED`.
+  `None` is no longer accepted.
+- A request the node does not answer raises `AVSSConnectionError` instead
+  of `TimeoutError`, and the transport is closed.
+- `AVSSTransport.control_point_request()` takes a `timeout`, which the
+  transport enforces.
+- Firmware transfers fail after 60 seconds without progress
+  (`PROGRAM_PROGRESS_TIMEOUT`).
+- `ProxyAVSSTransport` raises AVSS exceptions instead of transceiver
+  exceptions.
+- `ProxyAVSSTransport.open()` fails instead of waiting forever for a node
+  that is not assigned to the transceiver, is busy or does not respond.
+- `TransceiverClient` requests time out after 5 seconds by default. The
+  connection is closed when a request times out.
 - `TransceiverClient.avss_program_write()` raises `TimeoutError` when the
-  transceiver reports that the write timed out before it was sent. The node
-  is still connected and the write may be retried.
-- `AVSSTransport.control_point_request()` takes a `timeout` and is
-  responsible for enforcing it. A request the device did not answer raises
-  `TimeoutError` and closes the transport, since a late response would be
-  taken for the answer to the next request.
-- `AVSSClient` control point requests raise `AVSSConnectionError`, not
-  `TimeoutError`, when the device did not answer: the transport has closed
-  itself by then, so the connection is gone.
-- The USB transceiver transport no longer sends keepalive pings.
-- `ProxyAVSSTransport.open()` fails with `AVSSConnectionError` without retrying
-  if the transceiver reports the node's control point as busy.
-- `ProxyAVSSTransport.open()` fails with `AVSSConnectionError` if the
-  transceiver is not assigned to the node, instead of waiting for it
-  indefinitely.
-- `ProxyAVSSTransport.program_write()` and `control_point_request()` raise
-  `AVSSConnectionError` when the node is unavailable or the transceiver
-  connection broke, and `AVSSTransportError` for other request failures,
-  instead of leaking transceiver exceptions. `AVSSTransport` documents
-  `AVSSTransportError`, and `AVSSClient` passes it through instead of
-  wrapping it in another.
-- `AVSSTransport.program_write()` may raise `TimeoutError` when the write
-  could not be sent within the transport's own limit; the write was not
-  performed and the connection is intact. `AVSSClient` transfers retry such
-  writes, bounded by the progress deadline below. `ProxyAVSSTransport`
-  raises it when the transceiver reports a program write timed out.
-- `AVSSClient` program transfers fail once `PROGRAM_PROGRESS_TIMEOUT` (60 s)
-  passes without progress, in place of the count of consecutive silent
-  windows (`PROGRAM_STALL_LIMIT`, removed). The legacy transfer, which had no
-  bound and could circle forever on a node that keeps rejecting writes, is
-  bounded the same way.
+  write could not be sent in time. The write can be retried.
+- No keepalive pings are sent over USB.
+- `SettingsMapper.from_readable` converts values to the type the firmware
+  expects and rejects values of the wrong type.
+- `marshal()` omits optional fields that are `None` from the input, and
+  rejects `None` in non-optional fields.
+- `unmarshal()` handles unions more broadly than the earlier `X | None`.
 
 ### Deprecated
-- Importing the library as `anura`. The old name still works, resolving to
-  the same modules as `pyanura`, but emits a `DeprecationWarning` and will be
-  removed in 3.0.
+- The `anura` import name. It will be removed in 3.0.
 
 ### Removed
-- `BleakAVSSClient` and `ProxyAVSSClient`, deprecated since 1.0.0a1. Use
-  `BleakAVSSTransport` or `ProxyAVSSTransport` with `AVSSClient` instead.
+- `BleakAVSSClient` and `ProxyAVSSClient`.
 - The `active` argument of `AVSSClient.report_health`.
-- The CLI `avss write-settings`, replaced by `avss update-settings` and
-  `avss reset-settings`.
+- `PROGRAM_STALL_LIMIT`.
+- CLI `avss write-settings` command.
 
 ### Fixed
-- The CLI `avss throughput` and `transceiver avss-throughput` commands
-  measure only the report they asked for, not whichever report arrived first.
-- `ProxyAVSSTransport.open()` aborts if the transport closes while it is
-  waiting, and no longer leaves its notification subscription and transport
-  loop running behind it when it fails.
-- `ProxyAVSSTransport.open()` gives up on a node that is connected but does
-  not respond, instead of waiting for it indefinitely.
-- `ProxyAVSSTransport.open()` raises `AVSSConnectionError` when the
-  transceiver connection breaks instead of leaking `TransceiverConnectionError`.
-- `BleakAVSSTransport.control_point_request()` handles any failure of the
-  control point write, not only `BleakError`.
-- `BleakAVSSTransport` holds the control point request slot busy until answered.
-  This prevents the response to a request that was abandoned by the caller from
-  being matched to the following request.
-- A CBOR payload from a node or a transceiver that carries trailing bytes is
-  rejected instead of being decoded from its leading bytes.
-- `AVSSClient` raises `AVSSProtocolError` for a payload it cannot decode
-  instead of letting a `cbor2` exception escape.
-- `WriteSettingsV2Response.num_unhandled` is now optional: it is optional on
-  the wire and current node firmware omits it, which made
-  `AVSSClient.write_settings_v2` fail while unmarshalling the response.
+- `AVSSClient.write_settings_v2` failed with current node firmware.
+- Transceiver upgrades could stall with fielded transceiver firmware.
+- `BleakAVSSTransport` could return the response to an earlier, abandoned
+  request.
+- `ProxyAVSSTransport.open()` left a background task running when it failed.
+- CBOR payloads with trailing bytes are rejected.
+- `AVSSClient` raises `AVSSProtocolError` for a payload it cannot decode.
+- The CLI throughput commands could measure the wrong report.
 
-## [1.1.0]
+## [1.1.0] - 2026-07-04
 
 ### Added
 - Support for the AVSS windowed DFU transfer (Prepare Upgrade V2), adding
@@ -261,7 +200,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - `TransceiverClient` now awaits the connection task in `__aexit__` to ensure the connection is fully torn down before the context manager returns.
 
-[Unreleased]: https://github.com/ReVibe-Energy/pyanura/compare/v1.0a4...HEAD
+[Unreleased]: https://github.com/ReVibe-Energy/pyanura/compare/v1.1...HEAD
+[1.1.0]: https://github.com/ReVibe-Energy/pyanura/compare/v1.0...v1.1
+[1.0.0]: https://github.com/ReVibe-Energy/pyanura/compare/v1.0a4...v1.0
 [1.0.0a4]: https://github.com/ReVibe-Energy/pyanura/compare/v1.0a3...v1.0a4
 [1.0.0a3]: https://github.com/ReVibe-Energy/pyanura/compare/v1.0a2...v1.0a3
 [1.0.0a2]: https://github.com/ReVibe-Energy/pyanura/compare/v1.0a1...v1.0a2
