@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+from pyanura.avss.models import GetFirmwareInfoResponse, GetVersionResponse
 from pyanura.dfu import (
     InstalledImage,
     ManifestV1,
@@ -95,6 +96,36 @@ def test_running_images_reads_an_empty_build_as_none():
     info = FirmwareInfo(app_version=v("26.5.0").as_numeric())
 
     assert running_images(info) == {"app": InstalledImage(v("26.5.0"), None)}
+
+
+@dataclass
+class VersionInfo:
+    version: str
+    build_version: str = ""
+
+
+def test_running_images_reads_the_app_image_from_a_version_response():
+    """Nodes too old for Get Firmware Info only answer Get Version."""
+    info = VersionInfo(version="24.9.0", build_version="v24.9.0")
+
+    assert running_images(info) == {"app": InstalledImage(v("24.9.0"), "v24.9.0")}
+    assert running_images(VersionInfo(version="24.9.0")) == {
+        "app": InstalledImage(v("24.9.0"), None)
+    }
+
+
+def test_running_images_takes_the_avss_responses():
+    firmware_info = GetFirmwareInfoResponse(
+        app_version=v("26.5.0").as_numeric(),
+        app_build_version="v26.5.0",
+        app_status=1,
+        net_version=v("26.5.0").as_numeric(),
+        net_build_version="v26.5.0",
+    )
+    version_info = GetVersionResponse(version="24.9.0", build_version="v24.9.0")
+
+    assert set(running_images(firmware_info)) == {"app", "net"}
+    assert set(running_images(version_info)) == {"app"}
 
 
 # unmet_dependencies

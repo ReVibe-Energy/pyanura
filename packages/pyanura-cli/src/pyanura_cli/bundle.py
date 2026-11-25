@@ -69,13 +69,7 @@ class AVSSBundleSession:
         except AVSSOpCodeUnsupportedError:
             # Firmware too old to support Get Firmware Info: only the app
             # version is available and the net image is unknown.
-            version_info = await self._client.get_version()
-            return {
-                "app": InstalledImage(
-                    Version.from_string(version_info.version),
-                    version_info.build_version or None,
-                ),
-            }
+            info = await self._client.get_version()
         return running_images(info)
 
     async def upload(self, contents: bytes, progress: Callable[[int], None]) -> None:

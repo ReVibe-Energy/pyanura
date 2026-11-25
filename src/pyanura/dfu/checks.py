@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from .bundle import InstalledImage, ManifestV1Image
 from .version import Version, _parse_spec
@@ -22,6 +22,7 @@ __all__ = [
 ]
 
 
+@runtime_checkable
 class _FirmwareInfo(Protocol):
     """What the AVSS and transceiver firmware info responses share."""
 
@@ -35,13 +36,36 @@ class _FirmwareInfo(Protocol):
     def net_build_version(self) -> str: ...
 
 
-def running_images(info: _FirmwareInfo) -> dict[str, InstalledImage]:
-    """The images a device runs, by component, from its firmware info.
+class _VersionInfo(Protocol):
+    """The AVSS version response, which only describes the app image."""
+
+    @property
+    def version(self) -> str: ...
+    @property
+    def build_version(self) -> str: ...
+
+
+def running_images(info: _FirmwareInfo | _VersionInfo) -> dict[str, InstalledImage]:
+    """The images a device runs, by component, from what it reports.
 
     `info` is the response to Get Firmware Info, from a node or from a
     transceiver. A component the device has nothing to report for is left
     out, such as a "net" image too old to tell the app its version.
+
+    For a node too old to support Get Firmware Info, `info` is the response
+    to Get Version instead. It only describes the "app" image, so "net" is
+    left out.
+
+    Raises:
+        ValueError: If a Get Version response holds a version that cannot
+            be parsed.
     """
+    if not isinstance(info, _FirmwareInfo):
+        return {
+            "app": InstalledImage(
+                Version.from_string(info.version), info.build_version or None
+            )
+        }
     images = {}
     for name, version, build in (
         ("app", info.app_version, info.app_build_version),
