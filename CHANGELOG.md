@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-11-27
+
 ### Upgrading from 1.x
 - Import `pyanura` instead of `anura`. Loggers are now named `pyanura.*`.
 - Use `AVSSClient` with `BleakAVSSTransport` or `ProxyAVSSTransport` in
@@ -200,7 +202,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - `TransceiverClient` now awaits the connection task in `__aexit__` to ensure the connection is fully torn down before the context manager returns.
 
-[Unreleased]: https://github.com/ReVibe-Energy/pyanura/compare/v1.1...HEAD
+[Unreleased]: https://github.com/ReVibe-Energy/pyanura/compare/v2.0...HEAD
+[2.0.0]: https://github.com/ReVibe-Energy/pyanura/compare/v1.1...v2.0
 [1.1.0]: https://github.com/ReVibe-Energy/pyanura/compare/v1.0...v1.1
 [1.0.0]: https://github.com/ReVibe-Energy/pyanura/compare/v1.0a4...v1.0
 [1.0.0a4]: https://github.com/ReVibe-Energy/pyanura/compare/v1.0a3...v1.0a4
